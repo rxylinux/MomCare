@@ -771,8 +771,12 @@ async function main() {
     const w = makeWorld()
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
+    // B2b2 调整说明：batch.vue confirmArchive 增加 family 权威分支，新增依赖
+    // isFamilyMode/reportFamilyStore/familyStore/upload；此处注入 family=false 走原 legacy
+    // 分支，原断言不变。
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled',
+       'isFamilyMode', 'reportFamilyStore', 'familyStore', 'upload'])
 
     w.report.pendingUpload = {
       fileUrls: ['srv://img1'], localPaths: ['local1'],
@@ -786,7 +790,7 @@ async function main() {
     const isArchiving = { value: false }
 
     w.failWrites(['YUNTU_REPORTS_DATA'])
-    const runArchive1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const runArchive1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => runArchive1())
     // 失败：不清草稿、不离开页面、失败项保留
     assert.equal(w.navigateBackCount, 0)
@@ -795,7 +799,7 @@ async function main() {
     assert.ok(w.toasts.some(t => /保存失败/.test(t)))
     // 存储恢复后重试：成功、无重复、清草稿并返回
     w.failWrites([])
-    const runArchive2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const runArchive2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => runArchive2())
     assert.equal(w.navigateBackCount, 1)
     assert.equal(w.report.pendingUpload, null)
@@ -807,8 +811,12 @@ async function main() {
     const w = makeWorld()
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
+    // B2b2 调整说明：batch.vue confirmArchive 增加 family 权威分支，新增依赖
+    // isFamilyMode/reportFamilyStore/familyStore/upload；此处注入 family=false 走原 legacy
+    // 分支，原断言不变。
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled',
+       'isFamilyMode', 'reportFamilyStore', 'familyStore', 'upload'])
 
     w.report.pendingUpload = {
       fileUrls: ['srv://img2'], localPaths: ['local2'],
@@ -822,14 +830,14 @@ async function main() {
     const isArchiving = { value: false }
 
     w.failWrites(['YUNTU_REPORTS_DATA'])
-    const runArchive3 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const runArchive3 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => runArchive3())
     assert.equal(w.navigateBackCount, 0)
     assert.ok(w.report.pendingUpload !== null)
     assert.equal(w.report.reports.length, 0)
 
     w.failWrites([])
-    const runArchive4 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const runArchive4 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => runArchive4())
     assert.equal(w.navigateBackCount, 1)
     assert.equal(w.report.pendingUpload, null)
@@ -842,8 +850,12 @@ async function main() {
     const w = makeWorld()
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
+    // B2b2 调整说明：batch.vue confirmArchive 增加 family 权威分支，新增依赖
+    // isFamilyMode/reportFamilyStore/familyStore/upload；此处注入 family=false 走原 legacy
+    // 分支，原断言不变。
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled',
+       'isFamilyMode', 'reportFamilyStore', 'familyStore', 'upload'])
 
     w.report.pendingUpload = {
       fileUrls: ['srv://a', 'srv://b'], localPaths: ['la', 'lb'],
@@ -858,7 +870,7 @@ async function main() {
 
     // 第一项成功、第二项失败：第 1 次写允许成功，之后失败
     w.failWritesAfter('YUNTU_REPORTS_DATA', 1)
-    const runArchive5 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const runArchive5 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => runArchive5())
     assert.equal(w.navigateBackCount, 0)
     assert.ok(w.report.pendingUpload !== null)
@@ -866,7 +878,7 @@ async function main() {
     assert.equal(items.value[1].createdId, undefined)
 
     w.failWrites([])
-    const runArchive6 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const runArchive6 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => runArchive6())
     assert.equal(w.navigateBackCount, 1)
     // 两项各一份，成功项未重复
@@ -1064,8 +1076,12 @@ async function main() {
     const w = makeWorld()
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
+    // B2b2 调整说明：batch.vue confirmArchive 增加 family 权威分支，新增依赖
+    // isFamilyMode/reportFamilyStore/familyStore/upload；此处注入 family=false 走原 legacy
+    // 分支，原断言不变。
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled',
+       'isFamilyMode', 'reportFamilyStore', 'familyStore', 'upload'])
 
     // 无 serverReportId 的本地图片
     w.report.pendingUpload = {
@@ -1079,14 +1095,14 @@ async function main() {
     const isArchiving = { value: false }
 
     w.failWrites(['YUNTU_REPORTS_DATA'])
-    const run1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const run1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => run1())
     assert.equal(w.navigateBackCount, 0)
     assert.equal(w.report.reports.length, 0)
     assert.ok(items.value[0].draftId, '失败次已分配的 ID 应被记住')
 
     w.failWrites([])
-    const run2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
+    const run2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false, () => false, null, null, null)
     await withImmediateTimers(() => run2())
     assert.equal(w.navigateBackCount, 1)
     // 恰好一份，且 ID 与失败次相同（未生成第二个 rpt ID）

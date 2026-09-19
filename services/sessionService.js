@@ -243,6 +243,32 @@ export function getMemberCache(key) {
   }
 }
 
+// 受限恢复写入作用域（B2b2 恢复边界）：仅在【发起时已确认身份】创建——捕获
+// 不可变 env/AppID/member/family；迟到写入只能落这个原作用域的恢复键，
+// 不接受调用方传任意成员/键，不因当前配置变化漂移；返回真实落盘结果。
+export function openRecoveryScope(recoveryKey) {
+  if (state.status !== 'confirmed' || !state.member || state.confirming) return null
+  const scope = {
+    envId: CLOUD_CONFIG.envId,
+    appId: CLOUD_CONFIG.appId,
+    memberId: state.member.memberId,
+    familyId: state.member.familyId
+  }
+  const cacheKey = `${CACHE_PREFIX}_${scope.envId}_${scope.appId}_${scope.memberId}_${SCHEMA}_${recoveryKey}`
+  return {
+    scope,
+    write(value) {
+      try {
+        // 与 setMemberCache 同一存储形状（JSON 字符串）：getMemberCache 直接可读
+        uni.setStorageSync(cacheKey, JSON.stringify(value))
+        return true
+      } catch (e) {
+        return false
+      }
+    }
+  }
+}
+
 export function setMemberCache(key, value, epochAtWrite) {
   if (state.status !== 'confirmed' || !state.member || state.confirming) return false
   if (epochAtWrite !== undefined && epochAtWrite !== state.epoch) return false

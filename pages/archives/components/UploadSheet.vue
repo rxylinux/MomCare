@@ -11,7 +11,7 @@
           </view>
           <view class="opt-text">
             <text class="opt-label">拍照上传</text>
-            <text class="opt-sub">拍摄报告单，自动矫正图片</text>
+            <text class="opt-sub">拍摄报告单，保留原件上传（不压缩替代原件）</text>
           </view>
           <text class="opt-arrow">›</text>
         </view>
@@ -44,6 +44,8 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useReportStore } from '@/stores/report'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { request, API_BASE, getToken, isGuestMode } from '@/utils/api.js'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut, currentEpoch } from '@/services/sessionService.js'
+import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
 
 const props = defineProps({
   show: {
@@ -54,6 +56,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:show', 'select'])
 const reportStore = useReportStore()
+const reportFamilyStore = useReportFamilyStore()
+// B2b2 三态：family=权威批次上传 / 其余保持既有拦截（演示不假成功）
+const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
 
 const animShow = ref(false)
 
@@ -78,28 +83,30 @@ function close() {
 
 // 拍照上传
 async function onCamera() {
+  // 操作级 epoch：授权/选图/持久副本/批次/导航贯穿同一次操作
+  const opEpoch = currentEpoch()
   close()
   try {
     await uni.authorize({ scope: 'scope.camera' })
-    await doCamera()
+    await doCamera(opEpoch)
   } catch (e) {
     // 权限被拒绝
     showPermissionDialog('camera')
   }
 }
 
-async function doCamera() {
+async function doCamera(opEpoch) {
   try {
     const res = await new Promise((resolve, reject) => {
       uni.chooseImage({
         count: 9,
         sourceType: ['camera'],
-        sizeType: ['compressed'],
+        sizeType: ['original'], // 原件：不默认压缩替代原件
         success: resolve,
         fail: reject
       })
     })
-    await handleUploadResult(res.tempFilePaths)
+    await handleUploadResult(res.tempFilePaths, opEpoch)
   } catch (e) {
     console.error('Camera error:', e)
   }
@@ -107,13 +114,14 @@ async function doCamera() {
 
 // 相册选择
 async function onGallery() {
+  const opEpoch = currentEpoch()
   close()
   try {
     const res = await new Promise((resolve, reject) => {
       uni.chooseImage({
         count: 20,
         sourceType: ['album'],
-        sizeType: ['compressed'],
+        sizeType: ['original'], // 原件：不默认压缩替代原件
         success: resolve,
         fail: reject
       })
@@ -122,7 +130,7 @@ async function onGallery() {
       uni.showToast({ title: '最多一次上传 20 张', icon: 'none' })
       return
     }
-    await handleUploadResult(res.tempFilePaths)
+    await handleUploadResult(res.tempFilePaths, opEpoch)
   } catch (e) {
     console.error('Gallery error:', e)
     if (e && e.errMsg && e.errMsg.includes('deny')) {
@@ -131,97 +139,52 @@ async function onGallery() {
   }
 }
 
-// 处理图片上传结果 — 立即上传到服务端
-async function handleUploadResult(tempFilePaths) {
+// 处理图片上传结果：family 走权威批次（持久副本→受控暂存→登记→报告），
+// 演示/未确认保持明确拦截（不发起请求、不产生假成功）
+async function handleUploadResult(tempFilePaths, opEpoch) {
   if (!tempFilePaths || tempFilePaths.length === 0) return
+  // 选图返回后核对操作会话：挂起期间切成员，旧选择不得以新成员身份继续
+  if (opEpoch !== undefined && currentEpoch() !== opEpoch) {
+    uni.showToast({ title: '会话已切换，本次选择已取消', icon: 'none', duration: 2500 })
+    return
+  }
 
-  // 演示模式没有真实后端身份：明确不可上传，不发起请求、不产生假成功
-  if (isGuestMode()) {
+  // 演示模式没有真实后端身份：明确不可上传
+  if (isGuestMode() || isExplicitDemo()) {
     uni.showToast({ title: '演示模式不支持上传报告，请退出演示后使用', icon: 'none', duration: 2500 })
     return
   }
-  // B1：旧上传后端停用；新文件闭环在「家庭共享（云）」页（服务端开关控制）
-  uni.showToast({ title: '此入口的上传服务已停用；请使用「我的 → 家庭共享（云）」', icon: 'none', duration: 3000 })
-  return
-
-  uni.showLoading({ title: '上传中…' })
-  const uploadedItems = []   // { report_id, image_url }
-  const localPaths = []      // 本地临时路径（用于预览）
-  let failedCount = 0
-
-  for (const filePath of tempFilePaths) {
-    try {
-      // Compress image before upload
-      let uploadPath = filePath
-      try {
-        const compressRes = await new Promise((resolve, reject) => {
-          uni.compressImage({
-            src: filePath,
-            quality: 20,
-            success: resolve,
-            fail: reject,
-          })
-        })
-        uploadPath = compressRes.tempFilePath
-      } catch {
-        // compression failed, use original
-      }
-
-      // Upload via uni.uploadFile (binary, not base64)
-      // token 读取与登录模块统一使用 momcare_token 键（getToken），
-      // 不再读旧的 'token' 键导致鉴权头缺失
-      const token = getToken()
-      const uploadRes = await new Promise((resolve, reject) => {
-        uni.uploadFile({
-          url: API_BASE + '/api/reports/upload',
-          filePath: uploadPath,
-          name: 'file',
-          header: { Authorization: token ? `Bearer ${token}` : '' },
-          formData: {
-            archive_status: 'archived',
-          },
-          success: resolve,
-          fail: reject,
-        })
-      })
-
-      const parsed = typeof uploadRes.data === 'string' ? JSON.parse(uploadRes.data) : uploadRes.data
-      if (uploadRes.statusCode === 200 && parsed.code === 0) {
-        uploadedItems.push({
-          report_id: parsed.data.report_id,
-          image_url: parsed.data.image_url,
-        })
-        localPaths.push(filePath)
-      } else {
-        failedCount++
-      }
-    } catch (e) {
-      console.error('Upload failed for file:', filePath, e)
-      failedCount++
-    }
-  }
-
-  uni.hideLoading()
-
-  if (failedCount > 0 && uploadedItems.length === 0) {
-    uni.showToast({ title: '上传失败，请检查网络后重试', icon: 'none', duration: 2500 })
+  if (!isFamilyMode()) {
+    uni.showToast({ title: '请先在「我的 → 家庭共享（云）」确认身份后上传', icon: 'none', duration: 3000 })
     return
   }
-
-  if (failedCount > 0) {
-    uni.showToast({ title: `${failedCount} 张上传失败已跳过，${uploadedItems.length} 张成功`, icon: 'none', duration: 2500 })
+  // family：建批次（本机持久副本+完整清单落盘→逐项推进），交由分类页创建报告
+  uni.showLoading({ title: '准备上传…' })
+  let res
+  try {
+    res = await reportFamilyStore.createBatchFromTempPaths(tempFilePaths)
+  } finally {
+    uni.hideLoading()
   }
-
-  // Store upload data with server-issued ids
+  if (!res.ok) {
+    uni.showToast({ title: res.message || res.code || '无法建立上传批次', icon: 'none', duration: 2500 })
+    return
+  }
+  if (!res.started) {
+    uni.showToast({ title: '会话已切换，批次已保留在原成员名下', icon: 'none', duration: 2500 })
+    return
+  }
+  const b = reportFamilyStore.batch(res.batchId)
   const uploadData = {
-    items: uploadedItems,
-    fileUrls: uploadedItems.map(i => i.image_url),
-    localPaths: localPaths,
+    batchId: res.batchId,
+    items: b ? b.items.map(i => ({ order: i.order, uploadId: i.uploadId, fileId: i.fileId || '', state: i.state })) : [],
+    fileUrls: [], // 附件以 fileId 引用；临时 URL 不持久化（详情页按需签发）
+    localPaths: b ? b.items.map(i => i.savedFilePath) : [],
     fileType: 'image',
-    fileCount: uploadedItems.length
+    fileCount: b ? b.items.length : tempFilePaths.length
   }
+  // 单次交付：父页只收到一次 select（重复导航/重复批次由此杜绝）
   reportStore.pendingUpload = uploadData
-
   emit('select', uploadData)
 }
 

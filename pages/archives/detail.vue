@@ -186,16 +186,45 @@
 </template>
 
 <script setup>
-import { ref, computed, getCurrentInstance } from 'vue'
+import { ref, computed, getCurrentInstance, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { navigateToPage } from '@/utils/navigation.js'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, REPORT_TYPES, getTypeInfo } from '@/stores/report'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut, subscribeSession, currentEpoch } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
+import { fetchReportReadUrls } from '@/services/fileUploadService.js'
 import { legacyHttpEnabled } from '@/utils/backendGate.js'
 import { useHealthStore } from '@/stores/health.js'
 
 const reportStore = useReportStore()
+const familyStore = useFamilyStore()
+const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
+// family 权威报告 → 旧模板消费形状；临时 URL 按需签发（不持久化）
+const famReadUrls = ref([])
+// 会话失效清屏：报告正文/临时 URL/编辑态全部清除（familyStore 清数据外，
+// 页面自有副本同样响应会话边界）
+function clearFamilyContentView() {
+  report.value = {}
+  famReadUrls.value = []
+  loadError.value = ''
+  loading.value = false
+  if (isEditing.value) isEditing.value = false
+  editBaseline.value = null
+}
+watch(subscribeSession(), () => {
+  if (!isFamilyMode()) clearFamilyContentView()
+})
+function famReportToLegacy(r) {
+  if (!r || r.deleted) return null
+  return {
+    _id: r.id, report_type: r.reportType, report_date: r.dateKey,
+    archive_status: r.archiveStatus, note: r.note || '', notes: r.note || '',
+    file_urls: famReadUrls.value.map(u => u.tempFileURL),
+    _attachmentCount: (r.attachments || []).length, _cloud: true, revision: r.revision || 0
+  }
+}
 const healthStore = useHealthStore()
 const instance = getCurrentInstance().proxy
 const typeOptions = REPORT_TYPES
@@ -221,6 +250,7 @@ const currentImageUrl = computed(() => {
 const aiStatus = computed(() => report.value.ai_status || 'pending')
 
 const aiCardClass = computed(() => {
+  if (isFamilyMode()) return 'ai-card-disabled' // 非 demo：AI 未启用优先于一切配额/状态判断
   if ((aiStatus.value === 'pending' || aiStatus.value === 'failed') && healthStore.aiInterpretRemaining <= 0) {
     return 'ai-card-limited'
   }
@@ -233,6 +263,7 @@ const aiCardClass = computed(() => {
 })
 
 const aiCardIcon = computed(() => {
+  if (isFamilyMode()) return '🚫'
   if ((aiStatus.value === 'pending' || aiStatus.value === 'failed') && healthStore.aiInterpretRemaining <= 0) {
     return '⏰'
   }
@@ -245,6 +276,7 @@ const aiCardIcon = computed(() => {
 })
 
 const aiCardTitle = computed(() => {
+  if (isFamilyMode()) return 'AI 解读未启用'
   if ((aiStatus.value === 'pending' || aiStatus.value === 'failed') && healthStore.aiInterpretRemaining <= 0) {
     return '今日解读次数已用完'
   }
@@ -257,6 +289,8 @@ const aiCardTitle = computed(() => {
 })
 
 const aiCardSub = computed(() => {
+  // 非 demo：未启用优先——不显示配额/"已解读/整体正常"等误导性正式文案
+  if (isFamilyMode()) return '未配置 OCR/DeepSeek；不会生成自动解读，请阅读原件并遵医嘱'
   const result = report.value.ai_result
   if (aiStatus.value === 'done' && result) {
     const abnormal = result.abnormal_indicators || []
@@ -286,6 +320,35 @@ async function loadReport() {
   loading.value = true
   loadError.value = ''
   try {
+    if (isFamilyMode()) {
+      // 权威源：mc-reports 拉取 + 临时预览 URL（报告未删除才允许签发）。
+      // 全程 epoch 门：任一 await 后会话失效（退出/切成员/拒绝）直接返回——
+      // 不映射旧记录、不回落旧本地档案、不清除加载态以外的页面内容残留
+      const epochAtStart = currentEpoch()
+      await familyStore.pullReports()
+      if (currentEpoch() !== epochAtStart || !isFamilyMode()) {
+        clearFamilyContentView()
+        return
+      }
+      const rec = familyStore.reports[reportId.value]
+      if (!rec || rec.deleted) {
+        loadError.value = '报告不存在或已删除'
+        loading.value = false
+        return
+      }
+      const urls = await fetchReportReadUrls(reportId.value)
+      if (currentEpoch() !== epochAtStart || !isFamilyMode()) {
+        clearFamilyContentView()
+        return
+      }
+      famReadUrls.value = urls.ok ? urls.urls : []
+      report.value = famReportToLegacy(rec)
+      if (!urls.ok && (rec.attachments || []).length > 0) {
+        uni.showToast({ title: '预览获取失败：' + (urls.message || urls.code), icon: 'none', duration: 2500 })
+      }
+      loading.value = false
+      return
+    }
     if (legacyHttpEnabled()) {
       await reportStore.syncReportsFromCloud()
     }
@@ -336,7 +399,15 @@ function formatTimestamp(ts) {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// 编辑基线：打开时捕获记录 ID/revision/会话 epoch——保存时后台刷新不得抬高提交版本
+const editBaseline = ref(null) // { id, revision, epoch }
 function startEdit() {
+  if (isFamilyMode()) {
+    const rec = familyStore.reports[reportId.value]
+    editBaseline.value = rec ? { id: rec.id, revision: rec.revision || 0, epoch: currentEpoch() } : null
+  } else {
+    editBaseline.value = null
+  }
   isEditing.value = true
   editForm.value = {
     report_type: report.value.report_type,
@@ -357,6 +428,48 @@ async function saveEdit() {
   const typeInfo = getTypeInfo(editForm.value.report_type)
   uni.showLoading({ title: '保存中…' })
   try {
+    if (isFamilyMode()) {
+      // 打开编辑时捕获的基线（id/revision/epoch）：保存不以刷新后的最新版本静默覆盖
+      const bl = editBaseline.value
+      if (!bl || bl.id !== reportId.value) {
+        uni.showToast({ title: '编辑会话已失效，请重新编辑', icon: 'none', duration: 2500 })
+        isEditing.value = false
+        return
+      }
+      if (currentEpoch() !== bl.epoch) {
+        uni.showToast({ title: '会话已切换，编辑已取消', icon: 'none', duration: 2500 })
+        isEditing.value = false
+        return
+      }
+      const rec = familyStore.reports[reportId.value]
+      if (!rec || rec.deleted) {
+        uni.showToast({ title: '报告已删除或已更新，请返回刷新', icon: 'none', duration: 2500 })
+        return
+      }
+      // note 值语义：表单由记录初始化（未改=原值重提，不抹除）；空串=显式清空
+      const r = await familyStore.saveReport(reportId.value, {
+        reportType: editForm.value.report_type || undefined,
+        dateKey: editForm.value.report_date || undefined,
+        note: editForm.value.notes === '' ? null : (editForm.value.notes || undefined)
+      }, bl.revision)
+      if (currentEpoch() !== bl.epoch) {
+        isEditing.value = false
+        return
+      }
+      if (r.ok) {
+        uni.showToast({ title: '已保存（共享）', icon: 'none' })
+        isEditing.value = false
+        editBaseline.value = null
+        await loadReport()
+      } else if (r.code === 'revision-conflict') {
+        uni.showToast({ title: '对方已修改，请在档案页处理', icon: 'none', duration: 2500 })
+          setTimeout(() => navigateToPage('/pages/archives/index'), 1200)
+        await familyStore.pullReports()
+      } else {
+        uni.showToast({ title: r.message || '保存失败，请重试', icon: 'none', duration: 2500 })
+      }
+      return
+    }
     const result = await reportStore.updateReport(reportId.value, {
       report_type: editForm.value.report_type,
       report_name: typeInfo.label,
@@ -392,6 +505,11 @@ async function onAiCardTap() {
   if (aiStatus.value === 'done') {
     navigateToPage(`/pages/archives/ai-result?id=${reportId.value}`)
   } else if (aiStatus.value === 'failed' || aiStatus.value === 'pending') {
+    if (isFamilyMode()) {
+      // AI 在配置/真实验证前明确未启用：不发请求、不显示分析完成
+      uni.showToast({ title: 'AI 解读未启用（未配置 OCR/DeepSeek），可手动阅读原件', icon: 'none', duration: 3000 })
+      return
+    }
     if (!healthStore.canUseAiInterpret()) {
       uni.showToast({ title: '今日 5 次 AI 解读已用完，明天再来吧', icon: 'none', duration: 3000 })
       return
@@ -585,8 +703,36 @@ async function generateAndSavePoster() {
   })
 }
 
-function onDownload() {
+async function onDownload() {
   showActionMenu.value = false
+  if (isFamilyMode()) {
+    // 每次下载重新鉴权：报告未删除才允许签发；不使用旧缓存 URL
+    const res = await fetchReportReadUrls(reportId.value)
+    if (!res.ok) {
+      uni.showToast({ title: res.message || '报告已删除或不可下载', icon: 'none', duration: 2500 })
+      return
+    }
+    const url = res.urls && res.urls[0] && res.urls[0].tempFileURL
+    if (!url) {
+      uni.showToast({ title: '暂无可下载原件', icon: 'none' })
+      return
+    }
+    const epochAtDownload = currentEpoch()
+    uni.downloadFile({
+      url,
+      success: (r) => {
+        // 迟到成功门：下载期间会话失效（退出/切成员）→ 不保存私人原件到相册
+        if (currentEpoch() !== epochAtDownload || !isFamilyMode()) return
+        uni.saveImageToPhotosAlbum({
+          filePath: r.tempFilePath,
+          success: () => uni.showToast({ title: '已保存到相册', icon: 'none' }),
+          fail: () => uni.showToast({ title: '保存失败', icon: 'none' })
+        })
+      },
+      fail: () => uni.showToast({ title: '下载失败', icon: 'none' })
+    })
+    return
+  }
   if (currentImageUrl.value) {
     uni.downloadFile({
       url: currentImageUrl.value,
@@ -601,13 +747,36 @@ function onDownload() {
   }
 }
 
+// 删除基线：确认框打开时捕获显示中的 revision（其后对方推进 → 如实冲突）
+const deleteBaseline = ref(null)
 function onDelete() {
   showActionMenu.value = false
+  const rec = familyStore.reports[reportId.value]
+  deleteBaseline.value = rec ? { id: rec.id, revision: rec.revision || 0 } : null
   showDeleteConfirm.value = true
 }
 
 async function doDelete() {
   showDeleteConfirm.value = false
+  if (isFamilyMode()) {
+    uni.showLoading({ title: '删除中…' })
+    const rec = familyStore.reports[reportId.value]
+    const bl = deleteBaseline.value
+    const r = await familyStore.deleteReport(reportId.value,
+      (bl && bl.id === reportId.value) ? bl.revision : (rec ? rec.revision : undefined))
+    uni.hideLoading()
+    if (r.ok) {
+      uni.showToast({ title: '已删除', icon: 'none' })
+      setTimeout(() => uni.navigateBack(), 1000)
+    } else if (r.code === 'revision-conflict') {
+      uni.showToast({ title: '对方已修改，请刷新后重试', icon: 'none', duration: 2500 })
+      await familyStore.pullReports()
+    } else {
+      uni.showToast({ title: r.message || '删除失败，请重试', icon: 'none', duration: 2500 })
+    }
+    deleteBaseline.value = null
+    return
+  }
   uni.showLoading({ title: '删除中…' })
   try {
     const result = await reportStore.deleteReport(reportId.value)
@@ -867,4 +1036,6 @@ page {
   position: fixed;
   left: -9999px;
 }
+
+.ai-card-disabled { opacity: 0.75; }
 </style>

@@ -62,9 +62,15 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { navigateToPage } from '@/utils/navigation.js'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, getTypeInfo } from '@/stores/report'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 import { legacyHttpEnabled } from '@/utils/backendGate.js'
 
 const reportStore = useReportStore()
+const reportFamilyStore = useReportFamilyStore()
+const familyStore = useFamilyStore()
+const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
 
 const items = ref([])
 const isArchiving = ref(false) // 防止重复提交
@@ -76,6 +82,16 @@ onLoad((options) => {
   items.value = []
 
   // 从 store 读取上传数据
+  // B2b2 family：一次选图=一份多页报告——新批次统一进入 classify（携带持久 batchId）；
+  // 无批次 ID 的正式直达不读旧 pendingUpload（旧键无归属，正式态零读），
+  // 批量管理由 unarchived 页的稳定报告批量归档承担；下方旧路径仅演示数据
+  if (isFamilyMode()) {
+    if (reportStore.pendingUpload && reportStore.pendingUpload.batchId) {
+      uni.redirectTo({ url: '/pages/archives/classify?source=p2&batchId=' + encodeURIComponent(reportStore.pendingUpload.batchId) })
+    }
+    items.value = []
+    return
+  }
   const upload = reportStore.pendingUpload
   if (upload && upload.fileUrls) {
     const locals = upload.localPaths || []

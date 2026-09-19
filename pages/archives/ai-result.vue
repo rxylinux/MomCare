@@ -1,7 +1,11 @@
 <template>
   <view class="page">
+		<view v-if="aiDisabled" class="ai-disabled-banner">
+			<text class="ai-disabled-title">AI 解读未启用</text>
+			<text class="ai-disabled-desc">未配置 OCR/DeepSeek 服务；本页不提供自动解读，请以原始报告和医生意见为准。</text>
+		</view>
     <!-- Gradient Header Zone -->
-    <view class="ai-header-zone">
+    <view v-if="!aiDisabled" class="ai-header-zone">
       <NavBar title="AI 解读报告" theme="dark" transparent />
 
       <view class="ai-header-card">
@@ -16,8 +20,8 @@
       </view>
     </view>
 
-    <!-- Scrollable Content -->
-    <scroll-view scroll-y class="scroll">
+    <!-- Scrollable Content（AI 未启用时不渲染任何解读结果） -->
+    <scroll-view v-if="!aiDisabled" scroll-y class="scroll">
       <!-- Indicators Section -->
       <view class="ai-section-title-wrap">
         <text class="ai-section-title">逐项解读</text>
@@ -79,8 +83,18 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, getTypeInfo } from '@/stores/report'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 
 const reportStore = useReportStore()
+// B2b2：AI 在配置/真实验证前明确未启用——正式态不显示任何"解读完成/全部正常"式内容
+const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
+const aiDisabled = ref(false)
+import { watch } from 'vue'
+import { subscribeSession } from '@/services/sessionService.js'
+watch(subscribeSession(), () => {
+  // 演示/未确认与正式之间切换：立即按当前身份重估（正式恒为未启用态）
+  aiDisabled.value = !isExplicitDemo() || !(getSessionState().status === 'confirmed')
+})
 
 const report = ref({})
 const feedbackGiven = ref('')
@@ -177,6 +191,12 @@ function mapSeverity(severity) {
 }
 
 onLoad(async (options) => {
+  aiDisabled.value = !isExplicitDemo()
+  if (aiDisabled.value) return // 正式态：不读取旧档案、不呈现解读结果/伪成功
+  if (isExplicitDemo()) {
+    uni.showToast && uni.showToast({ title: '演示模式：以下为示例内容，非真实解读', icon: 'none', duration: 2500 })
+  }
+  aiDisabled.value = !isExplicitDemo()
   if (options.id) {
     const found = reportStore.reports.find(r => r._id === options.id) ||
                   reportStore.unarchivedReports.find(r => r._id === options.id)
@@ -314,4 +334,8 @@ page {
 .feedback-done {
   background: #EAF7EF; border-color: #5BBF7C;
 }
+
+.ai-disabled-banner { margin: 24rpx; padding: 28rpx; background: #FEF4E3; border: 2rpx solid rgba(240,169,64,.4); border-radius: 20rpx; }
+.ai-disabled-title { display: block; font-size: 28rpx; font-weight: 600; color: #B07818; margin-bottom: 8rpx; }
+.ai-disabled-desc { display: block; font-size: 24rpx; color: #8C5A10; line-height: 1.6; }
 </style>

@@ -41,7 +41,7 @@ node cloud/assemble.mjs        # 生成 dist/cloud-functions/<fn>/（含锁定�
 
 1. 微信开发者工具 → 云开发 → 云函数 → 新建/上传（目录内执行「上传并部署：云端安装依赖」），或 CLI `tcb fn deploy`。
 2. 配置环境变量（上表四项）。
-3. 集合创建：按 `cloud/collections.json` 创建 9 个集合（含 B2b1 的 mc_checkups / mc_bag_items）（含 B2a 的 mc_pregnancy / mc_health_daily / mc_moods）并建索引（daily/mood 需 dateKey 复合索引支撑游标分页）。
+3. 集合创建：按 `cloud/collections.json` 创建 10 个集合（含 B2a 的 mc_pregnancy / mc_health_daily / mc_moods；B2b1 的 mc_checkups / mc_bag_items；B2b2 的 mc_reports）并建索引（daily/mood 需 dateKey 复合索引；mc_reports 需 familyId+sortKey 分页索引；mc_files 需 familyId+_id 清理遍历索引）。
 4. 数据库安全规则：应用 `cloud/rules/database.rules.json`（`read:false, write:false`——客户端零直接读写，全部经云函数）。
 5. 存储安全规则：应用 `cloud/rules/storage.rules.json`（默认全部拒绝，客户端直传保持关闭）。
 

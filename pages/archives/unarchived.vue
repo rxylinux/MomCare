@@ -86,14 +86,27 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateToPage } from '@/utils/navigation.js'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, getTypeInfo } from '@/stores/report'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut, subscribeSession, currentEpoch } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 import { legacyHttpEnabled } from '@/utils/backendGate.js'
 
 const reportStore = useReportStore()
+const loadError = ref('')
+const familyStore = useFamilyStore()
+const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
+const famUnarchived = () => Object.values(familyStore.reports)
+  .filter(r => !r.deleted && r.archiveStatus === 'unarchived')
+  .sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''))
+  .map(r => ({ _id: r.id, report_type: r.reportType, report_date: r.dateKey, archive_status: r.archiveStatus, note: r.note || '', file_urls: [], _attachmentCount: (r.attachments || []).length, _cloud: true }))
+async function loadFamilyUnarchived() {
+  await familyStore.pullReports()
+  return famUnarchived()
+}
 const loading = ref(true)
 const showBatchConfirm = ref(false)
 const showDeleteConfirm = ref(false)
@@ -101,13 +114,42 @@ const deleteTargetId = ref('')
 const thumbErrors = ref(new Map())
 
 const allRecognized = computed(() => {
+  // family：手动分类即有效（AI 未启用，不以 ai_type_guess 设门槛）
+  if (isFamilyMode()) return reportStore.unarchivedReports.length > 0
   return reportStore.unarchivedReports.length > 0 &&
     reportStore.unarchivedReports.every(r => r.ai_type_guess)
 })
 
+// family 可见列表重映射（拉取/操作/会话恢复后统一调用）
+function remapFamilyUnarchived() {
+  reportStore.unarchivedReports = Object.values(familyStore.reports)
+    .filter(r => !r.deleted && r.archiveStatus === 'unarchived')
+    .sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''))
+    .map(r => ({ _id: r.id, report_type: r.reportType, report_date: r.dateKey, archive_status: r.archiveStatus, note: r.note || '', file_urls: [], _cloud: true, revision: r.revision || 0 }))
+}
+// 会话失效清屏（含确认弹层）
+watch(subscribeSession(), () => {
+  if (!isFamilyMode()) {
+    reportStore.unarchivedReports = []
+    loadError.value = ''
+    loading.value = false
+    showDeleteConfirm.value = false
+    showBatchConfirm.value = false
+  }
+})
+
 onShow(async () => {
   loading.value = true
-  // B1：旧云同步停用，直接使用本地数据（新数据源在家庭共享页）
+  // B2b2 family：权威未归档报告实际拉取并进入模板派生源
+  if (isFamilyMode()) {
+    const res = await familyStore.pullReports()
+    if (!res.ok && Object.keys(familyStore.reports).length === 0) {
+      loadError.value = '同步失败，请下拉重试'
+    }
+    remapFamilyUnarchived()
+    loading.value = false
+    return
+  }
   if (legacyHttpEnabled()) {
     try {
       await reportStore.syncReportsFromCloud()
@@ -161,11 +203,18 @@ function onClassifyTap(item) {
   navigateToPage(`/pages/archives/classify?${params.join('&')}`)
 }
 
+// 批量归档意图：打开确认时冻结 {id, revision} 列表并绑定会话——
+// 其后列表同步/对方推进不改意图；确认只执行该冻结意图（冲突如实）
+const batchArchiveIntent = ref(null) // { epoch, items: [{id, revision}] }
 function onArchiveAll() {
   if (!allRecognized.value) {
     const unrecognized = reportStore.unarchivedReports.filter(r => !r.ai_type_guess).length
     uni.showToast({ title: `有 ${unrecognized} 份报告尚未分类，请先处理`, icon: 'none' })
     return
+  }
+  batchArchiveIntent.value = {
+    epoch: currentEpoch(),
+    items: reportStore.unarchivedReports.map(r => ({ id: r._id, revision: r.revision || 0 }))
   }
   showBatchConfirm.value = true
 }
@@ -173,6 +222,43 @@ function onArchiveAll() {
 async function doBatchArchive() {
   showBatchConfirm.value = false
   const ids = reportStore.unarchivedReports.map(r => r._id)
+  if (isFamilyMode()) {
+    // 打开确认时快照 {id, revision}；逐项按快照基线归档（其后同步不抬高基线）；
+    // 部分成功/冲突/失败分开反馈；跨成员切换即停
+    // 只执行确认打开时冻结的意图（快照 + epoch）；意图缺失/会话变化则重新确认
+    const intent = batchArchiveIntent.value
+    if (!intent || currentEpoch() !== intent.epoch) {
+      uni.hideLoading()
+      uni.showToast({ title: '列表已更新，请重新确认归档', icon: 'none', duration: 2500 })
+      return
+    }
+    const epochAtStart = intent.epoch
+    const snapshot = intent.items
+    uni.showLoading({ title: '归档中…' })
+    let okCount = 0
+    const conflicts = []
+    const failures = []
+    for (const snap of snapshot) {
+      if (currentEpoch() !== epochAtStart) break
+      const rec = familyStore.reports[snap.id]
+      if (!rec || rec.deleted) { failures.push(snap.id); continue }
+      const r = await familyStore.saveReport(snap.id, { archiveStatus: 'archived' }, snap.revision)
+      if (r.ok) okCount++
+      else if (r.code === 'revision-conflict') conflicts.push(snap.id)
+      else failures.push(snap.id)
+    }
+    uni.hideLoading()
+    batchArchiveIntent.value = null
+    if (currentEpoch() !== epochAtStart) return
+    await familyStore.pullReports()
+    remapFamilyUnarchived()
+    const parts = []
+    if (okCount) parts.push(`${okCount} 份已归档`)
+    if (conflicts.length) parts.push(`${conflicts.length} 份对方已修改`)
+    if (failures.length) parts.push(`${failures.length} 份失败可重试`)
+    uni.showToast({ title: parts.join('，') || '没有可归档的报告', icon: 'none', duration: 3000 })
+    return
+  }
   uni.showLoading({ title: '归档中…' })
   try {
     const result = await reportStore.batchArchive(ids)
@@ -190,13 +276,34 @@ async function doBatchArchive() {
   }
 }
 
+// 删除基线：确认框打开时捕获显示中的 revision（其后对方推进 → 如实冲突）
+const deleteTarget = ref(null) // { id, revision }
 function onDeleteItem(id) {
   deleteTargetId.value = id
+  const rec = familyStore.reports[id]
+  deleteTarget.value = { id, revision: rec ? (rec.revision || 0) : 0 }
   showDeleteConfirm.value = true
 }
 
 async function doDelete() {
   showDeleteConfirm.value = false
+  if (isFamilyMode()) {
+    const bl = deleteTarget.value
+    const rec = familyStore.reports[deleteTargetId.value]
+    if (!rec || rec.deleted) {
+      uni.showToast({ title: '报告已删除或已更新', icon: 'none', duration: 2500 })
+      remapFamilyUnarchived()
+      return
+    }
+    const r = await familyStore.deleteReport(deleteTargetId.value, bl ? bl.revision : (rec.revision || 0))
+    if (r.ok) uni.showToast({ title: '已删除', icon: 'none' })
+    else if (r.code === 'revision-conflict') uni.showToast({ title: '对方已修改，请刷新后重试', icon: 'none', duration: 2500 })
+    else uni.showToast({ title: r.message || '删除失败，请重试', icon: 'none', duration: 2500 })
+    // 操作后重拉并重映射（删除立即从可见列表消失）
+    await familyStore.pullReports()
+    remapFamilyUnarchived()
+    return
+  }
   uni.showLoading({ title: '删除中…' })
   try {
     const result = await reportStore.deleteReport(deleteTargetId.value)

@@ -190,7 +190,13 @@
         "sizeBytes": "字节数",
         "status": "registered",
         "createdAt": "毫秒时间戳",
-        "registeredAt": "毫秒时间戳"
+        "registeredAt": "毫秒时间戳",
+        "attachedReportIds": "事务保护的当前引用报告 ID 集合（B2b2）",
+        "everAttached": "曾附着过报告（裸预览门；true 后只能走报告路由）",
+        "lastDetachedAt": "引用集合清空时间（清理宽限计时起点；重复移除不重置）",
+        "formalTargetPath": "复制目标路径（迟到复制孤儿回收线索）",
+        "pendingCompensation": "登记侧补偿失败标记（清理按真实句柄补删）",
+        "cleanedAt": "终态 deleted 时间（文件墓碑，防同 uploadId 复活）"
       },
       "indexes": [
         {
@@ -205,6 +211,19 @@
             }
           ],
           "unique": false
+        },
+        {
+          "keys": [
+            {
+              "field": "familyId",
+              "order": "asc"
+            },
+            {
+              "field": "_id",
+              "order": "desc"
+            }
+          ],
+          "purpose": "cleanupOrphans 全量分页遍历（墓碑墙不饥饿）"
         }
       ]
     },
@@ -266,6 +285,40 @@
             }
           ],
           "unique": false
+        }
+      ]
+    },
+    {
+      "name": "mc_reports",
+      "purpose": "家庭共享报告（B2b2）：稳定报告 ID、有序附件引用、墓碑删除",
+      "fields": {
+        "_id": "rpt_<客户端生成稳定 ID>",
+        "familyId": "数据分区（非授权依据）",
+        "schemaVersion": "结构版本（当前 1）",
+        "revision": "乐观并发版本号",
+        "deleted": "墓碑标记（附件留档审计但不计有效引用）",
+        "dateKey": "报告日期 YYYY-MM-DD",
+        "reportType": "枚举（stores/report.js REPORT_TYPES）",
+        "archiveStatus": "archived / unarchived",
+        "note": "用户备注 ≤500 字",
+        "attachments": "有序 [{fileId: mc_files 登记记录 ID}] ≤20，服务端事务校验",
+        "uploaderId": "报告创建者（首次创建报告的成员；不必等于每个附件的文件上传者，附件上传者见 mc_files.uploaderId）",
+        "updatedBy": "最后操作者（可与 uploader 不同）",
+        "sortKey": "dateKey:id（分页稳定游标第二键）"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "familyId",
+              "order": "asc"
+            },
+            {
+              "field": "sortKey",
+              "order": "desc"
+            }
+          ],
+          "purpose": "report.list 稳定分页（含墓碑）"
         }
       ]
     }

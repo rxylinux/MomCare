@@ -404,7 +404,29 @@ const familyConflicts = computed(() => familyStore.conflictEntries)
 // 冲突比较值：本地提交 payload vs 云端 currentRecord（仅渲染当前成员可见字段；
 // 墓碑显示"已删除"，显式清除显示"(已清除)"）
 const FIELD_LABELS = { weightKg: '体重(kg)', systolic: '收缩压', diastolic: '舒张压', fetalCount: '胎动', sharedNote: '共享备注', note: '备注', mood: '心情', symptoms: '症状', plans: '计划', lmpDate: '末次月经', dueDate: '预产期', nickname: '昵称', babyNickname: '宝宝昵称', hospital: '医院', doctor: '医生', hospitalPhone: '联系电话', preWeightKg: '孕前体重', heightCm: '身高' }
+const REPORT_FIELD_LABELS = { dateKey: '日期', reportType: '类型', archiveStatus: '归档状态', note: '备注' }
 function conflictDiff(entry) {
+  // 报告域冲突（B2b2）：本地 payload vs 云端 currentRecord 顶层字段
+  if (entry.kind && entry.kind.startsWith('report')) {
+    const p = entry.payload || {}
+    const c = entry.currentRecord || {}
+    const diffs = []
+    const push = (field, mine, cloud) => {
+      const label = REPORT_FIELD_LABELS[field] || field
+      const localStr = mine === null || mine === undefined || mine === '' ? '(空)' : String(mine)
+      let cloudStr
+      if (c.deleted) cloudStr = '(云端已删除)'
+      else if (cloud === undefined) cloudStr = '(未设置)'
+      else if (cloud === null || cloud === '') cloudStr = '(空)'
+      else cloudStr = String(cloud)
+      diffs.push({ field: label, local: localStr, cloud: cloudStr })
+    }
+    push('dateKey', p.dateKey, c.dateKey)
+    push('reportType', p.reportType, c.reportType)
+    push('archiveStatus', p.archiveStatus, c.archiveStatus)
+    push('note', p.note, c.note)
+    return diffs
+  }
   const diffs = []
   const localPayload = entry.payload || {}
   const cloudRecord = entry.currentRecord
@@ -429,6 +451,7 @@ function conflictDiff(entry) {
   return diffs
 }
 function conflictLabel(entry) {
+	if (entry.kind && entry.kind.startsWith('report')) return '报告'
 	if (entry.kind === 'pregnancy') return '孕期资料'
 	if (entry.kind === 'mood') return '私人心情/备注'
 	return `健康记录 ${entry.extra && entry.extra.dateKey ? entry.extra.dateKey : ''}`

@@ -46,6 +46,8 @@ export const useFamilyStore = defineStore('familyData', () => {
   const pregnancy = ref(null)            // viewPregnancy 或 null
   const checkups = ref({})               // B2b1: id → viewCheckup
   const bagItems = ref({})               // B2b1: id → viewBag
+  const reports = ref({})                // B2b2: id → viewReport
+  const lastReportSyncAt = ref(null)     // B2b2: 报告域完整同步时间
   const daily = ref({})                  // dateKey → viewDaily（含 deleted 墓碑）
   const moods = ref({})                  // dateKey → viewMood（本人）
   const lastFullSyncAt = ref(null)
@@ -94,6 +96,8 @@ export const useFamilyStore = defineStore('familyData', () => {
     moods.value = snap.moods || {}
     checkups.value = snap.checkups || {}
     bagItems.value = snap.bagItems || {}
+    reports.value = snap.reports || {}
+    lastReportSyncAt.value = snap.lastReportSyncAt || null
     lastFullSyncAt.value = snap.lastFullSyncAt || null
     lastBagSyncAt.value = snap.lastBagSyncAt || null
     lastCheckupSyncAt.value = snap.lastCheckupSyncAt || null
@@ -113,6 +117,8 @@ export const useFamilyStore = defineStore('familyData', () => {
       moods: moods.value,
       checkups: checkups.value,
       bagItems: bagItems.value,
+      reports: reports.value,
+      lastReportSyncAt: lastReportSyncAt.value,
       lastFullSyncAt: lastFullSyncAt.value,
       lastBagSyncAt: lastBagSyncAt.value,
       lastCheckupSyncAt: lastCheckupSyncAt.value,
@@ -237,12 +243,14 @@ export const useFamilyStore = defineStore('familyData', () => {
     }
     // mc-health 与 mc-schedule 领域使用不同函数与参数映射
     const isScheduleKind = entry.kind.startsWith('bag') || entry.kind.startsWith('checkup')
-    const fnName = isScheduleKind ? 'mc-schedule' : 'mc-health'
+    const isReportKind = entry.kind.startsWith('report')
+    const fnName = isScheduleKind ? 'mc-schedule' : (isReportKind ? 'mc-reports' : 'mc-health')
     let action
     if (entry.kind === 'daily-delete') action = 'daily.delete'
     else if (entry.kind === 'bag-delete') action = 'bag.delete'
     else if (entry.kind === 'checkup-delete') action = 'checkup.delete'
     else if (entry.kind === 'checkup-item') action = 'checkup.toggle-item'
+    else if (entry.kind === 'report-delete') action = 'report.delete'
     else if (entry.kind === 'bag-init') action = 'bag.initialize'
     else if (entry.kind === 'checkup-init') action = 'checkup.initialize'
     else if (entry.kind === 'checkup-migrate') action = 'checkup.migrate-apply'
@@ -265,7 +273,7 @@ export const useFamilyStore = defineStore('familyData', () => {
       if (entry.extra.originLmpDate) callData.originLmpDate = entry.extra.originLmpDate
       delete callData.payload
     }
-    if (isScheduleKind) {
+    if (isScheduleKind || isReportKind) {
       if (entry.extra.id) callData.id = entry.extra.id
       if (entry.kind === 'checkup-item' && entry.extra.itemId) {
         callData.itemId = entry.extra.itemId
@@ -360,6 +368,8 @@ export const useFamilyStore = defineStore('familyData', () => {
       if (record.id) checkups.value = { ...checkups.value, [record.id]: mergeRecord(checkups.value[record.id], record) }
     } else if (kind.startsWith('bag')) {
       if (record.id) bagItems.value = { ...bagItems.value, [record.id]: mergeRecord(bagItems.value[record.id], record) }
+    } else if (kind.startsWith('report')) {
+      if (record.id) reports.value = { ...reports.value, [record.id]: mergeRecord(reports.value[record.id], record) }
     }
   }
 
@@ -404,6 +414,12 @@ export const useFamilyStore = defineStore('familyData', () => {
       const res = await familyCall('mc-schedule', { action: 'checkup.get', schemaVersion: SCHEMA_VERSION, id: entry.extra.id })
       if (res.ok && res.data.record) {
         checkups.value = { ...checkups.value, [entry.extra.id]: mergeRecord(checkups.value[entry.extra.id], res.data.record) }
+        applied = true
+      }
+    } else if (entry.kind.startsWith('report') && entry.extra && entry.extra.id) {
+      const res = await familyCall('mc-reports', { action: 'report.get', schemaVersion: SCHEMA_VERSION, id: entry.extra.id })
+      if (res.ok && res.data.record) {
+        reports.value = { ...reports.value, [entry.extra.id]: mergeRecord(reports.value[entry.extra.id], res.data.record) }
         applied = true
       }
     }
@@ -510,6 +526,8 @@ export const useFamilyStore = defineStore('familyData', () => {
     moods.value = {}
     checkups.value = {}
     bagItems.value = {}
+    reports.value = {}
+    lastReportSyncAt.value = null
     lastFullSyncAt.value = null
     lastBagSyncAt.value = null
     lastCheckupSyncAt.value = null
@@ -852,6 +870,37 @@ export const useFamilyStore = defineStore('familyData', () => {
     return { ok: results.length > 0 && pendingLeft === 0 && unsettled === 0 && results.every(r => r.ok || r.resolved), results, pendingLeft, unsettled }
   }
 
+  // ── B2b2：报告 ──
+  async function pullReports() {
+    if (!sessionReady()) return { ok: false }
+    const epoch = currentEpoch()
+    let cursor = null, pages = 0
+    const newRpt = {}
+    do {
+      const res = await familyCall('mc-reports', { action: 'report.list', schemaVersion: SCHEMA_VERSION, cursor, limit: 100 })
+      if (!res.ok) return res
+      for (const r of res.data.records) newRpt[r.id] = r
+      cursor = res.data.nextCursor
+      pages++
+      if (pages > 20) return { ok: false, code: 'pagination-error' }
+    } while (cursor)
+    if (currentEpoch() !== epoch) return { ok: false, code: 'stale-session' }
+    const merged = { ...reports.value }
+    for (const [k, v] of Object.entries(newRpt)) merged[k] = mergeRecord(merged[k], v)
+    reports.value = merged
+    lastReportSyncAt.value = Date.now() // 全部页成功才推进本领域完整同步时间
+    persistSnapshot(epoch)
+    return { ok: true }
+  }
+  async function saveReport(id, partial, baselineRevision) {
+    return submit({ kind: 'report', entityId: `report:${id}`, payload: partial,
+      localRecordGetter: () => reports.value[id], baselineRevision, extraArgs: { id } })
+  }
+  async function deleteReport(id, baselineRevision) {
+    return submit({ kind: 'report-delete', entityId: `report:${id}`, payload: {},
+      localRecordGetter: () => reports.value[id], baselineRevision, extraArgs: { id } })
+  }
+
   return {
     pregnancy, daily, moods, lastFullSyncAt, syncing, lastError,
     checkups, bagItems,
@@ -862,6 +911,7 @@ export const useFamilyStore = defineStore('familyData', () => {
     pullBagItems, saveBagItem, deleteBagItem, toggleBagItem,
     initializeBagTemplates,
     pullCheckups, saveCheckup, deleteCheckup, toggleCheckupItem, markCheckupStatus,
+    reports, lastReportSyncAt, pullReports, saveReport, deleteReport,
     initializeCheckupTemplates, previewCheckupMigration, applyCheckupMigration, maybeAdvanceScheduleLmp, recoverMigrationBatch,
     dailyRecord, moodRecord, dailyHistoryAsc, clearMemory,
     __submit: submit,

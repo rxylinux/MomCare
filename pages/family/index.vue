@@ -110,6 +110,7 @@ import {
 	getMemberCache, setMemberCache,
 	savePendingUpload, getPendingUpload, clearPendingUpload
 } from '@/services/sessionService.js'
+import { uploadSingleFile } from '@/services/fileUploadService.js'
 
 const runtimeState = ref(cloudRuntimeState())
 const runtimeReady = computed(() => runtimeState.value === 'ready' || runtimeState.value === 'ready-to-init')
@@ -303,63 +304,51 @@ async function handleUploadImage() {
 
 async function performUpload(pending) {
 	uploading.value = true
-	const epochAtStart = currentEpoch()
 	try {
-		const prepared = await familyCall('mc-files', { action: 'prepareUpload', uploadId: pending.uploadId })
-		const preparedOutcome = handleAuthFailure(prepared, epochAtStart)
-		if (preparedOutcome) {
-			uploading.value = false
-			return // stale：待办保留原成员；locked：页面已清屏
-		}
-		if (!prepared.ok) {
-			uploadMsg.value = `无法获取上传路径：${prepared.message || prepared.code}（待上传已保留，可重试）`
+		// 受控管线已收敛到 fileUploadService（B2b2）；页面保持同一状态机与文案。
+		// B1 诊断页语义：暂存过期 → 待办作废需重选（正式报告批次另行保留原件）
+		const result = await uploadSingleFile({ uploadId: pending.uploadId, savedFilePath: pending.savedFilePath })
+		if (result.locked) {
+			session.value = getSessionState()
+			uploadMsg.value = '身份被服务端拒绝，会话已锁定；请重新确认身份或联系管理员'
 			uploadMsgWarn.value = true
+			uploadedImageUrl.value = ''
+			registeredFileId.value = ''
+			pendingUploadInfo.value = null
 			return
 		}
-
-		// #ifdef MP-WEIXIN
-		const uploaded = await new Promise((resolve, reject) => {
-			wx.cloud.uploadFile({
-				cloudPath: prepared.data.cloudPath,
-				filePath: pending.savedFilePath,
-				success: resolve,
-				fail: reject
-			})
-		})
-		// #endif
-		/* #ifndef MP-WEIXIN */
-		uploadMsg.value = '上传仅在微信小程序端可用（待上传已保留）'
-		uploadMsgWarn.value = true
-		return
-		/* #endif */
-
-		const reg = await familyCall('mc-files', {
-			action: 'registerStaged',
-			stageFileID: uploaded.fileID,
-			uploadId: pending.uploadId
-		})
-		const regOutcome = handleAuthFailure(reg, epochAtStart)
-		if (regOutcome) {
-			uploading.value = false
-			return
-		}
-		if (!reg.ok) {
-			if (reg.code === 'staged-file-unreadable') {
-				// 暂存已过期：待办作废，需要重新选图（新 uploadId）
+		if (result.stale) return // 待办保留原成员名下
+		if (!result.ok) {
+			if (result.code === 'staged-file-unreadable') {
 				clearPendingUpload()
 				refreshPendingUpload()
 				uploadMsg.value = '暂存文件已过期，请重新选择图片上传'
 				uploadMsgWarn.value = true
 				return
 			}
-			uploadMsg.value = `登记失败：${reg.message || reg.code}（待上传已保留，可直接重试同一文件）`
+			if (result.code === 'unsupported-platform') {
+				uploadMsg.value = '上传仅在微信小程序端可用（待上传已保留）'
+				uploadMsgWarn.value = true
+				return
+			}
+			if (result.stage === 'prepare') {
+				uploadMsg.value = `无法获取上传路径：${result.message || result.code}（待上传已保留，可重试）`
+				uploadMsgWarn.value = true
+				return
+			}
+			if (result.stage === 'stage') {
+				uploadMsg.value = `上传失败：${result.message || '未知错误'}（待上传已保留，可重试同一文件）`
+				uploadMsgWarn.value = true
+				return
+			}
+			uploadMsg.value = `登记失败：${result.message || result.code}（待上传已保留，可直接重试同一文件）`
 			uploadMsgWarn.value = true
 			return
 		}
-		registeredFileId.value = reg.data.file.fileId
+		registeredFileId.value = result.fileId
 		clearPendingUpload()
 		refreshPendingUpload()
-		uploadMsg.value = reg.data.replayed ? '登记完成（重复确认幂等，结果为同一文件）' : '登记完成'
+		uploadMsg.value = result.replayed ? '登记完成（重复确认幂等，结果为同一文件）' : '登记完成'
 		uploadMsgWarn.value = false
 		await previewRegistered()
 	} catch (e) {

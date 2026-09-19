@@ -92,6 +92,31 @@ function formalCloudPath(paths, uploadId, buffer) {
   return `${paths.formalPrefix}${uploadId}_${hash}`
 }
 
+// 补偿删除：登记被清理抢先/认领丢失时，删除刚复制的正式对象（真实 fileID 句柄，
+// 按 SDK fileList 契约逐对象检查）——不留不可达正式副本；失败仅尽力而为
+//（下次同 uploadId 重试同路径覆写，最终由终态清理兜底）
+async function compensateFormalCopy(cloudRef, formalFileID) {
+  try {
+    if (!formalFileID) return
+    await cloudRef.deleteFile({ fileList: [formalFileID] })
+  } catch (err) { /* 尽力而为；句柄已由 persistFormalHandle 留档供清理重试 */ }
+}
+
+// 补偿前把实际正式 fileID 持久化到登记文档（cleaning/deleted 均安全）：
+// 补偿 deleteFile 失败时，下一次 cleanupOrphans 按真实句柄重试删除，不留孤儿
+async function persistFormalHandle(db, regId, formalFileID) {
+  try {
+    if (!formalFileID) return
+    const doc = await getDocMaybe(db.collection(COLLECTIONS.files).doc(regId))
+    if (!doc || doc.formalFileID) return
+    const { _id: _f, ...fields } = doc
+    void _f
+    await db.collection(COLLECTIONS.files).doc(regId).set({
+      data: { ...fields, formalFileID, pendingCompensation: true }
+    })
+  } catch (err) { /* 尽力而为 */ }
+}
+
 exports.main = async function main(event) {
   if (!cloud) return fail('sdk-unavailable', 'wx-server-sdk 不可用')
   cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV, throwOnNotFound: false })
@@ -133,8 +158,27 @@ exports.main = async function main(event) {
           await claimTx.rollback()
           return ok({ replayed: true, file: publicFileView(regId, existing) })
         }
-        claim = existing // claiming：复用认领，继续转存/登记
-        await claimTx.rollback()
+        if (existing.status === 'cleaning') {
+          // B2b2：清理中的文件不可被重新登记/引用（正式副本可能已删除）
+          await claimTx.rollback()
+          return fail('file-cleaning', '该上传记录正在清理，请更换 uploadId 重新上传')
+        }
+        if (existing.status === 'deleted') {
+          // B2b2 P1-2：清理完成后的终态文件墓碑——同 uploadId 认领不得复活，
+          // 需显式换新 uploadId（新实体）重新上传
+          await claimTx.rollback()
+          return fail('file-deleted', '该上传记录已清理完成，不能重复登记；请使用新 uploadId')
+        }
+        // claiming：事务内【续租】后复用认领（写 updatedAt 提交）——
+        // 并发 cleanupOrphans 只清理租期停滞的记录，活跃重试不被清理；
+        // 续租与清理的状态迁移在同一文档上事务互斥（后提交方冲突重读）
+        const { _id: _renewId, ...renewFields } = existing
+        void _renewId
+        await claimTx.collection(COLLECTIONS.files).doc(regId).set({
+          data: { ...renewFields, updatedAt: now }
+        })
+        await claimTx.commit()
+        claim = existing
       } else {
         // set 数据不含 _id（SDK 契约：doc(id) 携带主键）
         const doc = {
@@ -178,21 +222,116 @@ exports.main = async function main(event) {
     }
     if (!formalFileID) return fail('formal-copy-failed', '正式副本写入失败，请用同一 uploadId 重试')
 
+    // ── ②.a 复制后记录目标路径并续租（事务）：本步及之后的一切拒绝路径都以
+    // 真实句柄补偿删除刚复制的对象——清理抢先/认领丢失都不留不可达正式副本 ──
+    try {
+      const tgtTx = await db.startTransaction()
+      const tgtDoc = await getDocMaybe(tgtTx.collection(COLLECTIONS.files).doc(regId))
+      if (tgtDoc && tgtDoc.status === 'registered' && tgtDoc.stageFileID === claim.stageFileID) {
+        // 并发同 uploadId 已完成登记：幂等重放（同内容同路径；绝不补偿删除存活对象）
+        const view = publicFileView(regId, tgtDoc)
+        await tgtTx.rollback()
+        return ok({ replayed: true, file: view })
+      }
+      if (!tgtDoc || tgtDoc.stageFileID !== claim.stageFileID) {
+        await tgtTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
+        return fail('claim-missing', '认领记录缺失，请更换 uploadId 重新上传')
+      }
+      if (tgtDoc.status === 'cleaning' || tgtDoc.status === 'deleted') {
+        await tgtTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
+        return fail(tgtDoc.status === 'cleaning' ? 'file-cleaning' : 'file-deleted',
+          '该上传记录正在清理或已清理完成，不能完成登记；请使用新 uploadId')
+      }
+      if (tgtDoc.status !== 'claiming') {
+        await tgtTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
+        return fail('operation-id-conflict', '登记状态异常，请重试')
+      }
+      const { _id: _tgtId, ...tgtFields } = tgtDoc
+      void _tgtId
+      await tgtTx.collection(COLLECTIONS.files).doc(regId).set({
+        data: { ...tgtFields, formalTargetPath: formalPath, updatedAt: Date.now() }
+      })
+      await tgtTx.commit()
+    } catch (err) {
+      return fail('transaction-failed', '正式目标记录未完成，可用同一 uploadId 重试', {
+        errMsg: String((err && (err.errMsg || err.message)) || err).slice(0, 200)
+      })
+    }
+
+    // ── ②.b 复制后持久化【实际正式 fileID】（事务）：此后任何拒绝/失败路径
+    // 都以真实句柄补偿删除刚复制的对象，不留不可达正式副本 ──
+    try {
+      const fidTx = await db.startTransaction()
+      const fidDoc = await getDocMaybe(fidTx.collection(COLLECTIONS.files).doc(regId))
+      if (fidDoc && fidDoc.status === 'registered' && fidDoc.stageFileID === claim.stageFileID) {
+        const view = publicFileView(regId, fidDoc)
+        await fidTx.rollback()
+        return ok({ replayed: true, file: view })
+      }
+      if (!fidDoc || fidDoc.stageFileID !== claim.stageFileID) {
+        await fidTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
+        return fail('claim-missing', '认领记录缺失，请更换 uploadId 重新上传')
+      }
+      if (fidDoc.status === 'cleaning' || fidDoc.status === 'deleted') {
+        await fidTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
+        return fail(fidDoc.status === 'cleaning' ? 'file-cleaning' : 'file-deleted',
+          '该上传记录正在清理或已清理完成，不能完成登记；请使用新 uploadId')
+      }
+      if (fidDoc.status !== 'claiming') {
+        await fidTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
+        return fail('operation-id-conflict', '登记状态异常，请重试')
+      }
+      const { _id: _fid2, ...fidFields } = fidDoc
+      void _fid2
+      await fidTx.collection(COLLECTIONS.files).doc(regId).set({
+        data: { ...fidFields, formalFileID, updatedAt: Date.now() }
+      })
+      await fidTx.commit()
+    } catch (err) {
+      return fail('transaction-failed', '正式文件句柄记录未完成，可用同一 uploadId 重试', {
+        errMsg: String((err && (err.errMsg || err.message)) || err).slice(0, 200)
+      })
+    }
+
     // ── ③ 原子登记完成 ──
     const regTx = await db.startTransaction()
     try {
       const doc = await getDocMaybe(regTx.collection(COLLECTIONS.files).doc(regId))
       if (!doc) {
         await regTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
         return fail('claim-missing', '认领记录缺失，请更换 uploadId 重新上传')
       }
       if (doc.stageFileID !== claim.stageFileID) {
         await regTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
         return fail('operation-id-conflict', '同一 uploadId 已绑定不同暂存文件')
       }
       if (doc.status === 'registered') {
         await regTx.rollback()
         return ok({ replayed: true, file: publicFileView(regId, doc) })
+      }
+      // B2b2 P1-2：迟到登记不得复活清理中/已清理完成的文件；已复制对象补偿删除
+      if (doc.status === 'cleaning' || doc.status === 'deleted') {
+        await regTx.rollback()
+        await persistFormalHandle(db, regId, formalFileID)
+        await compensateFormalCopy(cloud, formalFileID)
+        return fail(doc.status === 'cleaning' ? 'file-cleaning' : 'file-deleted',
+          '该上传记录正在清理或已清理完成，不能完成登记；请使用新 uploadId')
       }
       // set 数据不得包含 _id：get 取回的文档自带 _id，直接展开会混入，
       // 真实 SDK 在网络请求前即以 -501007 拒绝（源码核对）——显式剔除
@@ -201,6 +340,7 @@ exports.main = async function main(event) {
       const completed = {
         ...claimFields,
         storageFileKey: formalPath, // 稳定正式路径（唯一副本位置）
+        formalTargetPath: formalPath, // 迟到复制孤儿的回收线索（终态保留）
         formalFileID,
         contentType,
         sizeBytes: buffer.length,
@@ -226,12 +366,26 @@ exports.main = async function main(event) {
     if (!doc || doc.status !== 'registered' || doc.familyId !== config.familyId || !doc.formalFileID) {
       return fail('file-not-found', '文件不存在或未完成登记')
     }
+    // B2b2 P1-1：一旦文件附着过报告，裸 fileId 预览不再绕过报告上下文——
+    // 已附着文件的预览必须走 mc-reports.report.getReadUrls（校验报告未删除）。
+    // 未附着过的独立文件（B1 诊断场景）保持可预览。已签发的临时 URL 在平台
+    // 过期前无法撤销（如实边界）；本门覆盖所有新签发。
+    if (doc.everAttached) {
+      return fail('file-attached-use-report-route', '该文件已附着报告，请从报告详情预览')
+    }
     // 家庭共享报告：两成员均可读（PRD：报告两人共享）
     let urlResult
     try {
       urlResult = await cloud.getTempFileURL({ fileList: [doc.formalFileID] })
     } catch (err) {
       return fail('temp-url-failed', '获取访问地址失败')
+    }
+    // 返回前重核（迟到签发门）：签发期间文件被附着报告/清理/状态变化 → 丢弃结果
+    const docNow = await getDocMaybe(db.collection(COLLECTIONS.files).doc(fileId))
+    if (!docNow || docNow.status !== 'registered' || docNow.familyId !== config.familyId ||
+        docNow.everAttached || docNow.formalFileID !== doc.formalFileID) {
+      return fail(docNow && docNow.everAttached ? 'file-attached-use-report-route' : 'file-not-found',
+        '文件状态已变化，请从报告详情预览')
     }
     const entry = urlResult && urlResult.fileList && urlResult.fileList[0]
     if (!entry || !entry.tempFileURL) return fail('temp-url-failed', '获取访问地址失败')

@@ -1,5 +1,16 @@
 <template>
   <view class="page">
+		<!-- family 批次状态与控制（失败重试/重暂存/缺图移除） -->
+		<view v-if="famBatch && famBatch.status !== 'done'" class="batch-ctrl">
+			<text class="batch-ctrl-title">本批 {{ famBatch.items.length }} 张：{{ famBatch.status === 'ready' ? '全部登记完成，可保存' : famBatch.status === 'partial' ? '部分未完成' : '上传中' }}</text>
+			<view v-for="it in famBatch.items" :key="it.order" class="batch-ctrl-row">
+				<text class="batch-ctrl-item">第 {{ it.order + 1 }} 张 · {{ it.state === 'registered' ? '已登记' : it.state === 'staged-expired' ? '暂存过期（原件已保留）' : it.state === 'persist-failed' ? '本机保存失败' : it.state === 'failed' ? (it.error || '失败') : '待完成' }}</text>
+				<view v-if="it.state === 'failed' || it.state === 'pending'" class="batch-ctrl-btn" @tap="retryFailedItems"><text class="batch-ctrl-btn-t">重试</text></view>
+				<view v-if="it.state === 'staged-expired'" class="batch-ctrl-btn" @tap="restageExpiredItem(it.order)"><text class="batch-ctrl-btn-t">重新暂存</text></view>
+				<view v-if="it.state === 'persist-failed' || it.state === 'failed'" class="batch-ctrl-btn" @tap="replaceSlot(it.order)"><text class="batch-ctrl-btn-t">重选图片</text></view>
+				<view v-if="it.state === 'persist-failed'" class="batch-ctrl-btn batch-ctrl-danger" @tap="removeFailedSlot(it.order)"><text class="batch-ctrl-btn-t">移除</text></view>
+			</view>
+		</view>>
     <!-- NavBar -->
     <NavBar title="确认报告信息" />
 
@@ -54,7 +65,7 @@
             <view class="form-label">
               <text class="form-label-text">就诊医院（可选）</text>
             </view>
-            <input class="form-input" v-model="hospital" placeholder="输入医院名称" placeholder-class="input-placeholder" />
+            <input v-if="!isFamilyMode()" class="form-input" v-model="hospital" placeholder="输入医院名称" placeholder-class="input-placeholder" />
           </view>
 
           <!-- Pregnancy Week -->
@@ -62,7 +73,7 @@
             <view class="form-label">
               <text class="form-label-text">当时孕周（可选）</text>
             </view>
-            <input class="form-input" v-model="gestationWeek" placeholder="如：12" type="number" placeholder-class="input-placeholder" />
+            <input v-if="!isFamilyMode()" class="form-input" v-model="gestationWeek" placeholder="如：12" type="number" placeholder-class="input-placeholder" />
           </view>
 
           <!-- Notes -->
@@ -94,9 +105,33 @@ import { onLoad } from '@dcloudio/uni-app'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, REPORT_TYPES, getTypeInfo } from '@/stores/report'
 import { useHealthStore } from '@/stores/health.js'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut, subscribeSession, currentEpoch } from '@/services/sessionService.js'
+import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
+import { nextTick } from 'vue'
+import { useFamilyStore as useFamilyStore2 } from '@/services/familyStore.js'
+import { navigateToPage } from '@/utils/navigation.js'
+import { fetchReportReadUrls } from '@/services/fileUploadService.js'
 
 const reportStore = useReportStore()
 const healthStore = useHealthStore()
+const reportFamilyStore = useReportFamilyStore()
+const familyStore2 = useFamilyStore2()
+const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
+const familyBatchId = ref('')
+const editBaseline = ref(null) // 已有报告编辑：打开时捕获基线
+import { watch } from 'vue'
+watch(subscribeSession(), () => {
+  if (!(getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut())) {
+    reportId.value = ''
+    familyBatchId.value = ''
+    editBaseline.value = null
+    selectedType.value = ''
+    reportDate.value = ''
+    notes.value = ''
+    fileUrls.value = []
+    previewUrl.value = ''
+  }
+})
 const typeOptions = REPORT_TYPES
 
 const selectedType = ref('')
@@ -130,10 +165,74 @@ onLoad((options) => {
     hospital.value = healthStore.userInfo.hospital
   }
 
-  // 从 store 读取上传数据（避免 URL 参数编码问题）
-  const upload = reportStore.pendingUpload
+  // 批次 ID 只从 URL（受控导航）或新上传（source=p2）取；p6 编辑模式不回退旧 pendingUpload
+  familyBatchId.value = options.batchId ||
+    (options.source === 'p2' && reportStore.pendingUpload && reportStore.pendingUpload.batchId) || ''
+  if (familyBatchId.value) {
+    const b = reportFamilyStore.batch(familyBatchId.value)
+    if (b) {
+      // 冷启动预览：批次持久清单中的本机原件路径（顺序即附件顺序）
+      fileUrls.value = b.items.map(i => i.savedFilePath).filter(Boolean)
+      if (!previewUrl.value) previewUrl.value = fileUrls.value[0] || ''
+    }
+  }
 
-  // 优先使用 pendingUpload，否则从 URL 参数读取
+  // 从 store 读取上传数据（避免 URL 参数编码问题）
+  // ── family hydrate：已有报告（拉取+表单+预览+基线）/批次（草稿恢复）──
+  if (getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()) {
+    if (options.reportId) reportId.value = options.reportId
+    if (reportId.value) {
+      // 同步 hydrate：store 已有（暖数据）立即填表单+基线；否则拉取后补
+      const fill = rec => {
+        if (!rec || rec.deleted) return false
+        hydrating = true
+        editBaseline.value = { id: rec.id, revision: rec.revision || 0 }
+        selectedType.value = rec.reportType || ''
+        reportDate.value = rec.dateKey || ''
+        notes.value = rec.note || ''
+        nextTick(() => { hydrating = false }) // watch flush:pre 在下一 tick——同步复位太早
+        return true
+      }
+      const applyEditDraft = () => {
+        const ed = reportFamilyStore.readEditDraft(reportId.value)
+        if (ed) {
+          hydrating = true
+          // 字段存在性恢复：空串=用户显式清空（合法意图），不是"未设置"
+          if (ed.reportType !== undefined && ed.reportType !== null) selectedType.value = ed.reportType
+          if (ed.dateKey !== undefined && ed.dateKey !== null) reportDate.value = ed.dateKey
+          if ('note' in ed) notes.value = ed.note === null ? '' : ed.note // null→''（旧格式兼容）；''=显式清空
+          // 草稿保存的编辑基线优先：恢复后不被最新云 revision 替换
+          if (ed.baselineRevision !== undefined && ed.baselineRevision !== null) {
+            editBaseline.value = { id: reportId.value, revision: ed.baselineRevision }
+          }
+          hydrating = false
+        }
+      }
+      if (!fill(familyStore2.reports[reportId.value])) {
+        familyStore2.pullReports().then(() => { fill(familyStore2.reports[reportId.value]); applyEditDraft() }).catch(() => {})
+      } else {
+        applyEditDraft()
+      }
+      fetchReportReadUrls(reportId.value).then(urls => {
+        if (urls.ok && urls.urls[0]) {
+          previewUrl.value = urls.urls[0].tempFileURL
+          fileUrls.value = urls.urls.map(u => u.tempFileURL)
+        }
+      }).catch(() => {})
+    } else if (familyBatchId.value) {
+      const b = reportFamilyStore.batch(familyBatchId.value)
+      if (b && b.draft) {
+        selectedType.value = b.draft.reportType || ''
+        reportDate.value = b.draft.dateKey || ''
+        notes.value = b.draft.note || ''
+      }
+    }
+  }
+
+  // 旧 pendingUpload/fileUrls 路径仅 explicit demo；正式一律不读（旧键无归属）
+  const upload = isExplicitDemo() ? reportStore.pendingUpload : null
+
+  // 旧 pendingUpload/fileUrls 路径仅 explicit demo；正式只消费受控 reportId/batchId 链路
   if (upload?.fileUrls?.length > 0) {
     fileUrls.value = upload.fileUrls
     // 优先用本地路径预览（本地临时路径在当前设备始终可渲染）
@@ -156,8 +255,9 @@ onLoad((options) => {
     }
 
     fileType.value = upload.fileType || 'image'
-  } else if (options.fileUrls) {
-    // 从未归档页面进入时，从 URL 参数读取 fileUrls
+  } else if (isExplicitDemo() && options.fileUrls) {
+    // 从未归档页面进入时，从 URL 参数读取 fileUrls（仅 explicit demo——
+    // 旧 URL 无受控归属，正式只消费受控 reportId/batchId 链路）
     try {
       fileUrls.value = JSON.parse(decodeURIComponent(options.fileUrls))
       previewUrl.value = fileUrls.value[0] || ''
@@ -168,20 +268,25 @@ onLoad((options) => {
   }
 
   if (options.source) source.value = options.source
-  if (options.reportId) reportId.value = options.reportId
-  if (options.aiType) {
-    selectedType.value = options.aiType
+  if (options.reportId) {
+    reportId.value = options.reportId
   }
-  if (options.ocrDate) {
-    reportDate.value = options.ocrDate
-    ocrDateHint.value = true
+  // 旧 URL 参数携带的 aiType/ocrDate 仅 explicit demo 消费；正式不读
+  if (isExplicitDemo()) {
+    if (options.aiType) {
+      selectedType.value = options.aiType
+    }
+    if (options.ocrDate) {
+      reportDate.value = options.ocrDate
+      ocrDateHint.value = true
+    }
   }
 })
 
 function previewImage() {
   if (!previewUrl.value) return
   // 收集所有可用图片 URL（本地路径优先，fallback 到云端路径）
-  const upload = reportStore.pendingUpload
+  const upload = isExplicitDemo() ? reportStore.pendingUpload : null
   const locals = (upload && upload.localPaths) || []
   // 优先使用本地路径，否则使用云端路径
   const urls = locals.length > 0 ? locals : fileUrls.value
@@ -207,14 +312,173 @@ function goBack() {
   uni.navigateBack()
 }
 
+// ── 编辑期草稿持久化：表单字段变更即落盘（批次→batch.draft；已有报告→成员编辑草稿），
+// 未点击保存的输入不丢失；onLoad 已恢复批次草稿/编辑草稿 ──
+let draftPersistTimer = null
+function persistDraftNow() {
+  if (!(getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut())) return
+  // note 保留原始字符串（含空串=用户显式清空）；不以 || null 把 '' 抹成 null
+  const draft = { reportType: selectedType.value, dateKey: reportDate.value, note: notes.value }
+  if (familyBatchId.value) {
+    reportFamilyStore.persistBatchDraft(familyBatchId.value, { ...draft, archiveStatus: 'archived' })
+  } else if (reportId.value) {
+    // 自动保存的草稿必须携带编辑基线（打开时捕获的 revision）——
+    // 恢复时不被最新云 revision 替换、不因自动保存而丢失基线
+    const bl = editBaseline.value
+    reportFamilyStore.persistEditDraft(reportId.value, draft, bl && bl.id === reportId.value ? bl.revision : undefined)
+  }
+}
+let hydrating = false // 程序化 hydrate 期间不触发自动草稿保存
+watch([selectedType, reportDate, notes], () => {
+  if (hydrating) return
+  if (draftPersistTimer) clearTimeout(draftPersistTimer)
+  draftPersistTimer = setTimeout(persistDraftNow, 30)
+})
+
+// ── 批次控制：失败重试 / 暂存过期重暂（本机原件）/ 缺图移除（显式）──
+async function retryFailedItems() {
+  if (!familyBatchId.value) return
+  const r = await reportFamilyStore.retryBatch(familyBatchId.value)
+  void r
+  uni.showToast({ title: '已重试未完成项', icon: 'none' })
+}
+async function restageExpiredItem(order) {
+  if (!familyBatchId.value) return
+  const r = await reportFamilyStore.restageItem(familyBatchId.value, order)
+  if (!r.ok) uni.showToast({ title: r.message || '无法重暂存', icon: 'none', duration: 2500 })
+  else uni.showToast({ title: '已用本机原件重新暂存', icon: 'none' })
+}
+async function replaceSlot(order) {
+  if (!familyBatchId.value) return
+  const r = await reportFamilyStore.replaceItemSlot(familyBatchId.value, order)
+  if (r && r.ok === false && r.code && r.code !== 'cancelled') {
+    uni.showToast({ title: r.message || '重选失败', icon: 'none', duration: 2500 })
+  }
+}
+function removeFailedSlot(order) {
+  if (!familyBatchId.value) return
+  const r = reportFamilyStore.discardItem(familyBatchId.value, order)
+  if (!r.ok) uni.showToast({ title: r.message || '移除失败', icon: 'none', duration: 2500 })
+}
+const famBatch = computed(() => familyBatchId.value ? reportFamilyStore.batch(familyBatchId.value) : null)
+
 async function save() {
   if (!canSave.value) {
     uni.showToast({ title: '请选择报告类型和日期', icon: 'none' })
     return
   }
 
+  if (isFamilyMode()) {
+    // family 权威链路优先完整分流（批次创建/已存在报告编辑），旧 store 分支不可达
+    uni.showLoading({ title: '保存中…' })
+    try {
+      if (familyBatchId.value) {
+        const b = reportFamilyStore.batch(familyBatchId.value)
+        if (b) {
+          b.draft = { reportType: selectedType.value, dateKey: reportDate.value, note: notes.value || null, archiveStatus: 'archived' }
+        }
+        const r = await reportFamilyStore.createReportFromBatch(familyBatchId.value, {
+          reportType: selectedType.value, dateKey: reportDate.value, note: notes.value || null, archiveStatus: 'archived'
+        })
+        uni.hideLoading()
+        if (r.draftChanged) {
+          // 草稿相对创建意图已变化且未提交：不得提示"已入档"或自动返回——
+          // 未提交草稿已持久（batch.draft）；toast 概要 + modal 实际动作（去编辑）
+          uni.showToast({ title: '本次修改未提交，草稿已保存', icon: 'none', duration: 2000 })
+          // epoch/modal 绑定：旧会话的确认不把草稿写入新成员
+          const modalEpoch = currentEpoch()
+          const bNow = reportFamilyStore.batch(familyBatchId.value)
+          const targetId = bNow && bNow.reportId ? bNow.reportId : ''
+          // 基线：创建意图时版本（新建为 revision1），不取对方后来 revision
+          const createBaseline = bNow && bNow.createIntent ? 1 : (r.record && r.record.revision)
+          uni.showModal({
+            title: '报告已存在',
+            content: (r.message || '本次修改未提交，草稿已保存。') + '是否打开该报告进行编辑？',
+            confirmText: '去编辑',
+            cancelText: '留在本页',
+            success: m => {
+              if (currentEpoch() !== modalEpoch) return // 迟到确认不写新成员
+              if (m.confirm && targetId) {
+                // 先持久转移草稿（含基线），确认成功后打开 classify 编辑模式
+                const ok = reportFamilyStore.persistEditDraft(targetId, {
+                  reportType: selectedType.value,
+                  dateKey: reportDate.value,
+                  note: notes.value
+                }, createBaseline)
+                if (ok) {
+                  navigateToPage('/pages/archives/classify?source=p6&reportId=' + encodeURIComponent(targetId))
+                } else {
+                  uni.showToast({ title: '草稿转移失败，请重试', icon: 'none', duration: 2500 })
+                }
+              }
+              // 取消：草稿保留在 batch.draft，下次可再次进入
+            }
+          })
+          return
+        }
+        if (r.ok && r.warning) {
+          uni.showToast({ title: r.warning, icon: 'none', duration: 3000 })
+          return // 完成状态未落盘：留在页面，可重试保存完成对账
+        }
+        if (r.ok) {
+          reportStore.pendingUpload = null
+          uni.showToast({ title: '1 份报告已入档（共享）', icon: 'none' })
+          setTimeout(() => { uni.navigateBack() }, 1500)
+        } else if (r.code === 'not-ready') {
+          uni.showToast({ title: r.message || '尚有图片未完成登记，请稍后重试', icon: 'none', duration: 2500 })
+        } else if (r.code === 'revision-conflict') {
+          uni.showToast({ title: '对方已修改，请在档案页处理', icon: 'none', duration: 2500 })
+                  setTimeout(() => navigateToPage('/pages/archives/index'), 1200)
+        } else {
+          uni.showToast({ title: r.message || '保存失败，请重试', icon: 'none', duration: 2500 })
+        }
+        return
+      }
+      if (reportId.value) {
+        // 已有报告编辑（p6）：优先 onLoad hydrate 捕获的基线；冷启动未及 hydrate
+        // 时现拉现取（记录不存在才拒绝）
+        let rec = familyStore2.reports[reportId.value]
+        if (!rec) {
+          await familyStore2.pullReports()
+          rec = familyStore2.reports[reportId.value]
+        }
+        const bl = (editBaseline.value && editBaseline.value.id === reportId.value)
+          ? editBaseline.value
+          : (rec && !rec.deleted ? { id: rec.id, revision: rec.revision || 0 } : null)
+        if (!rec || rec.deleted || !bl) {
+          uni.showToast({ title: '报告已删除或已更新，请返回刷新', icon: 'none', duration: 2500 })
+          return
+        }
+        const r = await familyStore2.saveReport(reportId.value, {
+          reportType: selectedType.value || undefined,
+          dateKey: reportDate.value || undefined,
+          note: notes.value === '' ? null : (notes.value || undefined),
+          archiveStatus: 'archived'
+        }, bl.revision)
+        uni.hideLoading()
+        if (r.ok) {
+          if (draftPersistTimer) { clearTimeout(draftPersistTimer); draftPersistTimer = null } // 取消待执行 autosave
+          reportFamilyStore.clearEditDraft(reportId.value) // 已提交：旧草稿不再覆盖新数据
+          uni.showToast({ title: '已保存（共享）', icon: 'none' })
+          setTimeout(() => { uni.navigateBack() }, 1200)
+        } else if (r.code === 'revision-conflict') {
+          uni.showToast({ title: '对方已修改，请在档案页处理', icon: 'none', duration: 2500 })
+                  setTimeout(() => navigateToPage('/pages/archives/index'), 1200)
+          await familyStore2.pullReports()
+        } else {
+          uni.showToast({ title: r.message || '保存失败，请重试', icon: 'none', duration: 2500 })
+        }
+        return
+      }
+    } catch (e) {
+      uni.hideLoading()
+      uni.showToast({ title: (e && e.message) || '保存失败，请重试', icon: 'none', duration: 2500 })
+      return
+    }
+  }
+
   if (reportId.value) {
-    // 从 P6 进入 - 更新已有记录
+    // 从 P6 进入 - 更新已有记录（演示/旧路径）
     uni.showLoading({ title: '保存中…' })
     try {
       const result = await reportStore.updateReport(reportId.value, {
@@ -266,6 +530,56 @@ async function save() {
   // 其他流程：立即创建本地记录（服务端记录已在上传阶段创建）
   uni.showLoading({ title: '保存中…' })
   try {
+    if (isFamilyMode() && reportId.value && !familyBatchId.value) {
+      // 已有报告的分类编辑：权威部分更新（只改提交字段；打开时基线）
+      const bl = editBaseline.value
+      const rec = bl && bl.id === reportId.value ? familyStore2.reports[reportId.value] : null
+      if (!rec || rec.deleted) {
+        uni.hideLoading()
+        uni.showToast({ title: '报告已删除或已更新，请返回刷新', icon: 'none', duration: 2500 })
+        return
+      }
+      const r = await familyStore2.saveReport(reportId.value, {
+        reportType: selectedType.value || undefined,
+        dateKey: reportDate.value || undefined,
+        note: notes.value === '' ? null : (notes.value || undefined)
+      }, bl.revision)
+      uni.hideLoading()
+      if (r.ok) {
+        uni.showToast({ title: '已保存（共享）', icon: 'none' })
+        setTimeout(() => { uni.navigateBack() }, 1200)
+      } else if (r.code === 'revision-conflict') {
+        uni.showToast({ title: '对方已修改，请在档案页处理', icon: 'none', duration: 2500 })
+                  setTimeout(() => navigateToPage('/pages/archives/index'), 1200)
+        await familyStore2.pullReports()
+      } else {
+        uni.showToast({ title: r.message || '保存失败，请重试', icon: 'none', duration: 2500 })
+      }
+      return
+    }
+    if (isFamilyMode() && familyBatchId.value) {
+      // 权威链路：批次全部登记后创建报告（稳定 reportId/operationId，outbox 持久）
+      const r = await reportFamilyStore.createReportFromBatch(familyBatchId.value, {
+        reportType: selectedType.value,
+        dateKey: reportDate.value,
+        note: notes.value || null,
+        archiveStatus: 'archived'
+      })
+      uni.hideLoading()
+      if (r.ok) {
+        reportStore.pendingUpload = null
+        uni.showToast({ title: '1 份报告已入档（共享）', icon: 'none' })
+        setTimeout(() => { uni.navigateBack() }, 1500)
+      } else if (r.code === 'not-ready') {
+        uni.showToast({ title: r.message || '尚有图片未完成登记，请稍后重试', icon: 'none', duration: 2500 })
+      } else if (r.code === 'revision-conflict') {
+        uni.showToast({ title: '对方已修改，请在档案页处理', icon: 'none', duration: 2500 })
+                  setTimeout(() => navigateToPage('/pages/archives/index'), 1200)
+      } else {
+        uni.showToast({ title: r.message || '保存失败，请重试', icon: 'none', duration: 2500 })
+      }
+      return
+    }
     const created = await reportStore.createReport({
       report_type: selectedType.value,
       report_name: typeInfo.label,
@@ -537,4 +851,12 @@ page {
   font-weight: 600;
   color: white;
 }
+
+.batch-ctrl { margin: 20rpx 28rpx; padding: 20rpx 24rpx; background: #FEF7EA; border: 2rpx solid rgba(240,169,64,.35); border-radius: 18rpx; }
+.batch-ctrl-title { font-size: 24rpx; font-weight: 600; color: #B07818; display: block; margin-bottom: 12rpx; }
+.batch-ctrl-row { display: flex; align-items: center; justify-content: space-between; padding: 8rpx 0; }
+.batch-ctrl-item { font-size: 22rpx; color: #6E6A64; flex: 1; }
+.batch-ctrl-btn { background: #C98A3A; border-radius: 999rpx; padding: 6rpx 20rpx; margin-left: 12rpx; }
+.batch-ctrl-danger { background: #C0405A; }
+.batch-ctrl-btn-t { font-size: 20rpx; color: #fff; }
 </style>

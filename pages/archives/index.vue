@@ -19,10 +19,15 @@
     </view>
 
     <!-- Empty State (no reports at all) -->
-    <view v-else-if="reportStore.reports.length === 0" class="empty-state">
+    <view v-else-if="reportStore.reports.length === 0 && reportStore.unarchivedReports.length === 0" class="empty-state">
       <text class="empty-icon">📋</text>
       <text class="empty-title">还没有产检报告</text>
       <text class="empty-hint">点击右上角 + 上传第一份报告吧</text>
+    </view>
+    <view v-else-if="reportStore.reports.length === 0" class="empty-state" @tap="onBannerTap">
+      <text class="empty-icon">🗂</text>
+      <text class="empty-title">报告待分类</text>
+      <text class="empty-hint">{{ reportStore.unarchivedReports.length }} 份报告已上传，点击整理分类归档</text>
     </view>
 
     <!-- Has Reports -->
@@ -123,6 +128,59 @@
     <UploadSheet v-model:show="showUploadSheet" @select="onUploadSelect" />
 
     <!-- FAB Button -->
+    <!-- family 报告域待同步/失败重试横幅 -->
+    <view v-if="dataSource === 'family' && reportPendingCount > 0" class="sync-banner" style="position:static;margin-bottom:16rpx;">
+      <view class="sync-banner-row">
+        <text class="sync-banner-title">{{ reportPendingCount }} 份报告待同步</text>
+        <view class="sync-banner-btn" @tap="retryReportSync"><text class="sync-banner-btn-text">重试同步</text></view>
+      </view>
+    </view>
+
+    <!-- family 报告域冲突卡（本地 vs 云端 + 显式解决） -->
+    <view v-if="dataSource === 'family' && reportConflicts.length > 0" class="sync-banner" style="position:static;">
+      <view class="sync-banner-row">
+        <text class="sync-banner-title">{{ reportConflicts.length }} 份报告冲突待处理</text>
+      </view>
+      <view v-for="ce in reportConflicts" :key="ce.id" class="conflict-card">
+        <text class="conflict-title">「{{ conflictLabel(ce) }}」双方都做了修改</text>
+        <view v-if="ce.currentRecord && ce.currentRecord.deleted" class="conflict-row">
+          <text class="conflict-side">状态</text>
+          <text class="conflict-val">云端已删除（采用云端=放弃本条编辑）</text>
+        </view>
+        <view v-for="d in conflictDiff(ce)" :key="d.label" class="conflict-row">
+          <text class="conflict-side">{{ d.label }}</text>
+          <text class="conflict-val">我的：{{ d.mine }} · 云端：{{ d.cloud }}</text>
+        </view>
+        <view class="conflict-actions recover-actions">
+          <view class="conflict-btn conflict-btn-ghost" @tap="adoptCloudReport(ce.id)"><text class="conflict-btn-ghost-text">采用云端</text></view>
+          <view class="conflict-btn conflict-btn-solid" @tap="resubmitReport(ce.id)"><text class="conflict-btn-solid-text">确认重提</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 未完成批次（持久清单跨重启）：续传/去分类 -->
+    <view v-if="dataSource === 'family' && reportFamilyStore.activeBatches.length > 0" class="recover-card" style="bottom: 340rpx;">
+      <view class="recover-body">
+        <text class="recover-title">{{ reportFamilyStore.activeBatches.length }} 个未完成上传批次</text>
+        <text class="recover-desc" v-for="b in reportFamilyStore.activeBatches" :key="b.batchId">批次 {{ b.items.length }} 张 · {{ b.status === 'ready' ? '已登记，待填写报告信息' : b.status === 'partial' ? '部分未完成' : '上传中' }}</text>
+      </view>
+      <view class="conflict-actions recover-actions">
+        <view class="conflict-btn conflict-btn-solid" @tap="resumeBatch(reportFamilyStore.activeBatches[0].batchId)"><text class="conflict-btn-solid-text">继续处理</text></view>
+      </view>
+    </view>
+
+    <!-- 清单落盘失败恢复卡（family：saveFile 已移动临时文件，句柄唯一） -->
+    <view v-if="dataSource === 'family' && reportFamilyStore.lastRecovery && reportFamilyStore.recoveryIdentityMatches(reportFamilyStore.lastRecovery)" class="save-failed-banner recover-card">
+      <view class="recover-body">
+        <text class="recover-title">{{ reportFamilyStore.lastRecovery.items.filter(i => i.savedFilePath).length }} 张原件已保存但未开始上传</text>
+        <text class="recover-desc">上次批次清单写入本机失败；可恢复上传或放弃（放弃将删除本机原件）。{{ reportFamilyStore.lastRecovery.persisted ? '恢复信息已保存，重启后仍可恢复。' : '恢复信息未能落盘，仅保存在内存中，退出应用后可能无法恢复。' }}</text>
+      </view>
+      <view class="conflict-actions recover-actions">
+        <view class="conflict-btn conflict-btn-ghost" @tap="discardRecoveryNow"><text class="conflict-btn-ghost-text">放弃</text></view>
+        <view class="conflict-btn conflict-btn-solid" @tap="recoverUploadNow"><text class="conflict-btn-solid-text">恢复上传</text></view>
+      </view>
+    </view>
+
     <view class="fab-btn" @tap="showUploadSheet = true">
       <text class="fab-icon">+</text>
     </view>
@@ -195,16 +253,123 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { navigateToPage } from '@/utils/navigation.js'
 import UploadSheet from './components/UploadSheet.vue'
 import NavBar from '@/components/NavBar.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import { useReportStore, TAB_DEFS, getTypeInfo } from '@/stores/report'
+import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
+import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
+import { getOutbox } from '@/services/outbox.js'
+import { fetchReportReadUrls } from '@/services/fileUploadService.js'
+import { watch } from 'vue'
 
 const reportStore = useReportStore()
 const tabDefs = TAB_DEFS
+const familyStore = useFamilyStore()
+const reportFamilyStore = useReportFamilyStore()
+
+// ── family 报告域冲突卡（与 B2a 健康域同模式：本地 vs 云端 + 采用云端/确认重提）──
+const reportConflicts = computed(() => {
+  // 直接筛选 familyStore.conflictEntries（响应式）——不用 require
+  return familyStore.conflictEntries.filter(e => e.kind && e.kind.startsWith('report'))
+})
+// 报告域待同步（非冲突）数量与重试
+// 报告域待同步（非冲突）：顶层静态 import getOutbox，按 kind 过滤 report 域；
+// 响应式失效源沿用 store 版本（pendingCount/conflictEntries 变化即重算）
+const reportPendingCount = computed(() => {
+  void familyStore.pendingCount
+  void familyStore.conflictEntries
+  try {
+    return getOutbox().filter(e =>
+      (e.kind === 'report' || e.kind === 'report-delete') && !e.conflict).length
+  } catch (e) { return 0 }
+})
+async function retryReportSync() {
+  await familyStore.flushAll()
+  loadData()
+}
+function conflictLabel(entry) {
+  return entry.kind.startsWith('report') ? '报告' : '记录'
+}
+function conflictDiff(entry) {
+  const p = entry.payload || {}
+  const c = entry.currentRecord || {}
+  const fields = []
+  const push = (label, mine, cloud) => {
+    if (mine !== undefined || cloud !== undefined) {
+      fields.push({ label, mine: mine === undefined || mine === null ? '(空)' : String(mine), cloud: cloud === undefined || cloud === null ? '(空)' : String(cloud) })
+    }
+  }
+  push('日期', p.dateKey, c.dateKey)
+  push('类型', p.reportType, c.reportType)
+  push('归档', p.archiveStatus, c.archiveStatus)
+  push('备注', p.note, c.note)
+  return fields
+}
+async function adoptCloudReport(entryId) {
+  const ok = await familyStore.adoptCloud(entryId)
+  if (!ok) uni.showToast({ title: '获取云端版本失败，待办已保留', icon: 'none', duration: 2500 })
+  else uni.showToast({ title: '已采用云端版本', icon: 'none' })
+  loadData()
+}
+async function resubmitReport(entryId) {
+  const r = await familyStore.resubmit(entryId)
+  if (r && r.ok) {
+    uni.showToast({ title: '已重新提交', icon: 'none' })
+    loadData()
+  } else if (r && r.code === 'revision-conflict') {
+    uni.showToast({ title: '云端又有更新，请采用云端或稍后再试', icon: 'none', duration: 2500 })
+  } else {
+    uni.showToast({ title: (r && r.message) || '提交失败，待办已保留', icon: 'none', duration: 2500 })
+  }
+}
+
+// B2b2 三态数据源：family=mc-reports 权威 / demo=旧本地 / prompt=空
+const dataSource = ref(isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt'))
+watch(subscribeSession(), () => {
+  dataSource.value = isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt')
+  if (dataSource.value === 'family') {
+    loadData()
+  } else if (dataSource.value !== 'demo') {
+    // 会话失效：映射进旧 store 的报告副本、缩略临时 URL 一并清除——
+    // 不因数据源搬家丢失原有隔离保证
+    famThumbUrls.value = {}
+    reportStore.reports = []
+    reportStore.unarchivedReports = []
+    loading.value = false
+  }
+})
+
+// family 权威报告 → 旧模板消费形状
+function famReportToLegacy(r) {
+  if (!r || r.deleted) return null
+  return {
+    _id: r.id,
+    report_type: r.reportType,
+    report_date: r.dateKey,
+    archive_status: r.archiveStatus,
+    note: r.note || '',
+    file_urls: [], // 附件以 fileId 引用；缩略/预览临时 URL 按需签发（不持久化）
+    _attachmentCount: (r.attachments || []).length,
+    _cloud: true
+  }
+}
+// family 缩略图：首批报告首附件的临时 URL（会话内使用）
+const famThumbUrls = ref({})
+async function loadFamilyThumbs(list) {
+  for (const r of list.slice(0, 20)) {
+    const first = r.attachments && r.attachments[0]
+    if (!first || famThumbUrls.value[r.id]) continue
+    const res = await fetchReportReadUrls(r.id)
+    if (res.ok && res.urls[0]) famThumbUrls.value = { ...famThumbUrls.value, [r.id]: res.urls[0].tempFileURL }
+  }
+}
+const famReports = computed(() => Object.values(familyStore.reports)
+  .filter(r => !r.deleted && r.archiveStatus === 'archived').map(famReportToLegacy))
 
 const showUploadSheet = ref(false)
 const showFilterSheet = ref(false)
@@ -255,6 +420,44 @@ async function loadData() {
   }
   lastLoadTime.value = now
 
+  if (dataSource.value === 'family') {
+    loading.value = true
+    loadError.value = ''
+    // 实际模板消费：先把【当前】权威数据（含恢复的成员快照）映射进 reportStore
+    // 派生源——模板/筛选/分组/计数全部经由 store computeds 消费 family 数据；
+    // 拉取失败时暖离线显示最近数据，不因同步失败清空页面
+    const mapToTemplate = () => {
+      const mapped = Object.values(familyStore.reports)
+        .filter(r => !r.deleted)
+        .map(r => ({
+          _id: r.id,
+          report_type: r.reportType,
+          report_date: r.dateKey,
+          archive_status: r.archiveStatus,
+          note: r.note || '',
+          file_urls: famThumbUrls.value[r.id] ? [famThumbUrls.value[r.id]] : [],
+          _attachmentCount: (r.attachments || []).length,
+          _cloud: true
+        }))
+      reportStore.reports = mapped.filter(r => r.archive_status === 'archived')
+      reportStore.unarchivedReports = mapped.filter(r => r.archive_status !== 'archived')
+    }
+    mapToTemplate()
+    const res = await familyStore.pullReports()
+    if (res.ok) {
+      mapToTemplate()
+      await loadFamilyThumbs(Object.values(familyStore.reports).filter(r => !r.deleted))
+      mapToTemplate() // 缩略 URL 就绪后刷新一次
+    } else if (reportStore.reports.length === 0 && reportStore.unarchivedReports.length === 0) {
+      loadError.value = '同步失败，请重试' // 仅无任何可显示内容时提示错误；暖数据不被错误提示遮蔽
+    }
+    loading.value = false
+    return
+  }
+  if (dataSource.value === 'prompt') {
+    loading.value = false
+    return
+  }
   loading.value = true
   loadError.value = ''
   try {
@@ -318,7 +521,37 @@ function onReportTap(report) {
   navigateToPage(`/pages/archives/detail?id=${report._id}`)
 }
 
+function resumeBatch(batchId) {
+  const b = reportFamilyStore.batch(batchId)
+  if (!b) return
+  if (b.status === 'uploading' || b.status === 'partial') {
+    reportFamilyStore.retryBatch(batchId).catch(() => {})
+    uni.showToast({ title: '已重试未完成项', icon: 'none' })
+  }
+  navigateToPage('/pages/archives/classify?source=p2&batchId=' + encodeURIComponent(batchId))
+}
+
+async function recoverUploadNow() {
+  const r = await reportFamilyStore.recoverFromSavedPaths()
+  if (r.ok && r.batchId) {
+    uni.showToast({ title: '已恢复上传批次', icon: 'none' })
+    if (r.processing) r.processing.catch(() => {})
+    navigateToPage('/pages/archives/classify?source=p2&batchId=' + encodeURIComponent(r.batchId))
+  } else {
+    uni.showToast({ title: r.message || '恢复失败，原件已保留', icon: 'none', duration: 2500 })
+  }
+}
+function discardRecoveryNow() {
+  reportFamilyStore.discardRecovery()
+  uni.showToast({ title: '已放弃并清理本机原件', icon: 'none' })
+}
+
 function onUploadSelect(result) {
+  if (dataSource.value === 'family' && result.batchId) {
+    // B2b2：一次选图构成一份多页报告；导航携带持久批次 ID 进入可恢复分类
+    navigateToPage('/pages/archives/classify?source=p2&batchId=' + encodeURIComponent(result.batchId))
+    return
+  }
   if (result.fileCount === 1) {
     navigateToPage('/pages/archives/classify?source=p2')
   } else {
@@ -938,6 +1171,28 @@ page {
   font-weight: 600;
   color: white;
 }
+
+.recover-card { margin: 0 28rpx 20rpx; padding: 24rpx; background: #FEF4E3; border: 2rpx solid rgba(240,169,64,0.4); border-radius: 20rpx; position: fixed; left: 0; right: 0; bottom: 200rpx; z-index: 90; }
+.recover-body { margin-bottom: 16rpx; }
+.recover-title { font-size: 26rpx; font-weight: 600; color: #B07818; display: block; }
+.recover-desc { font-size: 22rpx; color: #B07818; opacity: 0.85; margin-top: 6rpx; display: block; line-height: 1.5; }
+.recover-actions { margin-top: 0; }
+.conflict-actions { display: flex; gap: 16rpx; }
+.conflict-btn { flex: 1; height: 64rpx; border-radius: 32rpx; display: flex; align-items: center; justify-content: center; }
+.conflict-btn-ghost { background: #F2F0EE; }
+.conflict-btn-solid { background: #C98A3A; }
+.conflict-btn-ghost-text { font-size: 24rpx; font-weight: 600; color: #6E6A64; }
+.conflict-btn-solid-text { font-size: 24rpx; font-weight: 600; color: #FFFFFF; }
+
+.sync-banner { margin: 0 28rpx 20rpx; padding: 20rpx 24rpx; background: #FEF4E3; border: 2rpx solid rgba(240,169,64,0.4); border-radius: 20rpx; }
+.sync-banner-row { display: flex; align-items: center; justify-content: space-between; }
+.sync-banner-title { font-size: 26rpx; font-weight: 600; color: #B07818; }
+.conflict-card { margin-top: 16rpx; padding: 20rpx; background: #FFFFFF; border: 2rpx solid rgba(240,169,64,0.5); border-radius: 16rpx; }
+.conflict-title { font-size: 24rpx; font-weight: 600; color: #8C5A10; display: block; margin-bottom: 12rpx; }
+.conflict-row { display: flex; gap: 12rpx; margin-bottom: 8rpx; align-items: flex-start; }
+.conflict-side { font-size: 22rpx; color: #9C9890; flex-shrink: 0; width: 80rpx; }
+.conflict-val { font-size: 22rpx; color: #4A4844; line-height: 1.5; flex: 1; }
+.conflict-actions { display: flex; gap: 16rpx; margin-top: 12rpx; }
 
 /* ── FAB Button ── */
 .fab-btn {
