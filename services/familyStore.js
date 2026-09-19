@@ -86,11 +86,21 @@ export const useFamilyStore = defineStore('familyData', () => {
     return s.status === 'confirmed' && s.member
   }
 
-  // 冷启动：身份确认后调用；恢复成员缓存快照，随后按需拉取
+  // 冷启动：身份确认后调用；恢复成员缓存快照，随后按需拉取。
+  // 快照按【家庭】作用域存取（同成员可重确认进不同家庭）：
+  // - persistSnapshot 只写家庭作用域键并在载荷内记录 familyId
+  // - restoreFromCache 只读当前家庭的键；载荷 familyId 不匹配不采用（双检）
+  // - 旧成员级键（无家庭作用域）保守保留原字节、不迁移不清除；
+  //   其内容无法证明属于哪个家庭，不自动采用（云端权威拉取兜底）
+  function snapshotKeyFor(familyId) {
+    return `${SNAPSHOT_KEY}@fam:${familyId}`
+  }
   function restoreFromCache() {
     if (!sessionReady()) return false
-    const snap = getMemberCache(SNAPSHOT_KEY)
+    const fam = getSessionState().member.familyId
+    const snap = getMemberCache(snapshotKeyFor(fam))
     if (!snap) return false
+    if (snap.familyId !== undefined && snap.familyId !== fam) return false
     pregnancy.value = snap.pregnancy || null
     daily.value = snap.daily || {}
     moods.value = snap.moods || {}
@@ -111,7 +121,9 @@ export const useFamilyStore = defineStore('familyData', () => {
   function persistSnapshot(epochAtStart) {
     if (!sessionReady()) return false
     if (epochAtStart !== undefined && epochAtStart !== currentEpoch()) return false
-    return setMemberCache(SNAPSHOT_KEY, {
+    const fam = getSessionState().member.familyId
+    return setMemberCache(snapshotKeyFor(fam), {
+      familyId: fam,
       pregnancy: pregnancy.value,
       daily: daily.value,
       moods: moods.value,
@@ -176,8 +188,13 @@ export const useFamilyStore = defineStore('familyData', () => {
       persistSnapshot(epochAtStart)
       return { ok: true }
     } catch (e) {
-      lastError.value = `同步失败：${e.message || e}`
-      return { ok: false, reason: 'error', message: lastError.value }
+      // 旧 continuation（挂起期间身份/epoch 已变化）的失败不得改写新身份的
+      // 同步异常标记——新身份的 UI 状态只由自己的拉取决定
+      if (currentEpoch() === epochAtStart) {
+        lastError.value = `同步失败：${e.message || e}`
+        return { ok: false, reason: 'error', message: lastError.value }
+      }
+      return { ok: false, reason: 'stale', message: `同步失败：${e.message || e}` }
     } finally {
       syncing.value = false
     }
@@ -202,26 +219,43 @@ export const useFamilyStore = defineStore('familyData', () => {
   }
 
   // ── 通用提交：outbox 落盘 → 发送 → 幂等收尾 ──
-  async function submit({ kind, entityId, payload, dateKey, localRecordGetter, baselineRevision, extraArgs }) {
+  async function submit({ kind, entityId, payload, dateKey, localRecordGetter, baselineRevision, extraArgs, stableOpId }) {
     if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
-    // 未变更重试（修复：同草稿两次离线点击产生两条操作、联网后第二条伪冲突）：
-    // 同实体且内容【完全一致】的既有待办 → 重放原不可变请求（同 opId/内容，服务端幂等），
-    // 不产生第二条操作；内容已变 = 新意图，不覆盖已发送请求，走正常入队/合并
-    const sameEntity = getOutbox().find(e => e.entityId === entityId && !e.conflict)
-    if (sameEntity && stableStringify(sameEntity.payload) === stableStringify(payload)) {
-      return flushEntry(sameEntity.id)
-    }
     const local = localRecordGetter ? localRecordGetter() : null
-    // baselineRevision：调用方（如表单）捕获的编辑开始版本——优先于当前快照版本，
-    // 防止后台刷新后用最新 revision 静默覆盖他人修改
+    // baselineRevision：调用方（如表单）捕获的编辑开始版本——优先于当前快照版本
     const expectedRevision = (baselineRevision !== undefined && baselineRevision !== null)
       ? baselineRevision
       : (local ? local.revision : 0)
-    const opId = newOpId(kind.replace(/[^a-z]/g, '').slice(0, 6))
+    const extra = { dateKey: dateKey || null, ...(extraArgs || {}) }
+    // 迁移固定意图（stableOpId）：不走 sameEntity 去重/不合并——
+    // 完整比较 kind/entity/date/expectedRevision/extra/payload 全部相同才重放同 opId；
+    // 同 opId 换正文拒绝；不借用普通编辑的 opId/基线；不吞掉普通未发送草稿
+    if (stableOpId) {
+      const existing = getOutbox().find(e => e.opId === stableOpId)
+      if (existing) {
+        const fullMatch = existing.kind === kind &&
+          existing.entityId === entityId &&
+          existing.expectedRevision === expectedRevision &&
+          stableStringify(existing.payload) === stableStringify(payload) &&
+          stableStringify(existing.extra || {}) === stableStringify(extra || {})
+        if (fullMatch) {
+          return flushEntry(existing.id) // 幂等重放
+        }
+        return { ok: false, code: 'operation-id-conflict', message: '同一迁移操作 ID 曾以不同内容提交——不可变更' }
+      }
+      // 没有同 opId 条目→直接入队（不检查 sameEntity——不借用/不合并普通编辑）
+    } else {
+      // 普通编辑：未变更重试（同实体同内容重放原请求）
+      const sameEntity = getOutbox().find(e => e.entityId === entityId && !e.conflict && !e.immutable)
+      if (sameEntity && stableStringify(sameEntity.payload) === stableStringify(payload)) {
+        return flushEntry(sameEntity.id)
+      }
+    }
+    const opId = stableOpId || newOpId(kind.replace(/[^a-z]/g, '').slice(0, 6))
     // outbox 只存可序列化字段（云调用参数 + 展示）；落盘失败不发请求不报成功
     const enq = enqueueOutbox({
-      kind, entityId, opId, expectedRevision, payload,
-      extra: { dateKey: dateKey || null, ...(extraArgs || {}) }
+      kind, entityId, opId, expectedRevision, payload, extra,
+      immutable: Boolean(stableOpId) // 迁移固定意图不可被普通编辑合并
     })
     if (!enq.ok) {
       return { ok: false, code: 'outbox-persist-failed', message: '本机待同步队列写入失败，内容未保存，请释放空间后重试' }
@@ -472,11 +506,11 @@ export const useFamilyStore = defineStore('familyData', () => {
   }
 
   // ── 领域入口（页面调用；payload 只含提交字段，null/'' = 显式清除）──
-  async function saveDaily(date, partial, baselineRevision) {
+  async function saveDaily(date, partial, baselineRevision, stableOpId) {
     const dateKey = typeof date === 'string' ? date : todayKeyOf(date)
     return submit({
       kind: 'daily', entityId: `daily:${dateKey}`, payload: partial,
-      dateKey, localRecordGetter: () => daily.value[dateKey], baselineRevision
+      dateKey, localRecordGetter: () => daily.value[dateKey], baselineRevision, stableOpId
     })
   }
   async function deleteDaily(date) {
@@ -486,18 +520,18 @@ export const useFamilyStore = defineStore('familyData', () => {
       dateKey, localRecordGetter: () => daily.value[dateKey]
     })
   }
-  async function savePregnancy(partial, baselineRevision) {
+  async function savePregnancy(partial, baselineRevision, stableOpId) {
     return submit({
       kind: 'pregnancy', entityId: 'pregnancy', payload: partial,
       localRecordGetter: () => pregnancy.value,
-      baselineRevision
+      baselineRevision, stableOpId
     })
   }
-  async function saveMood(date, partial, baselineRevision) {
+  async function saveMood(date, partial, baselineRevision, stableOpId) {
     const dateKey = typeof date === 'string' ? date : todayKeyOf(date)
     return submit({
       kind: 'mood', entityId: `mood:${dateKey}`, payload: partial,
-      dateKey, localRecordGetter: () => moods.value[dateKey], baselineRevision
+      dateKey, localRecordGetter: () => moods.value[dateKey], baselineRevision, stableOpId
     })
   }
 
@@ -537,25 +571,31 @@ export const useFamilyStore = defineStore('familyData', () => {
   }
 
   // 订阅权威会话状态：任何失效（退出 endSession / 业务身份拒绝锁定 / 确认完成
-  // 更换成员）都立即清空已可渲染内容——不依赖某个页面自觉调用 clearMemory。
+  // 更换成员或家庭）都立即清空已可渲染内容——不依赖某个页面自觉调用 clearMemory。
   // 已挂载的其他页面在下一次读取（computed 依赖 sessionVersion）时同样拿到空数据。
   const sessionVersion = subscribeSession()
   let lastWatchedMemberId = null
+  let lastWatchedFamilyId = null
   watch(sessionVersion, () => {
     const s = getSessionState()
     if (s.status !== 'confirmed') {
       clearMemory()
       lastWatchedMemberId = null
+      lastWatchedFamilyId = null
       return
     }
-    // 仅【成员更换】时清空旧成员内容并恢复新成员快照；
-    // 同成员重确认（含回前台复核）不得清掉已拉取/已保存的数据
+    // 【成员或家庭任一更换】时清空旧内容并恢复新作用域快照——
+    // 同成员重确认进不同家庭（familyId 变化）同样不得保留旧家庭数据；
+    // 同成员同家庭重确认（含回前台复核）不得清掉已拉取/已保存的数据
     const memberId = s.member ? s.member.memberId : null
-    if (lastWatchedMemberId !== null && memberId !== lastWatchedMemberId) {
+    const familyId = s.member ? s.member.familyId : null
+    if (lastWatchedMemberId !== null &&
+        (memberId !== lastWatchedMemberId || (lastWatchedFamilyId !== null && familyId !== lastWatchedFamilyId))) {
       clearMemory()
       restoreFromCache()
     }
     lastWatchedMemberId = memberId
+    lastWatchedFamilyId = familyId
   }, { immediate: false })
 
   // ── B2b1：待产包 ──
@@ -580,9 +620,9 @@ export const useFamilyStore = defineStore('familyData', () => {
     persistSnapshot(epoch)
     return { ok: true }
   }
-  async function saveBagItem(id, partial, baselineRevision) {
+  async function saveBagItem(id, partial, baselineRevision, stableOpId) {
     return submit({ kind: 'bag', entityId: `bag:${id}`, payload: partial,
-      localRecordGetter: () => bagItems.value[id], baselineRevision, extraArgs: { id } })
+      localRecordGetter: () => bagItems.value[id], baselineRevision, extraArgs: { id }, stableOpId })
   }
   async function deleteBagItem(id, baselineRevision) {
     return submit({ kind: 'bag-delete', entityId: `bag:${id}`, payload: {},
@@ -629,10 +669,10 @@ export const useFamilyStore = defineStore('familyData', () => {
     persistSnapshot(epoch)
     return { ok: true }
   }
-  async function saveCheckup(id, payload, status, baselineRevision, templateKey, source) {
+  async function saveCheckup(id, payload, status, baselineRevision, templateKey, source, stableOpId) {
     return submit({ kind: 'checkup', entityId: `checkup:${id}`, payload,
       localRecordGetter: () => checkups.value[id], baselineRevision,
-      extraArgs: { id, ...(status !== undefined ? { status } : {}), ...(templateKey !== undefined ? { templateKey } : {}), ...(source ? { source } : {}) } })
+      extraArgs: { id, ...(status !== undefined ? { status } : {}), ...(templateKey !== undefined ? { templateKey } : {}), ...(source ? { source } : {}) }, stableOpId })
   }
   async function deleteCheckup(id, baselineRevision) {
     return submit({ kind: 'checkup-delete', entityId: `checkup:${id}`, payload: {},
@@ -892,9 +932,9 @@ export const useFamilyStore = defineStore('familyData', () => {
     persistSnapshot(epoch)
     return { ok: true }
   }
-  async function saveReport(id, partial, baselineRevision) {
+  async function saveReport(id, partial, baselineRevision, stableOpId) {
     return submit({ kind: 'report', entityId: `report:${id}`, payload: partial,
-      localRecordGetter: () => reports.value[id], baselineRevision, extraArgs: { id } })
+      localRecordGetter: () => reports.value[id], baselineRevision, extraArgs: { id }, stableOpId })
   }
   async function deleteReport(id, baselineRevision) {
     return submit({ kind: 'report-delete', entityId: `report:${id}`, payload: {},

@@ -257,6 +257,27 @@ export function openRecoveryScope(recoveryKey) {
   const cacheKey = `${CACHE_PREFIX}_${scope.envId}_${scope.appId}_${scope.memberId}_${SCHEMA}_${recoveryKey}`
   return {
     scope,
+    // 原作用域读取：追加式记录须读原成员键，不能用当前成员的 getMemberCache。
+    // status: 'absent'（无键）| 'corrupt'（有键但不可解析——原字节必须保留，不覆写）
+    //        | 'ok' | 'error'（底层读异常，当作不可追加）
+    readStatus() {
+      let raw
+      try {
+        raw = uni.getStorageSync(cacheKey)
+      } catch (e) {
+        return { status: 'error' }
+      }
+      if (raw === '' || raw === null || raw === undefined) return { status: 'absent' }
+      try {
+        return { status: 'ok', value: JSON.parse(raw) }
+      } catch (e) {
+        return { status: 'corrupt' }
+      }
+    },
+    read() {
+      const r = this.readStatus()
+      return r.status === 'ok' ? r.value : null
+    },
     write(value) {
       try {
         // 与 setMemberCache 同一存储形状（JSON 字符串）：getMemberCache 直接可读
@@ -266,6 +287,40 @@ export function openRecoveryScope(recoveryKey) {
         return false
       }
     }
+  }
+}
+
+// 精确作用域缓存读取结果（B3a）：
+// 'present' = 当前成员作用域键存在且可解析
+// 'corrupt' = 当前成员作用域键存在但 JSON 损坏（原字节保留）
+// 'absent'  = 当前成员作用域无此键
+// 'other-member' = 此键后缀仅存在于其他成员命名空间（零读正文）
+// 'error'   = 底层存储读取异常（不当作 absent）
+export function getScopedCacheStatus(key) {
+  const scopedKey = namespaced(CACHE_PREFIX, SCHEMA, key)
+  let raw
+  try {
+    raw = uni.getStorageSync(scopedKey)
+  } catch (e) {
+    return 'error'
+  }
+  if (raw === '' || raw === null || raw === undefined) {
+    // 当前成员无此键——检查其他成员是否有（只看键名列表，不读正文）
+    try {
+      const info = typeof uni.getStorageInfoSync === 'function' ? uni.getStorageInfoSync() : { keys: [] }
+      const suffix = '_' + SCHEMA + '_' + key
+      const otherMember = (info.keys || []).some(k => k.endsWith(suffix) && k !== scopedKey)
+      return otherMember ? 'other-member' : 'absent'
+    } catch (e) {
+      return 'error'
+    }
+  }
+  // 键存在——尝试解析
+  try {
+    if (typeof raw === 'string') JSON.parse(raw)
+    return 'present'
+  } catch (e) {
+    return 'corrupt'
   }
 }
 

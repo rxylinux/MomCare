@@ -1,249 +1,255 @@
 {
-	"pages": [
-		{
-			"path": "pages/index/index",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black"
-			}
-		},
-		{
-				"path": "pages/login/index",
-				"style": {
-					"navigationStyle": "custom",
-					"navigationBarTextStyle": "black",
-					"backgroundColor": "#FBF7F2"
-				}
-			},
-			{
-				"path": "pages/register/index",
-				"style": {
-					"navigationStyle": "custom",
-					"navigationBarTextStyle": "black",
-					"backgroundColor": "#FBF7F2"
-				}
-			},
-		{
-			"path": "pages/knowledge/index",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black"
-			}
-		},
-		{
-			"path": "pages/profile/index",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black"
-			}
-		},
-		{
-			"path": "pages/knowledge/detail",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FFFFFF"
-			}
-		},
-		{
-			"path": "pages/archives/index",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FAF9F8"
-			}
-		},
-		{
-			"path": "pages/archives/unarchived",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FAF9F8"
-			}
-		},
-		{
-			"path": "pages/archives/batch",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FAF9F8"
-			}
-		},
-		{
-			"path": "pages/archives/classify",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FAF9F8"
-			}
-		},
-		{
-			"path": "pages/archives/detail",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FAF9F8"
-			}
-		},
-		{
-			"path": "pages/archives/ai-result",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FAF9F8"
-			}
-		},
-		{
-			"path": "pages/profile/weight-records",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/profile/bp-records",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/profile/fetal-records",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/profile/pregnancy-info",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-				"path": "pages/profile/onboarding",
-				"style": {
-					"navigationStyle": "custom",
-					"navigationBarTextStyle": "black",
-					"backgroundColor": "#FBF7F2"
-				}
-			},
-		{
-			"path": "pages/profile/hospital-bag",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/profile/checkup-reminder",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/profile/daily-plan",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-			{
-				"path": "pages/profile/privacy",
-				"style": {
-					"navigationStyle": "custom",
-					"navigationBarTextStyle": "black",
-					"backgroundColor": "#FBF7F2"
-				}
-			},
-			{
-				"path": "pages/family/index",
-				"style": {
-					"navigationStyle": "custom",
-					"navigationBarTextStyle": "black",
-					"backgroundColor": "#FBF7F2"
-				}
-			},
-		{
-			"path": "pages/profile/about",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/profile/edit-profile",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/guide/weekly-guide",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
-		{
-			"path": "pages/daily/detail",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		}
-	],
-	"globalStyle": {
-		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "孕伴 MomCare",
-		"navigationBarBackgroundColor": "#F5F7FA",
-		"backgroundColor": "#F5F7FA"
-	},
-	"tabBar": {
-		"custom": true,
-		"color": "#757575",
-		"selectedColor": "#C2185B",
-		"backgroundColor": "#FFFFFF",
-		"borderStyle": "white",
-		"list": [
-			{
-				"pagePath": "pages/index/index",
-				"text": "首页",
-				"iconPath": "static/tabbar/home.png",
-				"selectedIconPath": "static/tabbar/home.png"
-			},
-			{
-				"pagePath": "pages/knowledge/index",
-				"text": "知识",
-				"iconPath": "static/tabbar/knowledge.png",
-				"selectedIconPath": "static/tabbar/knowledge.png"
-			},
-			{
-				"pagePath": "pages/archives/index",
-				"text": "档案",
-				"iconPath": "static/tabbar/archives.png",
-				"selectedIconPath": "static/tabbar/archives.png"
-			},
-			{
-				"pagePath": "pages/profile/index",
-				"text": "我的",
-				"iconPath": "static/tabbar/profile.png",
-				"selectedIconPath": "static/tabbar/profile.png"
-			}
-		]
-	},
-	"uniIdRouter": {}
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/register/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/knowledge/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/knowledge/detail",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/archives/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FAF9F8"
+      }
+    },
+    {
+      "path": "pages/archives/unarchived",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FAF9F8"
+      }
+    },
+    {
+      "path": "pages/archives/batch",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FAF9F8"
+      }
+    },
+    {
+      "path": "pages/archives/classify",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FAF9F8"
+      }
+    },
+    {
+      "path": "pages/archives/detail",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FAF9F8"
+      }
+    },
+    {
+      "path": "pages/archives/ai-result",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FAF9F8"
+      }
+    },
+    {
+      "path": "pages/profile/weight-records",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/bp-records",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/fetal-records",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/pregnancy-info",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/onboarding",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/hospital-bag",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/checkup-reminder",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/daily-plan",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/privacy",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/family/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/about",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/edit-profile",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/guide/weekly-guide",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/daily/detail",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#FBF7F2"
+      }
+    },
+    {
+      "path": "pages/profile/data-source-scan",
+      "style": {
+        "navigationBarTitleText": "旧数据来源预览"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "孕伴 MomCare",
+    "navigationBarBackgroundColor": "#F5F7FA",
+    "backgroundColor": "#F5F7FA"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#757575",
+    "selectedColor": "#C2185B",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tabbar/home.png",
+        "selectedIconPath": "static/tabbar/home.png"
+      },
+      {
+        "pagePath": "pages/knowledge/index",
+        "text": "知识",
+        "iconPath": "static/tabbar/knowledge.png",
+        "selectedIconPath": "static/tabbar/knowledge.png"
+      },
+      {
+        "pagePath": "pages/archives/index",
+        "text": "档案",
+        "iconPath": "static/tabbar/archives.png",
+        "selectedIconPath": "static/tabbar/archives.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tabbar/profile.png",
+        "selectedIconPath": "static/tabbar/profile.png"
+      }
+    ]
+  },
+  "uniIdRouter": {}
 }

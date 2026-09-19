@@ -33,27 +33,35 @@
 				</view>
 			</view>
 
-			<!-- 同步状态：真实结果 -->
-			<view class="sec">
-				<text class="sec-lbl">同步状态</text>
-				<view class="action-card">
-					<view class="action-row">
-						<view class="action-icon" :style="{ background: '#EBF2FB' }">
-							<text class="action-icon-text">☁️</text>
+				<!-- 同步状态：真实结果 -->
+				<view class="sec">
+					<text class="sec-lbl">同步状态</text>
+					<view class="action-card">
+						<view class="action-row">
+							<view class="action-icon" :style="{ background: '#EBF2FB' }">
+								<text class="action-icon-text">☁️</text>
+							</view>
+							<view class="action-title">云端同步</view>
+							<text class="action-tag" :style="{ color: '#757575' }">{{ syncStatusText }}</text>
 						</view>
-						<text class="action-title">云端同步</text>
-						<text class="action-tag" :style="{ color: '#757575' }">{{ syncStatusText }}</text>
-					</view>
-					<!-- 演示模式不展示正式档案的备份信息 -->
-					<view class="action-row" v-if="!demoMode && backupItems.length > 0">
-						<view class="action-icon" :style="{ background: '#F0ECFB' }">
-							<text class="action-icon-text">📦</text>
+						<!-- 等待旧同步释放超时——显式重试入口（不静默放弃健康概览） -->
+						<view v-if="syncStalled" class="action-row" @tap="refreshAuthoritative">
+							<view class="action-icon" :style="{ background: '#FDF3E3' }">
+								<text class="action-icon-text">🔄</text>
+							</view>
+							<view class="action-title">重试同步</view>
+							<text class="action-tag" :style="{ color: '#B07818' }">上次等待超时</text>
 						</view>
-						<text class="action-title">本机备份</text>
-						<text class="action-tag" :style="{ color: '#757575' }">{{ backupItems.length }} 份</text>
+						<!-- 演示模式不展示正式档案的备份信息 -->
+						<view class="action-row" v-if="!demoMode && backupItems.length > 0">
+							<view class="action-icon" :style="{ background: '#F0ECFB' }">
+								<text class="action-icon-text">📦</text>
+							</view>
+							<view class="action-title">本机备份</view>
+							<text class="action-tag" :style="{ color: '#757575' }">{{ backupItems.length }} 份</text>
+						</view>
 					</view>
 				</view>
-			</view>
 
 			<!-- 数据管理 -->
 			<view class="sec">
@@ -69,6 +77,18 @@
 					</view>
 				</view>
 				<text class="sec-note">导出/恢复将在后续版本提供；注销账号需要服务端支持，当前版本不可用。</text>
+			</view>
+
+			<!-- B3a 旧数据来源预览入口（仅已确认正式会话） -->
+			<view v-if="dataSource === 'family'" class="sec">
+				<text class="sec-lbl">旧数据</text>
+				<view class="action-card" @tap="goSourceScan">
+					<view class="action-row">
+						<text class="action-label">旧数据来源预览与迁移</text>
+						<text class="action-arrow">›</text>
+					</view>
+					<text class="action-desc">扫描本机白名单旧键（健康/报告/待产包），预览并逐条确认后迁移到当前家庭</text>
+				</view>
 			</view>
 
 			<view class="bottom-spacer"></view>
@@ -87,54 +107,128 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import NavBar from '@/components/NavBar.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import { useHealthStore } from '@/stores/health.js'
-import { useReportStore } from '@/stores/report'
-import { isRealAuthed } from '@/utils/api.js'
-import { listLegacyBackups, isDemoMode } from '@/utils/storage.js'
+import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
+import { navigateToPage } from '@/utils/navigation.js'
 
-const healthStore = useHealthStore()
-const reportStore = useReportStore()
+const familyStore = useFamilyStore()
 
-const demoMode = isDemoMode()
+// B3a 三态：可信会话+familyStore 统计（不读旧 healthStore/reportStore）
+const dataSource = ref(isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt'))
+// 权威概览刷新：健康域（孕期/日健康/心情，pullAll）与报告域（pullReports）【都】显式拉取——
+// pullAll 不含报告；只拉健康就显示"正常"会让报告计数停留在缓存/零（不诚实）。
+// 身份/epoch 作用域刷新令牌：每次触发取得新令牌，旧 continuation 的完成不得改动
+// 新身份的 UI 状态（错误标记/在途标记）；pullAll 因旧身份占用 busy 时【保证 eventual
+// 重试】——轮询直到旧同步释放（store 的 finally 必然释放）；仅设 60s 安全阀，
+// 超阀显示显式重试入口（syncStalled），不静默放弃新身份的健康概览
+const refreshToken = ref(0)
+const refreshingDomains = ref(false)
+const reportSyncError = ref('')
+const syncStalled = ref(false)          // 健康域等待旧同步释放超时——显示显式重试入口
+const reportSyncedThisEpoch = ref(false) // 报告计数来源：仅本次刷新成功拉取后才算权威
+const retryDelay = ms => new Promise(r => setTimeout(r, ms))
+async function pullHealthWithBusyRelease(myToken) {
+  for (let tries = 0; ; tries++) {
+    const r = await familyStore.pullAll()
+    if (!r || r.reason !== 'busy') return { r, exhausted: false }
+    if (myToken !== refreshToken.value) return { r, exhausted: false }
+    // 安全阀：旧同步始终未释放（极端异常）——显式可见重试，不无限等待
+    if (tries >= 600) return { r, exhausted: true }
+    await retryDelay(100)
+  }
+}
+async function refreshAuthoritative() {
+  if (dataSource.value !== 'family') return
+  const myToken = ++refreshToken.value
+  refreshingDomains.value = true
+  reportSyncError.value = ''
+  syncStalled.value = false
+  reportSyncedThisEpoch.value = false
+  try {
+    // pullReports 不吞异常（分页解析失败会 reject）——allSettled 两域互不拖累
+    const [healthR, reportsR] = await Promise.allSettled([pullHealthWithBusyRelease(myToken), familyStore.pullReports()])
+    // 旧 continuation：令牌已被更新的身份取代——不改写新身份的任何 UI 状态
+    if (myToken !== refreshToken.value) return
+    if (healthR.status === 'fulfilled' && healthR.value.exhausted) {
+      syncStalled.value = true // 等待旧同步释放超时——提供显式重试入口
+    }
+    const rpt = reportsR.status === 'fulfilled' ? reportsR.value : null
+    const softCodes = ['stale-session', 'unauthenticated-session', 'busy', 'no-session']
+    if (rpt && rpt.ok) {
+      reportSyncedThisEpoch.value = true // 本次刷新成功——报告计数为当前权威结果
+    } else if (!rpt || !softCodes.includes(rpt && rpt.code)) {
+      // 报告域拉取失败必须可见——不静默当作已完成；计数保持"本机缓存"标注
+      reportSyncError.value = (rpt && (rpt.message || rpt.code)) ||
+        (reportsR.reason && (reportsR.reason.message || reportsR.reason)) || '报告同步失败'
+    }
+  } finally {
+    if (myToken === refreshToken.value) refreshingDomains.value = false
+  }
+}
+watch(subscribeSession(), () => {
+  dataSource.value = isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt')
+  // 页面在未确认状态打开、随后完成确认——过渡后加载权威概览（健康+报告两域）
+  if (dataSource.value === 'family') {
+    refreshAuthoritative()
+  }
+})
+if (dataSource.value === 'family') {
+  refreshAuthoritative()
+}
 
-const dataModeText = computed(() => demoMode
+function goSourceScan() {
+  navigateToPage('/pages/profile/data-source-scan')
+}
+
+
+
+
+
+const demoMode = computed(() => dataSource.value === 'demo')
+
+const dataModeText = computed(() => demoMode.value
 	? '演示模式 · 示例数据独立存放'
-	: (isRealAuthed() ? '正式档案 · 已登录' : '正式档案 · 本机记录'))
+	: (dataSource.value === 'family' ? '正式档案 · 已确认身份' : dataSource.value === 'demo' ? '演示模式' : '正式档案 · 未确认'))
 
 const dataItems = computed(() => {
-	const weightCount = Object.values(healthStore.records || {}).filter(r => r && r.weight).length
-	const bpCount = Object.values(healthStore.records || {}).filter(r => r && r.bp).length
-	const fetalCount = Object.values(healthStore.records || {}).filter(r => r && r.fetal).length
-	const reportCount = reportStore.reports.length + reportStore.unarchivedReports.length
+	const dailyAll = Object.values(familyStore.daily || {}).filter(r => r && !r.deleted)
+	const weightCount = dailyAll.filter(r => r && r.fields && r.fields.weightKg != null).length
+	const bpCount = dailyAll.filter(r => r && r.fields && r.fields.systolic != null).length
+	const fetalCount = dailyAll.filter(r => r && r.fields && r.fields.fetalCount != null).length
+	const reportCount = Object.values(familyStore.reports || {}).filter(r => r && !r.deleted).length
+	// 报告计数来源标注：仅【本次刷新】成功拉取报告域后才显示权威计数——
+	// 持久化的 lastReportSyncAt（快照恢复）不代表本次挂载拉取成功，失败时保持"本机缓存"
+	const reportTag = reportSyncedThisEpoch.value ? '' : '（本机缓存）'
 	return [
 		{ icon: '⚖️', iconBg: '#FAEAEE', title: '体重记录', count: `${weightCount} 条` },
 		{ icon: '💗', iconBg: '#EBF2FB', title: '血压记录', count: `${bpCount} 条` },
 		{ icon: '👣', iconBg: '#EAF2EE', title: '胎动记录', count: `${fetalCount} 条` },
-		{ icon: '📁', iconBg: '#FDF3E3', title: '产检报告', count: `${reportCount} 份` }
+		{ icon: '📁', iconBg: '#FDF3E3', title: '产检报告', count: `${reportCount} 份${reportTag}` }
 	]
 })
 
 const totalRecords = computed(() => {
-	return Object.keys(healthStore.records || {}).length
+	return Object.values(familyStore.daily || {}).filter(r => r && !r.deleted).length
 })
 
 const syncStatusText = computed(() => {
-	if (demoMode) return '演示模式不同步'
-	if (healthStore.needsLegacyConfirm) return '已阻止上传：旧数据来源待确认'
-	if (!isRealAuthed()) return '未登录，仅本机'
-	switch (reportStore.lastSyncStatus) {
-		case 'ok': {
-			const t = reportStore.lastSyncAt ? new Date(reportStore.lastSyncAt) : null
-			return t ? `最近同步 ${formatTime(t)}` : '已同步'
-		}
-		case 'network': return '同步失败：网络不可用'
-		case 'server': return '同步失败：服务不可用'
-		case 'persist': return '已拉取云端，但本机缓存写入失败'
-		default: return '尚未同步'
+	if (demoMode.value) return '演示模式不同步'
+	if (dataSource.value === 'demo') return '演示模式，数据不出本机'
+	if (dataSource.value !== 'family') return '未确认身份，仅本机'
+	if (refreshingDomains.value || familyStore.syncing) return '同步中…'
+	if (familyStore.lastError) return '同步异常：' + familyStore.lastError
+	if (reportSyncError.value) return '报告同步异常：' + reportSyncError.value
+	if (syncStalled.value) return '同步等待超时——请点下方重试'
+	// "正常"须健康域与报告域【都】完成过权威拉取——只完成一半如实显示部分同步
+	if (!familyStore.lastFullSyncAt && !familyStore.lastReportSyncAt) return '尚未完成同步'
+	if (!familyStore.lastFullSyncAt || !familyStore.lastReportSyncAt) {
+		return familyStore.lastFullSyncAt ? '部分同步：报告域未完成' : '部分同步：健康域未完成'
 	}
+	if (familyStore.pendingCount > 0) return familyStore.pendingCount + ' 项待同步'
+	return '正常'
 })
 
 function formatTime(d) {
@@ -147,10 +241,11 @@ const actionItems = computed(() => [
 	{ icon: '📦', iconBg: '#EBF2FB', title: '导出全部数据', tag: '暂不可用', tagColor: '#9C9890', danger: false, action: 'exportAll' },
 	{ icon: '🔒', iconBg: '#FDF3E3', title: '隐私政策', danger: false, action: 'policy' },
 	{
-		icon: '🗑', iconBg: '#F2F0EE', danger: true, action: 'clearCache',
-		title: demoMode ? '清除演示数据' : '清除本机数据',
-		tag: demoMode ? '仅演示数据' : '清除前自动备份',
-		tagColor: '#F0A940'
+		// 清除能力未实现——如实标注"暂不可用"，不做红色可点破坏性样式、不承诺自动备份
+		icon: '🗑', iconBg: '#F2F0EE', danger: false, action: 'clearCache',
+		title: '清除本机数据',
+		tag: '暂不可用',
+		tagColor: '#9C9890'
 	},
 	{ icon: '⚠️', iconBg: '#FDEAEA', title: '注销账号并删除数据', tag: '暂不可用', tagColor: '#9C9890', danger: false, action: 'deleteAccount' }
 ])
@@ -166,12 +261,8 @@ function handleAction(item) {
 		return
 	}
 	if (item.action === 'clearCache') {
-		dangerTitle.value = demoMode ? '清除演示数据' : '清除本机数据'
-		dangerContent.value = demoMode
-			? '将清除本机的演示示例数据，不影响正式档案。'
-			: '将清除本机的健康记录与报告数据。\n清除前会自动创建一份可恢复备份；此操作不影响云端数据。'
-		dangerAction.value = item.action
-		showDangerModal.value = true
+		// B3a：新云模型暂不支持安全清本机——明确禁用并告知未执行（不保留死代码假路径）
+		uni.showToast({ title: '当前版本暂不支持清除本机数据（保留所有记录与备份）', icon: 'none', duration: 3000 })
 	}
 }
 
@@ -182,23 +273,13 @@ const dangerAction = ref('')
 
 function refreshBackups() {
 	// 演示模式不列出正式档案的备份
-	backupItems.value = demoMode ? [] : listLegacyBackups()
+	backupItems.value = dataSource.value === 'demo' ? [] : []
 }
 
 function doDangerAction() {
-	if (dangerAction.value !== 'clearCache') {
-		showDangerModal.value = false
-		return
-	}
+	// 清除能力未提供：任何到达此处的确认都不执行删除，如实告知——不伪造成功结果
 	showDangerModal.value = false
-	// 模式感知的真实清除：演示只清演示键；正式先备份、备份成功才清除并全量重置内存
-	const result = healthStore.clearLocalData()
-	uni.showToast({
-		title: result.ok ? result.message : (result.message || '清除失败，请重试'),
-		icon: 'none',
-		duration: 3000
-	})
-	if (result.ok) refreshBackups()
+	uni.showToast({ title: '当前版本不支持清除本机数据（未执行任何删除）', icon: 'none', duration: 3000 })
 }
 
 refreshBackups()

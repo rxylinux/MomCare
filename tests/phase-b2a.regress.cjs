@@ -991,9 +991,12 @@ async function main() {
     page.dataMode.value = 'family'
     await new Promise(r => setTimeout(r, 5))
     const weekBefore = page.famWeekInfo.value.week
-    // 绝对值断言：2026-06-01 → 2026-09-19 = 110 天（公历日序，非 YYYYMMDD 相减）
-    assert.equal(page.famWeekInfo.value.total, 110, `绝对天数 110（实得 ${page.famWeekInfo.value.total}）`)
-    assert.equal(page.famWeekInfo.value.week, 15, '孕 15 周')
+    // 绝对值断言：公历日序（非 YYYYMMDD 相减）——期望值按真实"今天"推导，不写死墙钟日期
+    // （写死会在跨日后差一：2026-06-01→09-19=110，→09-20=111；本机时区=上海）
+    const gregorianDay = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
+    const expectedTotal = Math.round(gregorianDay(new Date()) - gregorianDay(new Date(2026, 5, 1)))
+    assert.equal(page.famWeekInfo.value.total, expectedTotal, `绝对天数 ${expectedTotal}（实得 ${page.famWeekInfo.value.total}）`)
+    assert.equal(page.famWeekInfo.value.week, Math.floor(expectedTotal / 7), `孕周=绝对天数/7（${Math.floor(expectedTotal / 7)}）`)
     // 跨上海午夜：真实 App 时钟路径——healthStore.refreshToday(明天) 驱动重算
     const totalBefore = page.famWeekInfo.value.total
     const tomorrow = new Date(Date.now() + 86400000)

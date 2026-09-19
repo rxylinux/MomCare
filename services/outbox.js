@@ -61,15 +61,17 @@ function currentMemberId() {
 
 // 入队（或合并到同实体【从未发送】的 pending 条目）。
 // everSent 条目绝不合并/改写（超时可能在云端已提交，原 ID+原内容保留）。
-export function enqueueOutbox({ kind, entityId, opId, expectedRevision, payload, extra }) {
+export function enqueueOutbox({ kind, entityId, opId, expectedRevision, payload, extra, immutable }) {
   const memberId = currentMemberId()
   if (!memberId) return { ok: false, reason: 'unconfirmed' }
   const loaded = loadForMember(memberId)
   if (!loaded.ok) return { ok: false, reason: 'outbox-' + loaded.reason }
   const entries = loaded.entries
-  const mergeTarget = entries.find(e =>
+  // 不可变意图（迁移固定 opId）：既不合并进已有条目，也不被已有条目吸收
+  // ——保持普通未发送草稿完整，同 opId 幂等在调用层（familyStore.submit）处理
+  const mergeTarget = immutable ? undefined : entries.find(e =>
     e.entityId === entityId && e.kind === kind &&
-    e.status === 'pending' && e.everSent !== true)
+    e.status === 'pending' && e.everSent !== true && !e.immutable)
   let entry
   if (mergeTarget) {
     mergeTarget.payload = payload
@@ -84,6 +86,7 @@ export function enqueueOutbox({ kind, entityId, opId, expectedRevision, payload,
       id: 'ob_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
       kind, entityId, opId, expectedRevision, payload,
       extra: extra || {},
+      immutable: Boolean(immutable),
       status: 'pending', everSent: false, conflict: false,
       attempts: 0, queuedAt: Date.now()
     }
