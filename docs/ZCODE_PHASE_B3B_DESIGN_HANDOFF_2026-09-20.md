@@ -37,7 +37,7 @@
 | 2 | verify 称只读却持久化进度 | §5.1 verify **真只读零服务端写**：nextCursor/verifiedItems/verifiedBytes/errors 在**响应**返回，**UI 进度由客户端保存** |
 | 3 | 10MiB 文件超 256KiB 读页 | 游标含 **fileIndex+blockIndex 字节偏移**；manifest attachment 项新增 `chunkSha256[]`（VERIFY_BLOCK=256KiB 逐块承诺，10MiB≤40 块，导出端生成）——**分块承诺续接**，不需跨请求哈希中间态；commit 验证段文件仅核元数据/引用，实际字节证明沿用 attach（同事务引用阻止清理） |
 | 4 | indexDeclarePage 末页全量重扫 10000 条 | **页内校验+随页持久化滚动聚合**（runningCount+逐页摘要链式哈希，有界写）；末页 **O(1)** 核对 vs declare 解析时一次性算好的总数/根聚合 |
-| 5 | 长期未完成分片无界常驻 | 新增 `restore.abandon`（owner-only、置终态 abandoned、**分页删除** ≤500 文档/调用、逐文件事务摘除 restore: 引用回归 B2b2 清理语义）+ **单成员活跃批次上限 ≤2**（begin 拒绝并列出，引导完成/放弃）；部署前容量评估（最坏 ~4MiB/批次） |
+| 5 | 长期未完成分片无界常驻 | 新增 `restore.abandon`（owner-only、置终态 abandoned、**分页删除** ≤500 操作/调用、逐文件事务摘除 restore: 引用回归 B2b2 清理语义）+ **单成员活跃批次上限 ≤2**（begin 拒绝并列出，引导完成/放弃）；部署前容量评估（最坏 ~4MiB/批次） |
 
 **阶段一契约定型声明**（应评审要求明确）：导出侧（共享 codec + 只读本地包验真 + 导出，§2/§3/§4）契约**已独立定型**，不依赖恢复侧任何未决项——容器布局/上限、canonical+严格 UTF-8（孤立代理拒绝、非 schema 值排除）、增量 SHA（Uint8Array 接口+三端向量）、manifest v1 终版（无 totalSizeBytes；chunkSha256 由导出端生成）、分段构建 C1–C5+published 标志+崩溃恢复、所选范围完整/omitted/诊断包/scopeLabel、导出状态机、微信活体+H5 本地验包；阶段一不需 CSPRNG（导出临时目录名 `exp_<createdAt>_<seq>`）。**可先行授权阶段一**；阶段二（§5 恢复协议）同轮亦已完整落稿待批。
 
@@ -331,3 +331,57 @@ ec1cb0c62140de18a8aaeccf0f52c6b2ed1036c6940093e912a80615b8b940d5  pages/profile/
 ## 下一步
 
 B3b 阶段一已独立冻结，下一步按主设计 §5 实施隔离恢复。CODING 只修改生产源码与产品文档，TESTING 独立维护测试；每个阶段经 Codex 源码审查与稳定快照验收后再提交。真实部署与两手机联调待全部本地工作完成。
+
+## 阶段二权威协议（2026-09-20 终稿·v4——替代此前全部草案）
+
+**状态**：Codex 与独立测试端已完成设计复核，批准阶段二后端开码；生产功能和页面尚未验收。以下为唯一权威版本——此前 P0/并发/S1-S7 等分段草案**全部作废**，以本节与主设计 §5 为准。
+
+### 核心协议决策（不可再拆分选择）
+
+| 决策 | 权威结论 | 理由 |
+|---|---|---|
+| 记录超限路由 | 规范字节 ≤48KiB → uploadRecord（内联）；>48KiB → uploadRecordChunk+finalizeRecord | 64KiB 请求预算内两条路径殊途同归 |
+| chunkTotal 上限 | **103**（上限保留）；**服务端强制累计解码字节 ≤4,194,304**（103×40,960=4,218,880>4MiB——即使每片合法累计超限 → `record-too-large` 拒绝；仅末片可部分） | MAX_DOMAIN_JSON_BYTES=4MiB |
+| chunkTotal 锚定 | manifest 锚定入批次文档；**每条分片记录独立 anchor 文档** `_id=<batchId>:anchor:<domain>:<index>`（10000 条不可全放批次文档） | 防中途改+可扩展 |
+| finalize 读预算 | **4MiB 单次例外**（仅 finalizeRecord 此一处；commit/verify 仍 ≤256KiB/页） | ≤103 chunk 一次读完+全量 SHA |
+| chunk 保留 | **无限期保留**（restored 批次唯一字节源——不删；仅 abandon 清理） | 删即丢唯一字节 |
+| finalize 后零变更 | consumedAt 后新 chunk → record-consumed；重放 finalize → 幂等返回（不递增 contentGeneration） | 防事后篡改 |
+| finalize 丢响应 | 重放 → CAS 读 consumedAt → **比对不可变请求字段**（id/revision/deleted/expectedChunkTotal/expectedSha256）全等→幂等返回；不等→`finalize-conflict` | 幂等+防篡改 |
+| verify chunk 比对 | 逐 chunk SHA-256 vs frozenChunkSha256[chunkIndex]（≤256KiB/页）——不重算全量 | 依赖 finalize 全量证明+chunk 不可变 |
+| verify corruption | **verify 真只读**——corruption 仅在响应 errors[] 报告不改批次状态；**仅 commit verifying 路径**持久化终态 verify-corruption | standalone verify 零写 |
+| 预检模型 | **单活跃**（preflightId+租约+CAS 游标/滚动证明+proofComplete） | 无并发交错 |
+| preflightId 持久化 | commit 响应返回 preflightId → 客户端意图持久化 → 重启后携此 ID 续传 | 丢响应恢复 |
+| 预检租约 | 超时（默认 5 分钟无进展）→ 新调用 CAS 接管（stale lease takeover） | 防永久卡死 |
+| 冻结 O(1) | `status=uploading ∧ proofComplete ∧ provenGeneration===contentGeneration`（含零世代 0=0） | 世代分离 |
+| 写入+计数同事务 | 每次 upload/attach/chunk/finalize 单事务内容+contentGeneration+1 | 世代与内容一致 |
+| readUrl | 签发前 owner+非 abandoned+引用+registered+授权校验；**已签发 URL TTL 内可继续使用**（平台限制无法撤销——如实边界） | 安全+诚实 |
+| abandon 分页 | **先置 abandoning（计入活跃上限）**→事务组分页（每事务 ≤100 操作含读+写；每次调用 ≤500 操作为上界不保证；resumable cursor）→全清净后终态 abandoned →**仅清意图不清 .mcpkg**（持久副本保留——可能为用户唯一可恢复源；用户显式删除/新批次可用） | DB 限制+防滥用+数据保留 |
+| 持久包副本 | chooseMessageFile 临时路径冷启动可能失效——恢复前先复制到 USER_DATA_PATH + 复验 packageDigest + 持久意图；失败零云写保留原始；冷启动文件缺失/摘要不符 → 停止要求重选（绝不宣称自动恢复） | 数据保留 |
+| commit preflightId | 请求可选 preflightId（首次不传→创建+返回；重试传上次值；不匹配→preflight-conflict） | 断点续传 |
+| 零声明空包 | 声明=0 时无首次 upload——commit 首调从 declared 直接→uploading→预检 0 页→proofComplete 0=0→冻结→restored | 边界完备 |
+| abandon vs restored | restored 后 abandon 不可用（chunk 永久保留）；commit 先 restored → abandon already-restored；abandoning 计入活跃上限 | 终态保护+防循环 |
+
+### 测试矩阵（阶段二完整组）
+
+| 组 | 断言要点 |
+|---|---|
+| 累计字节超限 | 103 chunk 各 ≤40KiB 但累计 >4MiB → record-too-large 拒绝（每片合法不豁免） |
+| 超限记录全链 | >64KiB 规范字节 mood 记录 → 导出完整包 → chunk+finalize → 隔离区逐字段相等 → chunk 保留可 verify |
+| chunk 锚定 | 首片锚定 chunkTotal；后续片不匹配拒绝；finalize expectedChunkTotal≠锚定值拒绝 |
+| finalize 4MiB 例外 | ~3.9MiB 记录 101-103 chunk 一次读重组+hash+schema 全过；第 104 chunk 拒绝 |
+| finalize 失败零写 | 缺片/hash 不等/schema 拒 → mc_restore_records 零写+contentGeneration 不递增 |
+| finalize 丢响应重放 | 成功后丢响应 → 重放 → 幂等返回（contentGeneration 不变、不接受新 chunk → record-consumed） |
+| verify chunk 分页 | 逐 chunk 比对 frozenChunkSha256 ≤256KiB/页；篡改单 chunk → 比对失败 |
+| verify corruption 终态 | verifying 中发现 chunk 损坏/缺失 → verify-corruption 终态；不重试；abandon 后新批次可从本地包恢复 |
+| 单活跃预检 | 两 preflightId 竞争 → 后者 preflight-conflict；租约超时 → 新调用 CAS 接管续传 |
+| CAS 滚动证明 | 每页 checkedCount/checkedDigest 持久化；中途 contentGeneration 变 → content-changed 中止+清除 → 重走 |
+| 零世代空包 | 声明总数=0 → proofComplete=true（generation=0=0）→ 冻结合法 |
+| 写入+计数同事务 | upload 后 contentGeneration 立即可见 |
+| readUrl | owner+非 abandoned+引用+registered 校验通过后签发；abandon 后新 readUrl 拒绝；已签发 URL TTL 内仍可访问（如实） |
+| abandon 保留 .mcpkg | abandon 完成后持久副本仍在盘（文件字节不变）；意图已清；用户可从副本开新批次 |
+| abandon 清理 anchor 文档 | per-record anchor 文档（`<batchId>:anchor:*`）在 abandon 组1 中被删除——restored 后不删 |
+| abandon 事务组 | ≤500 操作/调用（≤100 操作/事务×5 组——操作含读+写非纯删除）；resumable cursor；abandoning 计入活跃上限；abandoned 后新动作全拒 |
+| commit preflightId | 请求可选 preflightId（首次不传→创建+返回；重试传上次值；不匹配→preflight-conflict） |
+| abandon vs restored | commit 先 restored → abandon already-restored；restored 后 chunk 永久保留不可 abandon |
+| preview 分片完整 | 超 256KiB 分片记录 preview 返回 nextChunkCursor 续读——不截断 |
+| 并发 abandon/attach | abandon 先置 abandoning（非终态——清理中计入活跃上限）→ attach 拒；attach 先完成 → abandon 事务摘除引用 |

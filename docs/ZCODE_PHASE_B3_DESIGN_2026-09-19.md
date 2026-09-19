@@ -161,52 +161,71 @@ published → delivering → delivered | delivery-cancelled（用户取消；包
 
 H5 无可信服务端身份（不发明 H5 鉴权后端）。可用：`<input type="file">` + `File.slice()` 分块 + 同一 codec 本地校验（§2.6 全项，含 complete 语义与孤立代理项）与本地预览（诊断包也可本地查验——本地操作无需身份）。不可用：服务端全量导出、mc-restore 上传——页面如实 unavailable-platform。不给云函数传 Blob URL/本机路径。H5 通过≠微信真机通过。
 
-## 5. mc-restore 云函数协议（隔离恢复；本期无 merge/清理界面/部分恢复）
+## 5. mc-restore 云函数协议（隔离恢复；本期无 merge/无部分恢复；abandon 为用户可达的清理入口）
 
 写 `mc_restore_*` 隔离集合；实时域不读取。现有/已删正式记录仅 preview 显示差异，不覆盖不复活。
 
 ### 5.0 批次标识与客户端意图
 
-- **batchId = `rst_<128 位 CSPRNG hex>`**（`wx.getRandomValues`/`crypto.getRandomValues`；不可用即停止）。副作用前持久化意图：`{batchId, packageDigest, manifestDigest, claimedKind, totals, perStream 指针, scope:{env,app,familyId,memberId,createdAt}, opIdBase}`。
-- **begin 只做不可变摘要承诺**（rev3 复审第 2 条）：`restore.begin {batchId, formatVersion, packageDigest, manifestDigest, claimedKind, totals}` —— 校验格式/上限，创建批次（status=`declaring`，owner=memberId），同 batchId+全量内容一致幂等、任何变化 `batch-conflict`。**begin 不依据客户端自报 packageKind 做合格判定**——客户端可在选包时（本地校验 complete/kind）更早拒绝，但服务端门在 declare 重组解析之后（§5.1）：由**服务端**从 manifest 字节判定 packageKind/complete/pending/scope 与调用者授权（含私人 scope 必须 resolveCaller 本人——上传者不能自称含他人私人的全家备份），不合格批次拒绝进入 indexing，**且不会接收任何记录或附件**。
-- 意图/epoch/续传/不删原包/新环境独立，同前。
+- **batchId = `rst_<128 位 CSPRNG hex>`**（`wx.getRandomValues`/`crypto.getRandomValues`；不可用即停止）。副作用前持久化意图：`{batchId, packageDigest, manifestDigest, claimedKind, totals, preflightId?, perStream 指针, scope:{env,app,familyId,memberId,createdAt}, opIdBase}`。
+- **begin 只做不可变摘要承诺**：`restore.begin {batchId, formatVersion, packageDigest, manifestDigest, claimedKind, totals}`（≤1KiB）——校验格式/上限，创建批次（status=`declaring`，owner=memberId），同 batchId+全量内容一致幂等、任何变化 `batch-conflict`。服务端合格判定在 declare 重组解析后（§5.1 declareChunk 行）。
+- 意图/epoch/续传/不删原包/新环境独立。
+
+### 5.0a 持久包副本（阶段二前置——副作用前的本机准备）
+
+`wx.chooseMessageFile` 返回的 `tempFiles[0].path` 是**会话级临时路径**——冷启动后可能失效。恢复流程开始前（任何 `restore.begin` 调用前）：
+
+1. **复制到持久目录**：`tempFilePath → USER_DATA_PATH/MomCareRestore/<batchId>.mcpkg`（分块复制 ≤64KiB/块+逐块回读校验）。
+2. **复验副本**：对持久副本整包分块 SHA-256 → 与选包时本地校验的 `packageDigest` **再次全等**（副本与原始选择一致）。
+3. **持久意图（原子性尽力）**：写入 scoped 恢复意图 `{batchId, durablePath, packageDigest, manifestDigest, scope, createdAt}`——复制+摘要+意图三步中任一失败 → **零云写入**、清理不可信副本、保留原始临时文件、如实报错（`copy-failed` / `digest-mismatch` / `intent-persist-failed`）。
+4. **冷启动/身份切换后**：意图读 durablePath → 文件在且 packageDigest 匹配 → 从意图续传；**文件缺失或摘要不符 → 停止并要求用户重新选包**（`durable-package-missing` / `durable-package-corrupt`）——**绝不宣称自动恢复**（重新选择后须是同一 packageDigest 才能续用原批次，否则新批次）。
+5. 意图/epoch/作用域规则同 §5.0。
 
 ### 5.1 动作总表（一动作一请求；全部 resolveCaller；请求 ≤64KiB/响应 ≤256KiB 服务端强制）
 
-| 动作 | 请求（要点/上限） | 职责与推进 |
+| 动作 | 请求 | 职责 |
 |---|---|---|
-| `restore.begin` | `{batchId, formatVersion, packageDigest, manifestDigest, claimedKind, totals}`（≤1KiB） | §5.0：不可变摘要承诺；创建批次 `declaring` |
-| `restore.declareChunk` | `{batchId, chunkIndex, chunkTotal≤128, chunkB64(base64(≤40KiB 原始字节)), chunkSha256}` | 上传 **manifest 原始 UTF-8 字节分片**；一片一文档（`_id=<batchId>:<chunkIndex>`，原始字节+单片摘要）；同索引同内容幂等、换内容 `chunk-conflict`、乱序/缺片 `declare-incomplete`（可重传）。**末片齐且按序**：重组原始字节 → sha256=manifestDigest → 解析 → **服务端判定**：packageKind='full' && complete=true && pending 全空 && scope 授权合法（私人 scope=调用者本人）&& §2.6 结构校验——不合格 → `package-rejected`（批次留 declaring，**不进入 indexing，不接收任何记录/附件**）；合格 → status=`indexing` |
-| `restore.indexDeclarePage` | `{batchId, pageCursor?}` | **有界、可恢复的声明索引**：每次调用从重组后的 manifest 派生**一页**声明（≤200 条或 ≤32KiB，响应 ≤256KiB）写入去重键分页文档（`_id=<batchId>:decl:<seq>`，唯一键=domain:index / fileIndex）；**页内校验**（本页条目与 manifest 对应切片逐项一致）并随页**持久化滚动聚合承诺**（runningCount + 逐页摘要的链式哈希，有界写）；**末页 O(1) 核对**：累计计数/链式摘要 vs declare 解析 manifest 时一次性算好的声明总数/根聚合（不重读已索引声明——10000 条绝不在末页全量重扫）→ 一致才 status=`declared`；不一致 → `index-mismatch`（从游标重试）。分片/声明存储的有界性见 abandon/活跃上限（下） |
-| `restore.uploadRecord` | `{batchId, domain, index, id, revision, record, deleted}`（整请求 ≤64KiB） | 仅 declared 后；服务端从规范化内容按 §2.4 **重算 hash** 与派生声明全等（同索引换内容 `declaration-mismatch`）；白名单/schema/私人范围；同内容幂等；写 `mc_restore_records._id=<batchId>:<domain>:<index>` |
-| `restore.attachFile` | `{batchId, fileIndex, fileId, sha256, length}`（无引用字段） | 客户端先走 mc-files 受控管线传实际字节；服务端读**正式文件实际字节**验长度+SHA=派生声明；须 registered（cleaning/deleted 拒绝、原件保留重试）；**全部引用（reportId/order）由服务端从冻结声明派生**；单事务：`mc_restore_files._id=<batchId>:<fileIndex>` + `mc_files.attachedReportIds` 追加 `restore:<batchId>:<fileIndex>` + everAttached——与 mc-reports 记账同事务边界（cleanupOrphans registered+引用→skipped-referenced；认领竞态读到 cleaning → 拒绝保留重试） |
-| `restore.commit` | `{batchId, pageCursor?}` | **两阶段有界**（rev3 复审第 4 条）：①uploading 下**分页预检**（≤50 项/页且读字节 ≤256KiB/页，含事务维护的已接收唯一条目计数）：发现缺项 → 返回缺项清单（带游标），**批次留 uploading，允许补传**（不冻结）；②当一页预检与唯一条目计数**可证明全齐**（记录数=声明总数、附件数=声明总数、无错误未清）→ **原子冻结** status=`verifying`（此后 upload/attach → `batch-frozen`）。verifying 下每次调用验证**一页**（≤50 项且读字节 ≤256KiB：逐项重算记录 hash、核对附件 fileId/sha/引用/registered——附件字节已在 attach 读验，此处核对元数据与引用，原件字节复验归 verify），**持久化验证游标**；最后一页成功 → **原子推进 `restored`**；页失败持久化失败码+游标稳定重试；绝不提前成功；restored 后重放幂等 |
-| `restore.progress` | `{batchId, domain?, cursor?}` | 只读**分页**（rev3 复审第 4 条）：逐域已传 index 集/缺失集、已 attach fileIndex 集、索引/验证游标、错误清单——10000 级清单必须经 cursor 分页（每页 ≤256KiB），不一次性返回 |
-| `restore.preview` | `{batchId, cursor}` | 分页隔离记录 + exists/deleted-conflict 差异（不覆盖不复活）+ readUrl；每页 ≤50 项且 ≤256KiB |
-| `restore.readUrl` | `{batchId, fileIndex}` | 仅批次 owner：批次+引用存在+registered+当前授权 → 临时 URL（隔离原件 owner-only） |
-| `restore.verify` | `{batchId, pageCursor?}` | **真只读**（零服务端副作用——不写批次文档）：每页复验并**在响应中**返回 `{nextCursor, verifiedItems, verifiedBytes, errors[]（有界）, hasMore}`——**UI 进度由客户端保存**（本地 durable 状态），服务端不落任何进度。游标两类：记录游标 `{kind:'record', domain, index}`（逐记录重算 canonical hash，≤50 条/页）；**文件字节游标 `{kind:'file', fileIndex, blockIndex}`**——附件原件按 VERIFY_BLOCK(256KiB) 分块读回、独立计算块 SHA-256 与 manifest `chunkSha256[blockIndex]` 承诺比对（**分块承诺续接**：10MiB 单文件=40 页顺序推进，不需要跨请求哈希中间态）；全文件 SHA 已在 attach 时以实际字节证明。commit 验证段对文件仅核元数据/引用/registered——实际字节证明沿用 attach（同事务引用阻止清理，不重复读字节） |
-| `restore.list` | `{cursor}` | 当前成员批次元数据分页；**全部批次动作与列表仅 owner**（U1，含纯共享包；家人用原包开自己批次） |
-| `restore.abandon` | `{batchId, pageCursor?}` | **用户可达的批次取消与按 owner 清理**（长期未完成分片存储的有界出口）：owner-only；非 restored 批次可弃——置终态 `abandoned` 并**分页删除**该批次的 chunk/声明/记录/恢复文件文档（≤500 文档/调用，响应返回 nextCursor 直至清净）；逐文件事务摘除 `mc_files.attachedReportIds` 的 `restore:<batchId>:*` 引用（与记账同事务边界；引用清空后文件回归 B2b2 正常清理语义）。另设**单成员活跃（非 restored/abandoned）批次上限 ≤2**：begin 超限 → `too-many-active-batches` 并附活跃批次清单（页面引导完成或放弃）。部署前做一次容量评估（每批次最坏 ~4MiB 分片+声明存储） |
+| `restore.begin` | `{batchId, formatVersion, packageDigest, manifestDigest, claimedKind, totals}` | §5.0 不可变摘要承诺；创建 `declaring` |
+| `restore.declareChunk` | `{batchId, chunkIndex, chunkTotal≤128, chunkB64(base64(≤40KiB)), chunkSha256}` | manifest 原始字节分片；一片一文档；**首片接受时锚定 chunkTotal**（后续片 chunkTotal≠首片值 → `chunk-total-mismatch`）；同片同内容幂等/换内容 `chunk-conflict`；末片齐且按序 → 重组+摘要+解析+服务端判定（kind/complete/pending/scope 授权/§2.6）→ 合格 `indexing` / 不合格 `package-rejected`（零记录附件接收） |
+| `restore.indexDeclarePage` | `{batchId, pageCursor?}` | ≤200 条/页（≤32KiB 处理，响应 ≤256KiB）；去重键分页文档；页内校验+滚动聚合（runningCount+链式摘要）；末页 O(1) 核对 vs 声明总数/根聚合 → `declared` / `index-mismatch`（游标重试） |
+| `restore.uploadRecord` | `{batchId, domain, index, id, revision, record, deleted}`（整请求 ≤64KiB） | 规范字节 ≤48KiB 内联记录；服务端重算 canonical hash 与冻结声明全等（不等 `declaration-mismatch`）；白名单/schema/私人范围；同内容幂等；**单事务**写 `mc_restore_records._id=<batchId>:<domain>:<index>` + 递增 contentGeneration |
+| `restore.uploadRecordChunk` | `{batchId, domain, index, chunkIndex, chunkTotal≤103, chunkB64(base64(≤40KiB——**仅末片可部分**), chunkSha256}（服务端强制累计解码字节 ≤4,194,304=MAX_DOMAIN_JSON_BYTES——103×40,960=4,218,880>4MiB，chunkTotal 上限 103 保留但累计超 4MiB → `record-too-large` 拒绝）` | 逐记录分片（规范字节 >48KiB 时走此路径）；**首片接受时锚定该记录的 chunkTotal**（后续片 chunkTotal≠首片值 → `chunk-total-mismatch`）；一片一文档 `_id=<batchId>:rec:<domain>:<index>:<chunkIndex>`；同片同内容幂等/换内容 `chunk-conflict`；仅 declared/uploading 有效；**finalize 后新 chunk → `record-consumed` 拒绝** |
+| `restore.finalizeRecord` | `{batchId, domain, index, id, revision, deleted, expectedChunkTotal, expectedSha256}`（≤1KiB） | **单次非事务读重组（显式 4MiB 例外）+ CAS 落库**：一次读全部 ≤103 chunk（≤4MiB=MAX_DOMAIN_JSON_BYTES；commit/verify 仍 ≤256KiB/页）→ 重组 → 全量 SHA-256 → 与冻结声明+expectedSha256 三方全等（不等 **零写**）→ 解析 JSON → 白名单/schema/私人范围（失败 **零写**）→ **CAS 小事务**：写 `mc_restore_records` 存 `{id,revision,deleted,canonicalHash,byteLength,chunkTotal,frozenChunkSha256[≤103],consumedAt}` + 递增 contentGeneration。**chunk 文档无限期保留**（restored 批次唯一字节源——不删）。缺片 `record-chunks-incomplete`（可重传）；**finalize 后丢响应重放**：CAS 读到 consumedAt 已设 → **比对不可变请求字段**（id/revision/deleted/expectedChunkTotal/expectedSha256 与落库保存值）——全等 → 幂等返回成功（不递增 contentGeneration、不接受新 chunk）；**任一不等 → `finalize-conflict` 拒绝**（不是原请求的重放——可能有篡改）。expectedChunkTotal≠已锚定 chunkTotal → `chunk-total-mismatch` |
+| `restore.attachFile` | `{batchId, fileIndex, fileId, sha256, length}` | 客户端先走 mc-files 管线传字节；服务端读正式字节验长度+SHA=声明；须 registered；引用由服务端从冻结声明派生；**单事务**：`mc_restore_files` + `mc_files.attachedReportIds` 追加 + everAttached + 递增 contentGeneration |
+| `restore.commit` | `{batchId, preflightId?, pageCursor?}`（preflightId 可选——首次不传创建新预检；重试/续传时传上次响应返回的 ID；不匹配活跃 ID 且租约未过期 → `preflight-conflict`） | **单活跃预检 + CAS 滚动证明 + proofComplete + O(1) 冻结**（详见 §5.2.1）。批次文档维护 `contentGeneration` + 单活跃预检 `{preflightId, startGen, cursor, checkedCount, checkedDigest}`。响应中返回 `preflightId`（客户端持久化到意图——重启后携此 ID 从持久化游标续传）；预检租约超时（可配置，默认 5 分钟无进展）→ 新 `commit` 调用可 CAS 接管（stale lease takeover）。**零声明空包**：声明总数=0 时无首次 upload——commit 首调即从 `declared` 直接进入 `uploading`→预检（0 页）→ proofComplete=true（0=0）→ 冻结→验证（0 页）→ restored。verifying 分页验证 + 持久化游标；最后页原子推进 `restored`；restored 后幂等 |
+| `restore.progress` | `{batchId, domain?, cursor?}` | 只读分页；响应含 `preflightId`（活跃时）供客户端恢复 |
+| `restore.preview` | `{batchId, cursor}` | 分页隔离记录 + 差异 + readUrl；分片记录完整内容经 chunk 引用分页读取；超 256KiB 返回 `{nextChunkCursor}` 续读——不截断 |
+| `restore.readUrl` | `{batchId, fileIndex}` | **签发前校验**：owner + 批次非 abandoned + 引用存在 + registered + 当前授权 → 临时 URL（**TTL 由平台决定——不可配置**，与 mc-files getReadUrl 一致：`expiresIn: '短期有效，有效期由平台决定'`）；已签发 URL 在平台 TTL 内可继续使用直至过期（无法撤销——如实边界） |
+| `restore.verify` | `{batchId, pageCursor?}` | 真只读（零服务端写）；UI 进度客户端保存。游标三类：`{kind:'record'}`（内联 ≤48KiB，重算 hash，≤50 条/页）；`{kind:'record-chunk', domain, index, chunkIndex}`（逐 chunk ≤256KiB/页 比对 frozenChunkSha256——不重算全量）；`{kind:'file', fileIndex, blockIndex}`（附件 VERIFY_BLOCK 分块比对）。**verify 为真只读**——发现 chunk 损坏/缺失时**仅在响应 errors[] 中报告**，**不写批次文档不改状态**（零服务端写）。**仅 commit 的 verifying 阶段**发现 corruption → 持久化失败码 → 批次进入终态 `verify-corruption`（commit 是有状态的——它的验证页失败有持久化语义）；standalone verify 的 corruption 由客户端 UI 呈现——用户据此选择 abandon+新批次 |
+| `restore.list` | `{cursor}` | owner-only 分页（含纯共享包；家人用原包开自己批次） |
+| `restore.abandon` | `{batchId, pageCursor?}` | owner-only；非 restored 可弃。**先置 `abandoning`（清理中——计入活跃上限防 begin/abandon 循环产生无限文档）** → 事务组分页删除（每事务 ≤100 操作含读+写——非 100 个删除；每次调用上限 ≤500 操作为上界不保证；resumable cursor）→ 全部页+引用清净后置终态 `abandoned`（释放活跃槽位）。逐文件事务摘除 `restore:` 引用。单成员活跃+abandoning 批次 ≤2 |
 
-### 5.2 状态机（精确迁移）
+### 5.2 状态机
 
 ```
-(begin) declaring → (declare 末片齐+服务端判定合格) indexing
-        → (indexDeclarePage 全页+复核一致) declared → (首次 upload/attach) uploading
-        → (commit 分页预检证明全齐：原子冻结) verifying → (commit 分页验证全过：原子推进) restored
-失败位：package-rejected 留 declaring（不接收任何记录/附件）
-       declare-incomplete/chunk-conflict 留 declaring（可重传片）
-       index-mismatch 留 indexing（游标重试）
-       declaration-mismatch/file-cleaning 单项拒绝记 batch.errors（有界），留 uploading 可补传
-       commit 预检发现缺项：留 uploading 允许补传（不冻结）
-       commit 验证页失败：留 verifying，游标稳定重试
-终态 restored | abandoned（用户显式放弃；分页清理）；verifying 起内容不可变；丢响应/重启/重复提交不提前成功
-活跃批次上限：单成员 ≤2（begin 拒绝并列出，引导 finish/abandon）
+(begin) declaring → (declare 末片+判定合格) indexing → (indexDeclarePage 全页+复核) declared
+       → (首次 upload/attach **或** commit 开始且声明总数=0) uploading → (commit 预检 proofComplete+O(1) 冻结) verifying
+       → (commit 分页验证全过) restored
+终态：restored | abandoned（abandoning 全部清净后）| verify-corruption（仅 commit verifying 路径）
+中间态：abandoning（清理中——计入活跃上限）
+失败位（非终态，可重试）：package-rejected / declare-incomplete / chunk-conflict / chunk-total-mismatch
+       / index-mismatch / declaration-mismatch / record-chunks-incomplete / file-cleaning
+       / preflight-conflict / content-changed / proof-stale / record-consumed
+verifying 起：内容不可变（batch-frozen）；verify 发现 corruption → verify-corruption 终态
 ```
+
+### 5.2.1 并发串行化
+
+- **chunk 锚定（per-record anchor 文档）**：manifest 分片的首片锚定写入**批次文档**（单一 manifest——可放批次文档）；**每条分片记录**的首片锚定写入独立 anchor 文档 `_id=<batchId>:anchor:<domain>:<index>`（`{chunkTotal, firstChunkSha256}` CAS）——10000 条记录不可全放一个批次文档。后续片校验 anchor 文档的 chunkTotal；不匹配 → `chunk-total-mismatch`。锚定后不可变。
+- **finalize 后零变更**：consumedAt 设置后，新 chunk → `record-consumed`；重放 finalize → 幂等返回（不递增 contentGeneration）。**丢响应后重放**：客户端重发 finalizeRecord → CAS 读到 consumedAt → 返回与首次相同结果——**不需要 generation 递增**。
+- **单活跃预检**：批次文档维护**一个** `{preflightId, startGen, cursor, checkedCount, checkedDigest, leaseExpiresAt}`。新 commit 无活跃预检 → 创建（preflightId=CSPRNG，响应返回给客户端）；活跃且 ID 匹配 → 从持久化游标续；活跃但 ID 不匹配且租约未过期 → `preflight-conflict`；租约已过期 → CAS 接管（stale lease takeover，新 preflightId）。逐页 CAS 写游标+计数+滚动摘要（先验 contentGeneration===startGen；不等 → 清除预检+`content-changed`）。全页完成+计数/摘要全等 → CAS 写 `proofComplete=true ∧ provenGeneration=startGen`（含零世代空包 0=0）。冻结 O(1) 核对 `status=uploading ∧ proofComplete ∧ provenGeneration===contentGeneration`。每次**新内容**写入单事务内容+contentGeneration+1；**同内容幂等重放不递增**（uploadRecord 已有记录且 hash 相同 → 返回成功不+1；uploadRecordChunk 已有 chunk 且 sha 相同 → 幂等返回不+1；attachFile 已有引用且 fileId 相同 → 幂等返回不+1）——防止丢响应重试使 proofGeneration 失效。
+- **abandon 并发**：abandon 先 CAS status=abandoning（非 abandoned——清理中）→ 后续 upload/attach/commit 拒绝（`batch-abandoning`）；commit 已写 restored → abandon `already-restored`；abandon 分页删除时读到引用事务摘除。**restored 后 abandon 不可用**（chunk 永久保留）。abandoning 状态计入活跃上限——防止 begin→abandon→begin 循环无限堆积文档。
+- **abandon 分页删除**：每次调用分 ≤5 个事务组（各 ≤100 操作含读+写）：组1 删 declare_chunk + **per-record anchor 文档**（`<batchId>:anchor:*`）；组2 删声明分页；组3 删 record chunk 文档；组4 删 mc_restore_records；组5 摘 mc_files 引用+删 mc_restore_files。全部服务端文档+引用清净后置终态 `abandoned` → 释放活跃槽位后**仅清理 scoped 恢复意图**（传输状态元数据——已无用）。**持久副本 `.mcpkg` 文件保留不删**：导入的聊天临时文件可能已消失，此副本可能是用户唯一可本地恢复的源——数据保留铁律；用户可从该副本开新批次重试，也可通过显式删除入口自行清理（页面如实显示本机存储占用）。resumable cursor（每组返回 nextCursor）。
+
 
 ### 5.3 索引/所有权/清理事实（按实际代码核对）
 
-`mc_restore_batches._id=batchId`（含 status/索引与验证游标/错误清单有界）；`mc_restore_declare_chunks._id=<batchId>:<chunkIndex>`；声明索引分页 `_id=<batchId>:decl:<seq>`（唯一键 domain:index / fileIndex）；`mc_restore_records._id=<batchId>:<domain>:<index>`；`mc_restore_files._id=<batchId>:<fileIndex>`。已核对 mc-reports cleanupOrphans（427–500 行：registered+引用→skipped-referenced；无引用过宽限→claimAndClean 领 cleaning、认领后新引用被拒）与 mc-files getReadUrl everAttached 门（373–387 行）；restore 引用与 report.upsert 记账同事务。包内 createdBy/familyId 仅展示；私人作者须本人确认。
+`mc_restore_batches._id=batchId`（status/contentGeneration/provenGeneration/preflight 记录/验证游标/错误清单有界）；`mc_restore_declare_chunks._id=<batchId>:<chunkIndex>`（manifest 分片）；**per-record 锚定文档** `_id=<batchId>:anchor:<domain>:<index>`（`{chunkTotal, firstChunkSha256}`——首片 CAS 写入，后续片校验）；声明索引分页 `_id=<batchId>:decl:<seq>`；`mc_restore_records._id=<batchId>:<domain>:<index>`（内联或 finalize 后元数据+frozenChunkSha256）；record chunk `_id=<batchId>:rec:<domain>:<index>:<chunkIndex>`；`mc_restore_files._id=<batchId>:<fileIndex>`。已核对 mc-reports cleanupOrphans（427–500 行）与 mc-files getReadUrl everAttached 门（373–387 行）；restore 引用与 report.upsert 记账同事务。包内 createdBy/familyId 仅展示；私人作者须本人确认。
 
 ## 6. 迁移协议（B3a 已验收 c4e5995——以下正文与 git HEAD 逐字一致，仅标题加注）
 
