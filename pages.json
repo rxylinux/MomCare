@@ -210,6 +210,18 @@
       "style": {
         "navigationBarTitleText": "旧数据来源预览"
       }
+    },
+    {
+      "path": "pages/profile/data-export",
+      "style": {
+        "navigationBarTitleText": "完整备份导出"
+      }
+    },
+    {
+      "path": "pages/profile/data-restore",
+      "style": {
+        "navigationBarTitleText": "备份包验证"
+      }
     }
   ],
   "globalStyle": {

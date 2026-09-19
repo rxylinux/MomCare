@@ -91,6 +91,22 @@
 				</view>
 			</view>
 
+			<!-- B3b 阶段一：完整导出 + 本地验包 -->
+			<view class="sec">
+				<text class="sec-lbl">备份</text>
+				<view class="action-card">
+					<view class="action-row" v-if="dataSource === 'family'" @tap="goExport">
+						<view class="action-label">完整备份导出</view>
+						<view class="action-arrow">›</view>
+					</view>
+					<view class="action-row" @tap="goRestore">
+						<view class="action-label">备份包本地验证</view>
+						<view class="action-arrow">›</view>
+					</view>
+					<view class="action-desc">完整备份为单一 .mcpkg 文件（含报告原件）；本地验证只做完整性校验，云端隔离恢复将在下一阶段提供。云端导出仅在微信小程序端可用。</view>
+				</view>
+			</view>
+
 			<view class="bottom-spacer"></view>
 		</scroll-view>
 
@@ -181,6 +197,13 @@ if (dataSource.value === 'family') {
 
 function goSourceScan() {
   navigateToPage('/pages/profile/data-source-scan')
+}
+
+function goExport() {
+  navigateToPage('/pages/profile/data-export')
+}
+function goRestore() {
+  navigateToPage('/pages/profile/data-restore')
 }
 
 

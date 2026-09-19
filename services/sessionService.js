@@ -374,6 +374,24 @@ export function stashDraft(draft) {
   }
 }
 
+// 草稿存储只读可判定状态（B3b 完整性门用）：区分 absent/ok/corrupt/error——
+// pendingDrafts 对损坏与空都返回 null，无法作为完整性依据
+export function draftStorageStatus() {
+  if (state.status !== 'confirmed' || !state.member) return 'unconfirmed'
+  try {
+    const raw = uni.getStorageSync(draftKeyForMember(state.member.memberId))
+    if (raw === '' || raw === null || raw === undefined) return 'absent'
+    try {
+      JSON.parse(raw)
+      return 'ok'
+    } catch (e) {
+      return 'corrupt'
+    }
+  } catch (e) {
+    return 'error'
+  }
+}
+
 export function pendingDrafts() {
   if (state.status !== 'confirmed' || !state.member) return null
   try {
