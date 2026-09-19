@@ -1018,16 +1018,20 @@ async function main() {
     w.health.loadUserProfile()
     await w.health.saveUserProfile()
     const nextCheckup = { value: w.health.checkupSchedules[0] }
+    // B2b1 调整说明：页面 handleMarkCompleted 增加 family/demo/prompt 三态路由，
+    // 新增 dataSource/familyStore 依赖；此处以 dataSource='demo' 走原 legacy 分支，
+    // 断言不变（失败如实提示并还原、恢复后成功）。
     const handleMarkCompleted = extractPageFn('pages/profile/checkup-reminder.vue', 'handleMarkCompleted',
-      ['nextCheckup', 'healthStore', 'uni'])
+      ['nextCheckup', 'healthStore', 'uni', 'dataSource', 'familyStore'])
+    const demoDataSource = { value: 'demo' }
     w.failWrites(['YUNTU_HEALTH_DATA'])
-    await handleMarkCompleted(nextCheckup, w.health, global.uni)()
+    await handleMarkCompleted(nextCheckup, w.health, global.uni, demoDataSource, null)()
     assert.ok(w.toasts.some(t => /保存失败/.test(t)))
     assert.ok(!w.toasts.some(t => t === '已标记完成'))
     assert.equal(w.health.checkupSchedules[0].status, 'upcoming')
     // 恢复后成功
     w.failWrites([])
-    await handleMarkCompleted(nextCheckup, w.health, global.uni)()
+    await handleMarkCompleted(nextCheckup, w.health, global.uni, demoDataSource, null)()
     assert.ok(w.toasts.some(t => t === '已标记完成'))
   })
 

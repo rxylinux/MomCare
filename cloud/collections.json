@@ -15,7 +15,19 @@
         "lastOperationId": "最后一次写入的操作 ID（审计）"
       },
       "indexes": [
-        { "keys": [{ "name": "familyId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "dateKey",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
       ]
     },
     {
@@ -33,7 +45,19 @@
         "lastOperationId": "操作 ID"
       },
       "indexes": [
-        { "keys": [{ "name": "ownerId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+        {
+          "keys": [
+            {
+              "name": "ownerId",
+              "direction": 1
+            },
+            {
+              "name": "dateKey",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
       ]
     },
     {
@@ -49,7 +73,19 @@
         "createdAt": "毫秒时间戳"
       },
       "indexes": [
-        { "keys": [{ "name": "memberId", "direction": 1 }, { "name": "createdAt", "direction": -1 }], "unique": false }
+        {
+          "keys": [
+            {
+              "name": "memberId",
+              "direction": 1
+            },
+            {
+              "name": "createdAt",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
       ]
     },
     {
@@ -66,7 +102,15 @@
         "updatedAt": "毫秒时间戳"
       },
       "indexes": [
-        { "keys": [{ "name": "familyId", "direction": 1 }], "unique": false }
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            }
+          ],
+          "unique": false
+        }
       ]
     },
     {
@@ -85,7 +129,19 @@
         "updatedAt": "毫秒时间戳"
       },
       "indexes": [
-        { "keys": [{ "name": "familyId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "dateKey",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
       ]
     },
     {
@@ -104,7 +160,19 @@
         "updatedAt": "毫秒时间戳"
       },
       "indexes": [
-        { "keys": [{ "name": "ownerId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+        {
+          "keys": [
+            {
+              "name": "ownerId",
+              "direction": 1
+            },
+            {
+              "name": "dateKey",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
       ]
     },
     {
@@ -125,7 +193,80 @@
         "registeredAt": "毫秒时间戳"
       },
       "indexes": [
-        { "keys": [{ "name": "uploaderId", "direction": 1 }, { "name": "createdAt", "direction": -1 }], "unique": false }
+        {
+          "keys": [
+            {
+              "name": "uploaderId",
+              "direction": 1
+            },
+            {
+              "name": "createdAt",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "mc_checkups",
+      "purpose": "B2b1 shared checkups; stable ID, multiple per week",
+      "fields": {
+        "_id": "chk_*",
+        "familyId": "partition",
+        "dateKey": "YYYY-MM-DD",
+        "status": "pending|completed|skipped",
+        "templateKey": "unique per family",
+        "source": "template|manual|manual-date",
+        "deleted": "tombstone",
+        "schemaVersion": "1",
+        "revision": "optimistic"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "sortKey",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
+      ]
+    },
+    {
+      "name": "mc_bag_items",
+      "purpose": "B2b1 shared hospital bag items; stable ID",
+      "fields": {
+        "_id": "bag_*",
+        "familyId": "partition",
+        "name": "1-50",
+        "category": "mom|baby|documents|going|other",
+        "quantity": "1-99",
+        "prepared": "bool",
+        "templateKey": "unique per family",
+        "deleted": "tombstone",
+        "schemaVersion": "1",
+        "revision": "optimistic"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "_id",
+              "direction": -1
+            }
+          ],
+          "unique": false
+        }
       ]
     }
   ]

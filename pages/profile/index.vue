@@ -105,21 +105,86 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useHealthStore, getTrimesterName } from '@/stores/health.js'
 import { navigateToPage } from '@/utils/navigation.js'
 import { removeToken } from '@/utils/api.js'
-import { endSession } from '@/services/sessionService.js'
+import { endSession, getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { getOutbox } from '@/services/outbox.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 import ProfileHero from '@/components/profile/ProfileHero.vue'
 import DueCountdownRing from '@/components/common/DueCountdownRing.vue'
 import ProfileSection from '@/components/profile/ProfileSection.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 
 const healthStore = useHealthStore()
+const familyStore = useFamilyStore()
 const showLogoutModal = ref(false)
 const logoutPendingCount = ref(0)
 const logoutConflictCount = ref(0)
+
+// B2b1 三态数据源：family=权威源 / demo=演示键 / prompt=空（摘要同源，两页一致）
+const dataSource = ref(isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt'))
+
+// 回前台/冷启动协调（沿用 B2a 首页模式）：去重身份确认；异步确认成功 → 激活并拉取
+import { onShow as __onShow } from '@dcloudio/uni-app'
+import { foregroundRecheck, coldStartConfirm } from '@/services/sessionService.js'
+
+function pullDomain() {
+	familyStore.pullCheckups().catch(() => {})
+	familyStore.pullBagItems().catch(() => {})
+}
+let __activatedMember = null
+function activateFamilyDomain() {
+	dataSource.value = 'family'
+	const s = getSessionState()
+	const mid = s.member ? s.member.memberId : null
+	if (__activatedMember !== mid) {
+		familyStore.restoreFromCache()
+		pullDomain()
+		__activatedMember = mid
+	}
+}
+
+watch(subscribeSession(), () => {
+	if (isExplicitDemo()) {
+		dataSource.value = 'demo'
+		__activatedMember = null
+		return
+	}
+	const s = getSessionState()
+	if (s.status === 'confirmed' && !isExplicitLoggedOut()) {
+		activateFamilyDomain()
+	} else if (s.status === 'rejected' || isExplicitLoggedOut()) {
+		dataSource.value = 'prompt'
+		__activatedMember = null
+	}
+})
+
+// setup 时已确认（热路径）：恢复成员快照并拉取
+if (dataSource.value === 'family') {
+	familyStore.restoreFromCache()
+	pullDomain()
+	__activatedMember = getSessionState().member ? getSessionState().member.memberId : null
+}
+
+__onShow(() => {
+	const session = getSessionState()
+	if (isExplicitDemo()) return
+	if (isExplicitLoggedOut() && session.status !== 'confirmed') return
+	if (session.status === 'confirmed' && !isExplicitLoggedOut()) {
+		activateFamilyDomain()
+		foregroundRecheck().then(res => {
+			if (!res || !res.ok) return
+			pullDomain()
+			familyStore.flushAll().catch(() => {})
+		}).catch(() => {})
+	} else if (session.status === 'unconfirmed' && dataSource.value !== 'demo') {
+		coldStartConfirm().then(res => {
+			if (res && res.ok) activateFamilyDomain()
+		}).catch(() => {})
+	}
+})
 
 // 退出提示：有未同步/冲突内容时如实说明保留在本人账户（不默认丢弃、不给下一身份）
 const logoutDesc = computed(() => {
@@ -288,45 +353,70 @@ const aiServiceItems = computed(() => {
 	]
 })
 
-// 待产包进度（从本地存储读取）
+// 待产包进度（三态同源：family 权威统计 / demo 演示键 / prompt 空文案。
+// 旧 hospital_bag_items 无可信归属，B2b1 起正式零读——不在此处恢复读取）
 const hospitalBagSubtitle = computed(() => {
-	try {
-		const saved = uni.getStorageSync('hospital_bag_items')
-		if (saved) {
-			const items = JSON.parse(saved)
-			const done = items.filter(i => i.done).length
-			return `已完成 ${done} / ${items.length} 项`
-		}
-	} catch (e) {}
+	if (dataSource.value === 'family') {
+		const items = Object.values(familyStore.bagItems).filter(i => !i.deleted)
+		if (items.length === 0) return '点击查看待产包清单'
+		const done = items.filter(i => i.prepared).length
+		return `已完成 ${done} / ${items.length} 项`
+	}
+	if (dataSource.value === 'demo') {
+		try {
+			const saved = uni.getStorageSync('MOMCARE_DEMO_BAG_ITEMS')
+			if (saved) {
+				const items = JSON.parse(saved)
+				const done = items.filter(i => i.done).length
+				return `已完成 ${done} / ${items.length} 项`
+			}
+		} catch (e) { /* */ }
+	}
 	return '点击查看待产包清单'
+})
+
+// 下次产检卡（三态同源：family 取权威最早 pending；demo 旧 store）
+// 日期键按日历字段直读（负时区不回退一天）；天数按上海日号差（与产检页一致），
+// 依赖 healthStore.today 响应式时钟——跨上海午夜自动更新
+function __shDayOrd(date) {
+	const sh = new Date(date.getTime() + (8 * 60 + date.getTimezoneOffset()) * 60000)
+	return Date.UTC(sh.getFullYear(), sh.getMonth(), sh.getDate()) / 86400000
+}
+function __keyOrd(key) {
+	const [y, m, d] = String(key).split('-').map(Number)
+	return Date.UTC(y, m - 1, d) / 86400000
+}
+function checkupCardInfo(dateStr) {
+	const [y, m, day] = String(dateStr).split('-').map(Number)
+	void y
+	void healthStore.today // 响应式依赖生产时钟
+	const days = __keyOrd(dateStr) - __shDayOrd(healthStore.today)
+	if (days > 0) {
+		return { subtitle: `${m}月${day}日 · 还有 ${days} 天`, badge: days + '天后', badgeStyle: 'amber' }
+	}
+	if (days === 0) {
+		return { subtitle: `${m}月${day}日 · 就是今天`, badge: '今天', badgeStyle: 'rose' }
+	}
+	return { subtitle: `${m}月${day}日 · 已过期`, badge: '已过期', badgeStyle: 'gray' }
+}
+const nextCheckupCard = computed(() => {
+	let dateStr = null
+	if (dataSource.value === 'family') {
+		const next = Object.values(familyStore.checkups)
+			.filter(c => !c.deleted && c.status === 'pending')
+			.sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || ''))[0]
+		dateStr = next ? next.dateKey : null
+	} else if (dataSource.value === 'demo') {
+		const next = healthStore.nextCheckup
+		dateStr = next ? next.checkup_date : null
+	}
+	if (!dateStr) return { subtitle: '暂无产检安排', badge: '', badgeStyle: '' }
+	return checkupCardInfo(dateStr)
 })
 
 // 待办 & 提醒
 const todoItems = computed(() => {
-	const next = healthStore.nextCheckup
-	let checkupSubtitle = '暂无产检安排'
-	let checkupBadge = ''
-	let checkupBadgeStyle = ''
-	if (next) {
-		const d = new Date(next.checkup_date)
-		const todayDate = new Date()
-		const days = Math.ceil((d - todayDate) / 86400000)
-		const m = d.getMonth() + 1
-		const day = d.getDate()
-		if (days > 0) {
-			checkupSubtitle = `${m}月${day}日 · 还有 ${days} 天`
-			checkupBadge = days + '天后'
-			checkupBadgeStyle = 'amber'
-		} else if (days === 0) {
-			checkupSubtitle = `${m}月${day}日 · 就是今天`
-			checkupBadge = '今天'
-			checkupBadgeStyle = 'rose'
-		} else {
-			checkupSubtitle = `${m}月${day}日 · 已过期`
-			checkupBadge = '已过期'
-			checkupBadgeStyle = 'gray'
-		}
-	}
+	const checkupCard = nextCheckupCard.value
 
 	// 今日计划：只显示真实记录里的计划，没有则显示空状态，不编造内容
 	const todayPlans = healthStore.getRecord(new Date())?.plans || []
@@ -339,9 +429,9 @@ const todoItems = computed(() => {
 			icon: '🗓',
 			iconBg: '#FAEAEE',
 			title: '下次产检',
-			subtitle: checkupSubtitle,
-			badge: checkupBadge,
-			badgeStyle: checkupBadgeStyle,
+			subtitle: checkupCard.subtitle,
+			badge: checkupCard.badge,
+			badgeStyle: checkupCard.badgeStyle,
 			action: 'nextCheckup'
 		},
 		{
