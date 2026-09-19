@@ -62,6 +62,14 @@ function publicNoteView(doc) {
 
 exports.main = async function main(event) {
   if (!cloud) return fail('sdk-unavailable', 'wx-server-sdk 不可用')
+  // B2a/R3-5：旧集合业务写入默认关闭——正式数据已迁移 mc-health 权威源；
+  // 此函数保留仅为历史契约测试对象。生产默认拒绝所有写操作（读只作兼容查看）。
+  // 隔离测试开关 MC_ALLOW_LEGACY_WRITES=true 仅限测试环境，生产不配置。
+  const allowLegacyWrites = process.env.MC_ALLOW_LEGACY_WRITES === 'true'
+  const isWriteAction = Boolean(event && event.action && event.action !== 'get')
+  if (isWriteAction && !allowLegacyWrites) {
+    return fail('legacy-endpoint-closed', '旧集合业务写入已关闭：正式数据请使用 mc-health（B2a 权威源）')
+  }
   cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV, throwOnNotFound: false })
   const config = loadServerConfig()
   const resolved = resolveCaller(cloud, config, event)

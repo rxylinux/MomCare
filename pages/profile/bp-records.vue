@@ -75,17 +75,67 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
+import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 import NavBar from '@/components/NavBar.vue'
 
 const healthStore = useHealthStore()
+const familyStore = useFamilyStore()
+const dataSource = ref(isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt'))
+// 响应式会话门控：权威会话失效（退出/锁定/切换）立即离开 family 展示
+const __sessionVersion = subscribeSession()
+watch(__sessionVersion, () => {
+  dataSource.value = isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt')
+})
+if (dataSource.value === 'family') {
+  familyStore.restoreFromCache()
+  familyStore.pullAll().catch(() => {})
+}
 
 // 从 store 获取统计数据
-const stats = computed(() => healthStore.getBpStats())
+const famBpEntries = computed(() => {
+  if (dataSource.value !== 'family') return []
+  return familyStore.dailyHistoryAsc()
+    .map(r => ({
+      date: r.dateKey,
+      systolic: r.fields && r.fields.systolic != null ? Number(r.fields.systolic) : null,
+      diastolic: r.fields && r.fields.diastolic != null ? Number(r.fields.diastolic) : null
+    }))
+    .filter(e => e.systolic != null && e.diastolic != null)
+    .slice().reverse()
+})
+const famBpStats = computed(() => {
+  const entries = famBpEntries.value
+  if (entries.length === 0) return { latest: null, status: '', count: 0 }
+  // famBpEntries 已按日期降序（最新在前）——最新 = 第一条
+  const last = entries[0]
+  return {
+    latest: `${last.systolic}/${last.diastolic}`,
+    status: last.systolic >= 140 || last.diastolic >= 90 ? '偏高' : '正常',
+    systolic: last.systolic, diastolic: last.diastolic,
+    count: entries.length
+  }
+})
+const stats = computed(() => {
+  if (dataSource.value === 'family') return famBpStats.value
+  if (dataSource.value === 'demo') return healthStore.getBpStats()
+  return { latest: null, status: '', count: 0 } // prompt：空态不读旧 store
+})
 
 // 从 store 获取历史记录
 const historyList = computed(() => {
+  if (dataSource.value === 'family') {
+    return famBpEntries.value.map(e => ({
+      date: e.date, dateDisplay: e.date, week: '',
+      systolic: String(e.systolic), diastolic: String(e.diastolic),
+      bpText: `${e.systolic}/${e.diastolic}`,
+      status: e.systolic >= 140 || e.diastolic >= 90 ? '偏高' : '正常',
+      statusClass: e.systolic >= 140 || e.diastolic >= 90 ? 'badge-high' : 'badge-normal'
+    }))
+  }
+  if (dataSource.value !== 'demo') return []
   const list = healthStore.getBpHistory()
   return list.map(item => ({
     ...item,

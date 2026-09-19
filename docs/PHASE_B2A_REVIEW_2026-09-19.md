@@ -2,18 +2,22 @@
 
 基线：B1 `b97b407`，开发顺序调整 `5567db2`。部署与真机验收统一延后，当前仅验收本地代码、平台契约与隔离测试。ZCode 编码，Codex 独立复现与审核。
 
-状态：实施中，尚未冻结/通过，不能据以下局部证据宣称阶段完成。
+状态：**B2a R5 本地独立验收通过（2026-09-19）**。以下 1–24 是发现与修复的历史记录，已复验关闭；不是当前未解决清单。真实 CloudBase 部署和双手机验收仍延后，不包含在本结论。
 
-## 当前待验收清单（优先看这里）
+## 最终验收证据
 
-已局部复验：分页 205 条、outbox 原操作保留/读写失败、存量 schema、真实服务契约、会话清理、重启重放/墓碑、孕期资料基线、计划对象、发请求前 sent 状态落盘、首页返回激活/编辑冲突/断网采用云端，以及体重图表。7 个修改 SFC 的脚本未绑定引用已归零。以下仍需收敛并冻结：
+- ZCode 冻结交接的 19 项源码/测试 SHA256 与当前文件逐项一致，独立验证前后无源码漂移；`git diff --check` 通过。
+- Codex 独立执行：B2a **42/42**，B1 **42/42**（跳过已移除旧共享/私人编辑器的 10 项，其等价操作由新 B2a 权威源测试覆盖；B1 上传/会话用例保留），历史 A **72/72**；均退出 0。
+- Codex 独立执行 H5 与 mp-weixin 构建，均退出 0。历史兼容测试开关不代表生产旧写入口已重新开启，默认旧业务写入口拒绝。
+- **19 份独立探针全部退出 0**：pagination、outbox、schema、full-path、recovery、store、pregnancy-isolation、extra、page-path、trend、unbound、foreground、conflict-isolation、mode、midnight、cold-restart、cold-home、three-trends、app-clock。仅使用合成数据、隔离本地磁盘/SDK，保留真实页面脚本、session/store/adapter 和云函数生产处理器。
+- 分页复验 205 条全部唯一；发送状态落盘失败不发请求；丢响应/重启保持原操作 ID；旧 revision、删除墓碑、未知版本、私人冲突跨成员隔离均有实际路径证据。
+- 首页与孕期资料编辑捕获原 revision；远端刷新后旧编辑进入冲突；断网采用云端不假成功；家庭返回首页、三个趋势页真实计算与空态隔离通过。
+- App + 首页冷启动同时触发、身份响应延迟时只确认一次，确认前无正式读取/缓存展示，确认后首页自动激活。演示/显式退出阻止自动确认；回前台真实复核与换成员清理通过。
+- 上海跨日使用合成 UTC 时钟验证页面计算，以及**实际 App 分钟回调**。仓库 R5-24 场景仅提取生产日号函数做断言，真正的回调验证来自独立 app-clock 探针；两者范围不混淆。
 
-1. 真实页面回归须使用同一 page bundle 的 session/config/adapter/store；只共享磁盘不会使第二个模块的 session 自动变 confirmed。可参考 `/tmp/momcare-b2a-page-path-audit.cjs`、`/tmp/momcare-b2a-pregnancy-form-audit.cjs` 和 `/tmp/momcare-b2a-trend-audit.cjs` 的有效装载方式。必须测试目标结果，不能用 typeof 或允许所有模式的断言代替。
-2. 三个趋势页 session 状态要响应确认/退出，prompt/rejected 等不得走旧 store 分支；明确演示仍可用。孕期资料正式保存不先把共享内容写入旧演示 store，未确认页也不自动填历史正式数据。
-3. App/首页 foreground 的身份复核、显式演示/退出边界、失败清屏与暖离线语义要一致，不能靠多个 onShow 同时启动竞争确认。新增首页孕周/倒计时不要只用无响应性的 Date.now；统一 Shanghai 日号并验证跨日。
-4. 家庭页保留的上传/预览、确认与迟到回调必须保留 B1 身份/epoch 清理保护；原有效 B1 上传用例通过。旧 mc-shared-records/mc-private-notes 的业务写入按 spec 第 5 条关闭或转到新权威源，部署说明不再指导向旧集合写新记录。
-5. 冲突界面显示可比较的本地修改和云端版本；退出说明本人待办仍保留并提供返回处理机会。完成 spec 范围自检。
-6. 稳定后全量回归、双端构建、交接/哈希与独立复验。不提交、不部署，直到 Codex 明确验收。
+验证日志位于本机 `/tmp/momcare-b2a-final-gate-{0..4}.log` 和 `/tmp/momcare-b2a-reviewed-*.log`。临时探针供本次复现使用，长期回归以仓库测试为准。接受本阶段后可继续 B2b1；不据此开启云上传或宣称 OCR/DeepSeek 已可用。
+
+## 历史发现与修复过程
 
 ## 初稿复现 1：分页丢记录
 
@@ -182,3 +186,26 @@ R4 进行中局部复验：真实 handleSave 不再改变旧 userInfo，孕期�
 `/tmp/momcare-b2a-mode-audit.cjs` 进一步调用实际 healthStore.enterDemoMode（不只手写模式键）后执行真实 App.onShow：已确认家庭用户切演示后仍新增 whoami 与 3 个业务读请求（6→10），演示门未覆盖 confirmed 分支。显式 endSession 后的 App.onShow 零请求已通过。演示优先级须覆盖已有 confirmed 会话，主页 mounted/onShow 和趋势/表单也要一致，不能只 gate unconfirmed。
 
 R4 新日期实现需纠正：shanghaiDayNum 返回 YYYYMMDD 整数然后直接相减，跨月天数错误。独立午夜探针补绝对值断言后，2026-06-01→2026-09-19 得 318 天，应 110 天。应将上海日号对应到真实公历日序（例如按年月日构造 UTC 日序再取差），覆盖月末、年末和闰日；不能只验证同月午夜 +1。`node --check cloud/functions/mc-private-notes/index.js` 也发现默认关闭补丁插入字符串字面量内部导致语法错误，须在冻结前修复并执行语法/组装验证。
+
+## R4 冻结独立复核（用户继续后）
+
+独立重跑 B2a 套件 38/38；交接 19 个哈希全部匹配。分页/outbox/schema/全链路/恢复/store/孕期隔离/首页/趋势/冲突隔离/前台身份/演示与退出/午夜共 13 份独立探针通过。但以下实际生产路径仍阻断验收：
+
+19. **血压/胎动页漏导入 watch**：`/tmp/momcare-b2a-unbound-audit.cjs` 检查发现 bp-records.vue:89、fetal-records.vue:97 的 watch 未绑定，页面 script 执行即 ReferenceError。不要只加载体重页；三个趋势页必须实际装载。
+20. **冷启动有标记也不复核**：`/tmp/momcare-b2a-cold-restart-audit.cjs` 真实 App/session/store 单 bundle，先确认妈妈写入持久标记，然后清除 require cache 新建整个 bundle（磁盘保留，内存/Pinia/session 全新）。App.onShow 判断 persistedSessionExists 为真后调用 foregroundRecheck，但它又因 autoRecheckEligible 初始 undefined 拒绝，未发 whoami，状态始终 unconfirmed。持久标记只能触发网络确认，不能直接放行缓存；演示/显式退出仍优先阻止自动确认。还要测试 App.onShow 与首页 onShow/mounted 同时发生的真实冷启动顺序：首页当前 unconfirmed 分支也依赖 autoRecheckEligible，可能在 App 确认结束后仍停留 unconfirmed。一个协调入口承接合法冷启动的同一确认 Promise，并在成功后激活页面。
+
+这不是部署缺失造成的：测试使用已配置隔离 SDK，且存有真实生产 confirmIdentity 写入的合成标记。修复后冻结 R5，保留原全部回归与未部署状态。
+
+## R5 实施期间追加复现 21–23：三个趋势页的实际数据绑定
+
+独立 `/tmp/momcare-b2a-three-trends-audit.cjs` 装载真实三个 SFC 的 script setup（只替换展示组件/生命周期注册），统一实际 Pinia/session/config/adapter。补齐 watch 导入后，三个脚本均可装载，但两日合成记录仍复现：
+
+21. **血压“最新”取到最旧记录**：09-18=110/70、09-19=125/85，实际 stats.latest=110/70。列表已 reverse 成降序，统计再次取末尾。应实际断言最新值 125/85。
+22. **胎动正式数据渲染崩溃**：stats.count>0 时模板无条件读 fetalData.heatmap.month/firstDayOfWeek/data，但 family 分支返回 heatmap:null。真实计算结果的模板访问抛 TypeError。热力图必须由正式数据生成并保持模板需要的形状，不能绕回旧数据源。
+23. **胎动显式 0 丢失**：记录 fetalCount=0 的日期被 count>0 过滤，历史/已记录天数缺失；null/未记录又被映射为0。应区分明确记录0与未记录，使用统一 Shanghai 日期及响应式跨日来源。
+
+复现退出1。修复需覆盖三个趋势页的实际计算与模板消费，而非只匹配源码关键字；未确认态顶部 stats 也不能回退旧 store（血压/胎动当前仍有二元分支）。这些均属原 B2a 页面接入范围。
+
+## 复现 24：实际 App 定时器仍按设备日历跨日
+
+18 份独立探针通过后，补验真正触发日期更新的 `App.methods.startDayClock`（此前 midnight 探针直接调用 refreshToday）。`TZ=UTC node /tmp/momcare-b2a-app-clock-audit.cjs` 在合成时钟 09-19 15:59:59Z → 16:00:01Z 调用实际定时回调，healthStore.today 未更新：App 判断的是设备本地年月日，上海已跨日而 UTC 未跨日。需让触发条件与页面采用同一上海日号；否则前台常驻时孕周/胎动等延迟更新，直接调用 refreshToday 的绿色测试不足以覆盖生产触发链。此项是既定跨日要求的最后一段生产路径，非新增功能。

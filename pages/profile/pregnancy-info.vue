@@ -202,10 +202,59 @@
 import { ref, computed, reactive, onMounted, nextTick } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
 import { isRealAuthed } from '@/utils/api.js'
+import { getSessionState } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 import { legacyHttpEnabled } from '@/utils/backendGate.js'
 import NavBar from '@/components/NavBar.vue'
 
 const healthStore = useHealthStore()
+const familyStore = useFamilyStore()
+
+function captureBaseline(fields, revision) {
+	editBaseline.fields = { ...fields }
+	editBaseline.revision = revision || 0
+	editBaseline.captured = true
+}
+
+function formPayload() {
+	// family 模式：与【编辑基线】（打开表单时的字段快照）diff，只提交用户
+	// 实际修改的字段——后台刷新不改基线，他人修改不会被静默覆盖
+	if (getSessionState().status === 'confirmed') {
+		const cur = editBaseline.captured ? editBaseline.fields : (familyStore.pregnancy && familyStore.pregnancy.fields ? familyStore.pregnancy.fields : {})
+		const p = {}
+		const diffStr = (key, val) => {
+			const v = val && val.trim() !== '' ? val.trim() : null
+			if ((cur[key] || null) !== v) p[key] = v
+		}
+		diffStr('nickname', form.nickname)
+		diffStr('babyNickname', form.babyNickname)
+		diffStr('hospital', form.hospital)
+		diffStr('doctor', form.doctor)
+		diffStr('hospitalPhone', form.hospitalPhone)
+		const w = form.preWeight !== '' ? Number(form.preWeight) : null
+		if ((cur.preWeightKg != null ? cur.preWeightKg : null) !== w) p.preWeightKg = w
+		const h = form.height !== '' ? Number(form.height) : null
+		if ((cur.heightCm != null ? cur.heightCm : null) !== h) p.heightCm = h
+		const lmp = lmpDateStr.value || null
+		if ((cur.lmpDate || null) !== lmp) p.lmpDate = lmp
+		const due = dueDateStr.value || null
+		if ((cur.dueDate || null) !== due) p.dueDate = due
+		return p
+	}
+	// 非 family：全量提交（旧本地路径）
+	const p = {}
+	const str = (v) => (v && v.trim() !== '' ? v.trim() : null)
+	p.nickname = form.nickname.trim() !== '' ? form.nickname.trim() : null
+	p.babyNickname = str(form.babyNickname)
+	p.hospital = str(form.hospital)
+	p.doctor = str(form.doctor)
+	p.hospitalPhone = str(form.hospitalPhone)
+	p.preWeightKg = form.preWeight !== '' ? Number(form.preWeight) : null
+	p.heightCm = form.height !== '' ? Number(form.height) : null
+	p.lmpDate = lmpDateStr.value || null
+	p.dueDate = dueDateStr.value || null
+	return p
+}
 
 // 表单数据
 const form = reactive({
@@ -237,8 +286,35 @@ const dueDateDisplay = computed(() => {
 	return `${parts[0]}年${parseInt(parts[1])}月${parseInt(parts[2])}日`
 })
 
-// 初始化表单数据
+// 初始化表单数据：family 模式从权威源（familyStore.pregnancy）回填，
+// 其余沿用旧 store（演示/未确认路径）
 onMounted(() => {
+	if (getSessionState().status === 'confirmed') {
+		familyStore.restoreFromCache()
+		// 基线用当前本地快照（不等待网络拉取——拉取可能带回他人修改，若以此回填
+		// 会覆盖打开表单时的真实基线）；提交前 pullAll 仅用于提示云端已推进
+		const preg = familyStore.pregnancy
+		const f = preg && preg.fields ? preg.fields : {}
+		form.nickname = f.nickname || ''
+		form.babyNickname = f.babyNickname || ''
+		form.hospital = f.hospital || ''
+		form.doctor = f.doctor || ''
+		form.hospitalPhone = f.hospitalPhone || ''
+		form.preWeight = f.preWeightKg != null ? String(f.preWeightKg) : ''
+		form.height = f.heightCm != null ? String(f.heightCm) : ''
+		lmpDateStr.value = f.lmpDate || ''
+		dueDateStr.value = f.dueDate || ''
+		captureBaseline(f, preg ? preg.revision : 0)
+		if (form.preWeight && form.height) calcBMI()
+		// 后台拉取：仅在云端 revision 超过基线时提示（不覆盖输入、不改基线）
+		familyStore.pullAll().then(() => {
+			const cur = familyStore.pregnancy
+			if (cur && cur.revision > editBaseline.revision) {
+				uni.showToast({ title: '云端有对方的新修改，保存时可能提示冲突', icon: 'none', duration: 2500 })
+			}
+		}).catch(() => {})
+		return
+	}
 	const userInfo = healthStore.userInfo
 	form.nickname = userInfo.nickname || ''
 	form.babyNickname = userInfo.babyNickname || ''
@@ -283,6 +359,11 @@ function onDueDateChange(e) {
 	dueDateStr.value = e.detail.value
 }
 
+// 编辑基线：打开表单时捕获的字段快照 + 当时 revision。
+// 后台刷新（他人修改）只提示，不覆盖正在编辑的输入，也不悄悄提高提交基线——
+// 若云端已推进，提交按基线 revision 冲突，由用户选择采用云端或确认重提
+const editBaseline = { fields: {}, revision: 0, captured: false }
+
 // 防抖定时器
 let bmiCalcTimer = null
 
@@ -325,34 +406,58 @@ function calcBMI() {
 }
 
 async function handleSave() {
-	// 备份旧值用于回滚
-	const oldUserInfo = { ...healthStore.userInfo }
-	const oldLmpDate = healthStore.lmpDate
-	const oldDueDate = healthStore.dueDate
-
-	// 更新 store 数据
-	healthStore.userInfo.nickname = form.nickname
-	healthStore.userInfo.babyNickname = form.babyNickname
-	healthStore.userInfo.hospital = form.hospital
-	healthStore.userInfo.doctor = form.doctor
-	healthStore.userInfo.hospitalPhone = form.hospitalPhone
-	healthStore.userInfo.preWeight = form.preWeight
-	healthStore.userInfo.height = form.height
-
-	// 更新日期
-	if (lmpDateStr.value) {
-		const parts = lmpDateStr.value.split('-')
-		healthStore.lmpDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
-	}
-	if (dueDateStr.value) {
-		const parts = dueDateStr.value.split('-')
-		healthStore.dueDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
-	}
-
 	// 显示加载状态
 	uni.showLoading({ title: '保存中...' })
 
 	try {
+		// B2a：正式模式（身份已确认）→ familyStore 权威源（outbox→云）。
+		// 分支放在一切旧 store 写入【之前】——正式保存不污染演示/旧 store
+		if (getSessionState().status === 'confirmed') {
+			const payload = formPayload()
+			if (Object.keys(payload).length === 0) {
+				uni.hideLoading()
+				uni.showToast({ title: '没有修改需要保存', icon: 'none', duration: 2000 })
+				return
+			}
+			const result = await familyStore.savePregnancy(payload, editBaseline.revision)
+			uni.hideLoading()
+			if (result.ok) {
+				// 保存成功后重拉，保证表单与权威源一致
+				familyStore.pullAll().catch(() => {})
+				uni.showToast({ title: '保存成功（家庭共享）', icon: 'success', duration: 1200 })
+				setTimeout(() => uni.navigateBack(), 1200)
+			} else if (result.code === 'revision-conflict') {
+				uni.showToast({ title: '资料已被对方更新，请刷新后重试；输入已保留', icon: 'none', duration: 2500 })
+			} else if (result.code === 'outbox-persist-failed') {
+				uni.showToast({ title: result.message, icon: 'none', duration: 2500 })
+			} else {
+				uni.showToast({ title: `保存失败（${result.message || result.code}）；输入已保留`, icon: 'none', duration: 2500 })
+			}
+			return
+		}
+
+		// 演示/未确认路径：旧本地 store 写入（原位置移入此分支）
+		const oldUserInfo = { ...healthStore.userInfo }
+		const oldLmpDate = healthStore.lmpDate
+		const oldDueDate = healthStore.dueDate
+
+		healthStore.userInfo.nickname = form.nickname
+		healthStore.userInfo.babyNickname = form.babyNickname
+		healthStore.userInfo.hospital = form.hospital
+		healthStore.userInfo.doctor = form.doctor
+		healthStore.userInfo.hospitalPhone = form.hospitalPhone
+		healthStore.userInfo.preWeight = form.preWeight
+		healthStore.userInfo.height = form.height
+
+		if (lmpDateStr.value) {
+			const parts = lmpDateStr.value.split('-')
+			healthStore.lmpDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+		}
+		if (dueDateStr.value) {
+			const parts = dueDateStr.value.split('-')
+			healthStore.dueDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+		}
+
 		const saveResult = await healthStore.saveUserProfile()
 
 		// 本机持久化（含产检迁移的二次写入）失败：不显示成功、不返回，表单内容保留

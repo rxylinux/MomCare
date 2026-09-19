@@ -1172,6 +1172,12 @@ export const useHealthStore = defineStore('health', () => {
 				console.error('enterDemoMode: cannot persist demo mode, abort')
 				return false
 			}
+			try { uni.setStorageSync('mc_session_mode', 'demo-explicit') } catch (e) { /* 忽略 */ }
+			// 演示优先：同时结束正式云会话（已确认用户切演示后不再自动复核/拉取）
+			try {
+				const { endSession } = require('@/services/sessionService.js')
+				endSession()
+			} catch (e) { /* 循环依赖保护：sessionService 不 import 本模块 */ }
 			_refreshSessionIdentity()
 			dataMode.value = 'demo'
 			setToken(GUEST_TOKEN)

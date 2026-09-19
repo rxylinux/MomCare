@@ -2,6 +2,8 @@
 	import { useHealthStore } from '@/stores/health.js'
 	import { isRealAuthed } from '@/utils/api.js'
 	import { legacyHttpEnabled } from '@/utils/backendGate.js'
+	import { getSessionState, foregroundRecheck, coldStartConfirm, persistedSessionExists, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+	import { useFamilyStore } from '@/services/familyStore.js'
 
 	// 跨日/回前台刷新 today：孕周等依赖日期的计算随 ref 更新
 	let dayClockTimer = null
@@ -66,6 +68,45 @@
 				console.warn('refreshToday failed:', e)
 			}
 
+			// B2a：回前台身份复核（复现17修复）——先复核当前身份再恢复业务读写。
+			// foregroundRecheck 是 App/页面共享的唯一确认入口（in-flight 去重，
+			// 不竞争确认）；成员变化由 sessionVersion 驱动 store 清空旧数据；
+			// 临时离线按暖离线保留已确认会话，明确拒绝锁定清屏。
+			try {
+				const session = getSessionState()
+				// 演示优先（复验：已确认用户切演示后零正式请求）——先于一切 confirmed 分支
+				if (isExplicitDemo()) {
+					// 演示模式：不确认、不拉取正式数据
+				} else {
+				// 自动复核资格：显式演示/显式退出不被后台自动确认（R3-3）；
+				// 冷启动 unconfirmed 只有持久会话标记（曾显式确认过）才自动复核
+				let sessionMode = ''
+				let hasPersistedSession = false
+				try {
+					sessionMode = uni.getStorageSync('mc_session_mode') || ''
+					hasPersistedSession = persistedSessionExists()
+				} catch (e) { /* 忽略 */ }
+				const shouldRecheck = !isExplicitLoggedOut() && (session.status === 'confirmed' || (session.status === 'unconfirmed' && hasPersistedSession && sessionMode !== 'demo-explicit'))
+				if (shouldRecheck) {
+					// 冷启动（未确认+持久标记）走 coldStartConfirm：标记只触发网络确认，
+					// 不放行缓存；已确认走 foregroundRecheck 复核。二者共享去重 Promise。
+					const confirmFn = session.status === 'confirmed' ? foregroundRecheck : coldStartConfirm
+					confirmFn().then(res => {
+						if (res && res.ok) {
+							const fam = useFamilyStore()
+							fam.restoreFromCache()
+							fam.pullAll().catch(() => {})
+							fam.flushAll().catch(() => {})
+						}
+						// res.transient → 暖离线：已确认会话保留可用，不强制清屏
+						// res.locked → confirmIdentity 已锁定并清空
+					}).catch(() => {})
+				}
+				} // 演示优先分支闭合
+			} catch (e) {
+				console.warn('App.onShow family sync failed:', e)
+			}
+
 			// B1：旧 Cloudflare 云同步停用（正式后端切换 CloudBase，入口在家庭共享页）；
 			// 失败保留本地数据，不伪成功
 			if (legacyHttpEnabled() && isRealAuthed()) {
@@ -83,16 +124,19 @@
 			console.log('MomCare Hide')
 		},
 		methods: {
+			// 比较上海日号（非设备本地日期）：UTC 设备在上海午夜跨日时正确触发
+			// refreshToday——与 familyStore/首页的 Asia/Shanghai 日号同一语义
+			shanghaiDayKey(date) {
+				const sh = new Date(date.getTime() + (8 * 60 + date.getTimezoneOffset()) * 60000)
+				return sh.getFullYear() * 10000 + (sh.getMonth() + 1) * 100 + sh.getDate()
+			},
 			startDayClock() {
 				if (dayClockTimer) clearInterval(dayClockTimer)
 				dayClockTimer = setInterval(() => {
 					try {
 						const healthStore = useHealthStore()
 						const now = new Date()
-						const sameDay = healthStore.today.getFullYear() === now.getFullYear() &&
-							healthStore.today.getMonth() === now.getMonth() &&
-							healthStore.today.getDate() === now.getDate()
-						if (!sameDay) {
+						if (this.shanghaiDayKey(healthStore.today) !== this.shanghaiDayKey(now)) {
 							healthStore.refreshToday(now)
 						}
 					} catch (e) {

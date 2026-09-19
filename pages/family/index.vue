@@ -53,41 +53,12 @@
 					</view>
 				</view>
 
-				<!-- 共享数字记录 -->
+				<!-- B2a：正式数据入口已迁移到首页/资料/趋势页；本页保留身份与配置诊断 -->
 				<view class="section-card" v-if="session.status === 'confirmed'">
-					<text class="card-title">今日共享记录 · {{ todayKey }}</text>
-					<text class="card-sub">体重、血压等数字两人共享；本页为 B1 最小接入</text>
-
-					<view class="field-row">
-						<text class="field-label">体重 (kg)</text>
-						<input class="field-input" type="digit" v-model="sharedInput.weightKg" placeholder="如 58.5" placeholder-class="ph" />
-					</view>
-					<view class="field-row" v-if="sharedRecord">
-						<text class="field-meta">当前版本 r{{ sharedRecord.revision }} · 最后由{{ sharedRecord.updatedBy === 'mama' ? '妈妈' : '爸爸' }}更新</text>
-					</view>
-					<text v-if="sharedMsg" class="field-msg" :class="{ 'field-msg-warn': sharedMsgWarn }">{{ sharedMsg }}</text>
-
-					<view class="btn-row">
-						<view class="secondary-btn" @tap="loadShared"><text class="secondary-btn-text">刷新</text></view>
-						<view class="primary-btn" :class="{ disabled: savingShared }" @tap="handleSaveShared">
-							<text class="primary-btn-text">{{ savingShared ? '保存中…' : '保存共享记录' }}</text>
-						</view>
-					</view>
-				</view>
-
-				<!-- 本人私人笔记 -->
-				<view class="section-card" v-if="session.status === 'confirmed'">
-					<text class="card-title">我的私人笔记 · 仅本人可见</text>
-					<textarea class="note-textarea" v-model="privateInput" placeholder="只写给自己看的内容（另一成员任何接口都读不到）" placeholder-class="ph" :maxlength="2000" />
-
-					<text v-if="privateMsg" class="field-msg" :class="{ 'field-msg-warn': privateMsgWarn }">{{ privateMsg }}</text>
-
-					<view class="btn-row">
-						<view class="secondary-btn" @tap="loadPrivate"><text class="secondary-btn-text">刷新</text></view>
-						<view class="primary-btn" :class="{ disabled: savingPrivate }" @tap="handleSavePrivate">
-							<text class="primary-btn-text">{{ savingPrivate ? '保存中…' : '保存私人笔记' }}</text>
-						</view>
-					</view>
+					<text class="card-title">数据与同步诊断</text>
+					<text class="card-sub">正式健康记录、孕期资料与私人心情备注已在首页和相关页面直接读写（B2a 权威源）；此处仅展示同步状态。</text>
+					<text class="identity-sub">最近完整同步：{{ diagText }}</text>
+					<text class="identity-sub">待同步操作：{{ pendingCount }} 项{{ conflictCount > 0 ? '；冲突 ' + conflictCount + ' 项（相关页面处理）' : '' }}</text>
 				</view>
 
 				<!-- 文件：服务端开关驱动的真实上传闭环（默认关闭，如实展示） -->
@@ -135,8 +106,7 @@ import { onShow } from '@dcloudio/uni-app'
 import NavBar from '@/components/NavBar.vue'
 import { cloudRuntimeState } from '@/services/cloudAdapter.js'
 import {
-	confirmIdentity, fetchMyOpenid, getSessionState, familyCall, currentEpoch,
-	stashDraft, mergeDraft, pendingDrafts, clearDraftFields,
+	confirmIdentity, fetchMyOpenid, getSessionState, familyCall, currentEpoch, isExplicitDemo,
 	getMemberCache, setMemberCache,
 	savePendingUpload, getPendingUpload, clearPendingUpload
 } from '@/services/sessionService.js'
@@ -156,20 +126,54 @@ const todayKey = (() => {
 const SHARED_CACHE_KEY = `shared-daily-${todayKey}`
 const PRIVATE_CACHE_KEY = `private-${todayKey}`
 
-const sharedInput = ref({ weightKg: '' })
-const sharedRecord = ref(null)
-const sharedMsg = ref('')
-const sharedMsgWarn = ref(false)
-const savingShared = ref(false)
-let sharedOpId = '' // 同一逻辑操作跨重试保持不变；成功后换新
+const diagText = computed(() => {
+	try {
+		const fam = require('@/services/familyStore.js')
+		void fam
+	} catch (e) { /* 打包内不可用，占位 */ }
+	return lastFullSyncAt.value ? new Date(lastFullSyncAt.value).toLocaleString() : '尚未完成'
+})
+const lastFullSyncAt = ref(null)
+const pendingCount = ref(0)
+const conflictCount = ref(0)
 
-const privateInput = ref('')
-const privateMsg = ref('')
-const privateMsgWarn = ref(false)
-const savingPrivate = ref(false)
-let privateOpId = ''
-let privateExpectedRevision = null
+async function refreshDiagnostics() {
+	try {
+		const { useFamilyStore } = await import('@/services/familyStore.js')
+		const fam = useFamilyStore()
+		lastFullSyncAt.value = fam.lastFullSyncAt
+		pendingCount.value = fam.pendingCount
+		conflictCount.value = fam.conflictEntries.length
+	} catch (e) {
+		// 未确认身份等场景：保持默认展示
+	}
+}
 
+function newOpId(prefix) {
+	return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+// 业务调用的授权失败处理（上传路径仍使用）：
+// - 身份拒绝优先 → 同步权威会话、清理上传/诊断展示（收敛后无编辑输入）
+// - stale → 零变更（迟到响应不得影响新身份 UI）
+function handleAuthFailure(res, epochAtStart) {
+	const refusal = res.locked || ['not-family-member', 'wrong-appid', 'unauthenticated', 'not-configured'].includes(res.code)
+	if (refusal) {
+		session.value = getSessionState()
+		uploadMsg.value = '身份被服务端拒绝，会话已锁定；请重新确认身份或联系管理员'
+		uploadMsgWarn.value = true
+		uploadedImageUrl.value = ''
+		registeredFileId.value = ''
+		pendingUploadInfo.value = null
+		return 'locked'
+	}
+	if (res.code === 'stale-session' || (epochAtStart !== undefined && currentEpoch() !== epochAtStart)) {
+		return 'stale'
+	}
+	return null
+}
+
+// 上传策略与确认（模板引用；收敛后仍保留身份确认与文件闭环入口）
 const uploadEnabled = ref(false)
 const uploading = ref(false)
 const uploadMsg = ref('')
@@ -177,7 +181,6 @@ const uploadMsgWarn = ref(false)
 const uploadedImageUrl = ref('')
 const registeredFileId = ref('')
 let lastUploadId = ''
-
 const filePolicyText = ref('')
 
 const rejectText = computed(() => {
@@ -187,93 +190,32 @@ const rejectText = computed(() => {
 	return '身份确认失败'
 })
 
-function newOpId(prefix) {
-	return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-// 业务调用的授权失败处理（权威状态来自 sessionService，页面只观察与执行）：
-// - 'stale-session'/纪元变化 → 返回 'stale'：零变更（当前 UI 属于更新的有效成员）
-// - 明确身份拒绝（not-family-member 等 / locked 标记）→ 立即锁定页面：
-//   同步会话状态、清理敏感内存、给出锁定说明，不等待下一次确认
-function handleAuthFailure(res, epochAtStart) {
-	// 身份拒绝优先：拒绝响应是权威锁定（familyCall 锁定时会推进纪元），
-	// 不属于"更新有效成员的迟到回调"，必须立即同步并清屏
-	const refusal = res.locked || ['not-family-member', 'wrong-appid', 'unauthenticated', 'not-configured'].includes(res.code)
-	if (refusal) {
-		session.value = getSessionState()
-		clearSensitiveMemory()
-		lastConfirmedMemberId = null
-		sharedMsg.value = '身份被服务端拒绝，会话已锁定；请重新确认身份或联系管理员'
-		sharedMsgWarn.value = true
-		privateMsg.value = ''
-		uploadMsg.value = ''
-		return 'locked'
-	}
-	if (res.code === 'stale-session' || (epochAtStart !== undefined && currentEpoch() !== epochAtStart)) {
-		return 'stale'
-	}
-	return null
-}
-
-// 上一个已确认成员：身份更换（含明确拒绝）必须清理组件内敏感内容——
-// 输入框/版本游标/操作 ID/预览与登记号都属于前身份的会话内存。
-// 草稿与待上传持久化在各自成员命名空间，不受清理影响（保留在原身份下）。
-let lastConfirmedMemberId = null
-
-function clearSensitiveMemory() {
-	privateInput.value = ''
-	sharedInput.value = { weightKg: '' }
-	sharedRecord.value = null
-	privateExpectedRevision = null
-	sharedOpId = ''
-	privateOpId = ''
-	uploadedImageUrl.value = ''
-	registeredFileId.value = ''
-	sharedMsg.value = ''
-	privateMsg.value = ''
-	uploadMsg.value = ''
-	sharedMsgWarn.value = false
-	privateMsgWarn.value = false
-	uploadMsgWarn.value = false
-	pendingUploadInfo.value = null
-}
-
 async function handleConfirm(manual) {
-	const prevMember = lastConfirmedMemberId
 	const res = await confirmIdentity()
 	session.value = getSessionState()
 	if (!res.ok) {
-		// 暂时性网络失败：保持现状（未保存输入不丢、不清屏），可重试
 		if (res.transient) {
-			if (manual) uni.showToast({ title: '网络不可用，请稍后重试（输入已保留）', icon: 'none', duration: 2500 })
+			if (manual) uni.showToast({ title: '网络不可用，请稍后重试', icon: 'none', duration: 2500 })
 			return
 		}
-		// 明确拒绝/锁定：清理敏感内存（含上一身份残留输入）
-		clearSensitiveMemory()
-		lastConfirmedMemberId = null
 		if (manual) uni.showToast({ title: rejectText.value, icon: 'none', duration: 2500 })
 		return
 	}
-	// 身份更换（mama↔papa）：先清前身份内容再加载新身份数据
-	if (prevMember && prevMember !== res.member.memberId) {
-		clearSensitiveMemory()
-	}
-	lastConfirmedMemberId = res.member.memberId
-	await Promise.all([loadShared(), loadPrivate(), loadUploadPolicy()])
+	await Promise.all([loadUploadPolicy(), refreshDiagnostics()])
 	refreshPendingUpload()
-	// 确认后检查本人离线草稿（会话服务按当前确认成员隔离，未确认时为 null）
-	const draft = pendingDrafts()
-	if (draft) {
-		if (draft.weightKg !== undefined && draft.weightKg !== '') {
-			sharedInput.value.weightKg = draft.weightKg
-		}
-		if (draft.privateNote !== undefined && draft.privateNote !== '') {
-			privateInput.value = draft.privateNote
-		}
-		sharedMsg.value = '检测到本机暂存的未同步草稿，已恢复到输入框；保存成功后对应部分才会清除'
-		sharedMsgWarn.value = false
-	}
 	if (manual) uni.showToast({ title: `已确认：${res.member.displayName}`, icon: 'none' })
+}
+
+async function loadUploadPolicy() {
+	const res = await familyCall('mc-files', { action: 'uploadPolicy' })
+	if (!res.ok) {
+		filePolicyText.value = `上传策略读取失败：${res.message || res.code}`
+		return
+	}
+	uploadEnabled.value = Boolean(res.data.clientUploadEnabled)
+	filePolicyText.value = uploadEnabled.value
+		? '上传已启用：图片将先存入你的个人暂存目录，服务端校验后登记为正式副本（两人共享查看）'
+		: (res.data.reason || '上传通道未启用')
 }
 
 async function handleMyOpenid() {
@@ -284,185 +226,6 @@ async function handleMyOpenid() {
 	} else {
 		uni.showToast({ title: res.message || '获取失败', icon: 'none', duration: 2500 })
 	}
-}
-
-// 读取共享记录：成员缓存先行（离线可恢复），云端成功后更新缓存。
-// keepInput=true 时（冲突后刷新）只更新服务端版本展示，不覆盖用户输入。
-// 身份更换时 handleConfirm 已先清空输入，此处回填的必然是新成员数据。
-async function loadShared(keepInput = false) {
-	if (session.value.status !== 'confirmed') return
-	const cached = getMemberCache(SHARED_CACHE_KEY)
-	if (cached && cached.record) {
-		sharedRecord.value = cached.record
-		if (!keepInput && (sharedInput.value.weightKg === '' || sharedInput.value.weightKg == null)) {
-			sharedInput.value.weightKg = cached.record.payload.weightKg != null ? String(cached.record.payload.weightKg) : ''
-		}
-	}
-	const epoch = currentEpoch()
-	const res = await familyCall('mc-shared-records', { action: 'get', type: 'daily', dateKey: todayKey })
-	if (!res.ok) {
-		const outcome = handleAuthFailure(res, epoch)
-		if (outcome) return // stale 零变更 / locked 已清屏
-		if (!cached) {
-			sharedMsg.value = `读取失败：${res.message || res.code}（如有本机缓存将优先展示）`
-			sharedMsgWarn.value = true
-		}
-		return
-	}
-	setMemberCache(SHARED_CACHE_KEY, { record: res.data.record }, epoch)
-	sharedRecord.value = res.data.record
-	if (!keepInput && (sharedInput.value.weightKg === '' || sharedInput.value.weightKg == null)) {
-		sharedInput.value.weightKg = res.data.record && res.data.record.payload.weightKg != null
-			? String(res.data.record.payload.weightKg)
-			: ''
-	}
-	sharedMsg.value = ''
-}
-
-async function handleSaveShared() {
-	if (savingShared.value) return
-	const weight = Number(sharedInput.value.weightKg)
-	if (!Number.isFinite(weight) || weight <= 0) {
-		sharedMsg.value = '请输入有效体重'
-		sharedMsgWarn.value = true
-		return
-	}
-	savingShared.value = true
-	if (!sharedOpId) sharedOpId = newOpId('shr')
-	const expected = sharedRecord.value ? sharedRecord.value.revision : 0
-	// 竞态防护：捕获发起纪元；提交前先把内容预暂存到【原成员】名下——
-	// 即使确认期间身份切换，草稿也不会落到新身份
-	const epochAtStart = currentEpoch()
-	const stashedOk = mergeDraft({ weightKg: sharedInput.value.weightKg })
-	const res = await familyCall('mc-shared-records', {
-		action: 'upsert',
-		type: 'daily',
-		dateKey: todayKey,
-		payload: { weightKg: weight },
-		expectedRevision: expected,
-		operationId: sharedOpId
-	})
-	savingShared.value = false
-	// 迟到响应（零变更）或业务身份拒绝（立即锁定清屏）
-	const authOutcome = handleAuthFailure(res, epochAtStart)
-	if (authOutcome === 'stale' || authOutcome === 'locked') return
-	if (res.ok) {
-		sharedRecord.value = res.data.record
-		setMemberCache(SHARED_CACHE_KEY, { record: res.data.record })
-		sharedOpId = '' // 成功后下一逻辑操作用新 ID
-		sharedMsg.value = res.data.replayed ? '已保存（重复提交幂等重放）' : '已保存并共享'
-		sharedMsgWarn.value = false
-		// 只清草稿中的共享部分；未同步的私人笔记保留
-		clearDraftFields('weightKg')
-		return
-	}
-	if (res.code === 'revision-conflict') {
-		// fail 载荷在顶层；只刷新服务端版本展示，用户输入原样保留。
-		// 先刷新（会清常规消息）、后写冲突提示，保证提示可见
-		await loadShared(true)
-		sharedMsg.value = `已被对方更新（当前 r${res.currentRevision}），“刷新”查看最新值后再保存；你的输入未丢失`
-		sharedMsgWarn.value = true
-		return
-	}
-	// 网络类失败：按实际暂存结果如实报告
-	sharedMsg.value = stashedOk
-		? `保存失败（${res.message || res.code}）；输入已暂存到本机，恢复网络后重试`
-		: `保存失败（${res.message || res.code}）；本机暂存也未成功，内容仅保留在输入框，请释放空间后重试`
-	sharedMsgWarn.value = true
-}
-
-// 读取私人笔记：成员缓存先行，云端成功后更新缓存
-async function loadPrivate(keepInput = false) {
-	if (session.value.status !== 'confirmed') return
-	const cached = getMemberCache(PRIVATE_CACHE_KEY)
-	if (cached && cached.note) {
-		privateExpectedRevision = cached.note.revision
-		if (!keepInput && privateInput.value === '') {
-			privateInput.value = cached.note.content
-		}
-	}
-	const epoch = currentEpoch()
-	const res = await familyCall('mc-private-notes', { action: 'get', dateKey: todayKey })
-	if (!res.ok) {
-		const outcome = handleAuthFailure(res, epoch)
-		if (outcome) return
-		if (!cached) {
-			privateMsg.value = `读取失败：${res.message || res.code}`
-			privateMsgWarn.value = true
-		}
-		return
-	}
-	setMemberCache(PRIVATE_CACHE_KEY, { note: res.data.note }, epoch)
-	if (res.data.note) {
-		privateExpectedRevision = res.data.note.revision
-		if (!keepInput && privateInput.value === '') {
-			privateInput.value = res.data.note.content
-		}
-	} else {
-		privateExpectedRevision = 0
-	}
-	privateMsg.value = ''
-}
-
-async function handleSavePrivate() {
-	if (savingPrivate.value) return
-	const content = String(privateInput.value || '').trim()
-	if (!content) {
-		privateMsg.value = '内容不能为空'
-		privateMsgWarn.value = true
-		return
-	}
-	savingPrivate.value = true
-	if (!privateOpId) privateOpId = newOpId('prv')
-	// 竞态防护：捕获发起纪元；提交前按原成员预暂存私人内容
-	const epochAtStart = currentEpoch()
-	const stashedOk = mergeDraft({ privateNote: content })
-	const res = await familyCall('mc-private-notes', {
-		action: 'upsert',
-		dateKey: todayKey,
-		content,
-		expectedRevision: privateExpectedRevision,
-		operationId: privateOpId
-	})
-	savingPrivate.value = false
-	// 迟到响应（零变更）或业务身份拒绝（立即锁定清屏）
-	const authOutcome = handleAuthFailure(res, epochAtStart)
-	if (authOutcome === 'stale' || authOutcome === 'locked') return
-	if (res.ok) {
-		privateExpectedRevision = res.data.note.revision
-		setMemberCache(PRIVATE_CACHE_KEY, { note: res.data.note })
-		privateOpId = ''
-		privateMsg.value = '已保存（仅本人可见）'
-		privateMsgWarn.value = false
-		// 只清草稿中的私人部分；未同步的共享输入保留
-		clearDraftFields('privateNote')
-		return
-	}
-	if (res.code === 'revision-conflict') {
-		privateMsg.value = '笔记已被修改（可能你在其他设备更新过），“刷新”查看最新内容；你的输入未丢失'
-		privateMsgWarn.value = true
-		return
-	}
-	// 网络类失败：按【实际暂存结果】如实报告——mergeDraft 失败时不得声称"已暂存"
-	privateMsg.value = stashedOk
-		? `保存失败（${res.message || res.code}）；内容已暂存到本机，恢复网络后重试`
-		: `保存失败（${res.message || res.code}）；本机暂存也未成功，内容仅保留在输入框，请释放空间后重试`
-	privateMsgWarn.value = true
-}
-
-// 文件闭环：策略（服务端开关）→ 选图 → prepareUpload（服务端下发本人暂存路径）
-// → wx.cloud.uploadFile 直传暂存 → registerStaged（服务端校验/转存/登记）→ 授权读取
-async function loadUploadPolicy() {
-	const res = await familyCall('mc-files', { action: 'uploadPolicy' })
-	if (!res.ok) {
-		if (handleAuthFailure(res)) return
-		filePolicyText.value = `上传策略读取失败：${res.message || res.code}`
-		return
-	}
-	uploadEnabled.value = Boolean(res.data.clientUploadEnabled)
-	filePolicyText.value = uploadEnabled.value
-		? '上传已启用：图片将先存入你的个人暂存目录，服务端校验后登记为正式副本（两人共享查看）'
-		: (res.data.reason || '上传通道未启用')
 }
 
 // 待上传状态：uploadId + 持久化本地文件路径（uni.saveFile 副本，非临时路径）。
@@ -646,6 +409,7 @@ function goDemo() {
 }
 
 onShow(() => {
+	if (isExplicitDemo()) return // 演示优先：诊断页不自动确认/拉取
 	runtimeState.value = cloudRuntimeState()
 	session.value = getSessionState()
 	// 已确认过的会话：回到页面时自动重新确认（回前台重新校验身份）

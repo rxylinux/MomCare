@@ -53,6 +53,61 @@
       ]
     },
     {
+      "name": "mc_pregnancy",
+      "purpose": "家庭孕期档案单例（B2a）；文档 ID：familyId:pregnancy",
+      "fields": {
+        "_id": "familyId:pregnancy",
+        "familyId": "数据分区（非授权依据）",
+        "type": "pregnancy",
+        "fields": "白名单字段：lmpDate/dueDate/nickname/babyNickname/hospital/doctor/hospitalPhone/preWeightKg/heightCm",
+        "schemaVersion": "1（存量不支持版本全路径拒绝）",
+        "revision": "乐观并发版本号",
+        "updatedBy": "服务端生成成员 ID",
+        "updatedAt": "毫秒时间戳"
+      },
+      "indexes": [
+        { "keys": [{ "name": "familyId", "direction": 1 }], "unique": false }
+      ]
+    },
+    {
+      "name": "mc_health_daily",
+      "purpose": "共享健康数字（B2a，按日一条）；文档 ID：familyId:dateKey",
+      "fields": {
+        "_id": "familyId:dateKey",
+        "familyId": "数据分区",
+        "type": "daily",
+        "dateKey": "YYYY-MM-DD（分页稳定排序键，游标）",
+        "fields": "白名单字段：weightKg/systolic/diastolic/fetalCount/sharedNote",
+        "deleted": "墓碑标记（删除后阻止迟到编辑复活）",
+        "schemaVersion": "1",
+        "revision": "乐观并发版本号",
+        "updatedBy": "服务端生成成员 ID",
+        "updatedAt": "毫秒时间戳"
+      },
+      "indexes": [
+        { "keys": [{ "name": "familyId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+      ]
+    },
+    {
+      "name": "mc_moods",
+      "purpose": "私人心情/症状/备注/计划（B2a，仅本人）；文档 ID：familyId:memberId:dateKey",
+      "fields": {
+        "_id": "familyId:memberId:dateKey",
+        "familyId": "数据分区",
+        "ownerId": "服务端生成成员 ID（跨成员隔离）",
+        "type": "mood",
+        "dateKey": "YYYY-MM-DD（分页稳定排序键，游标）",
+        "fields": "白名单字段：mood/symptoms/note/plans({text,done}[])",
+        "deleted": "墓碑标记",
+        "schemaVersion": "1",
+        "revision": "乐观并发版本号",
+        "updatedAt": "毫秒时间戳"
+      },
+      "indexes": [
+        { "keys": [{ "name": "ownerId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+      ]
+    },
+    {
       "name": "mc_files",
       "purpose": "报告文件登记（暂存→正式→登记完成）；文档 ID：memberId:uploadId",
       "fields": {

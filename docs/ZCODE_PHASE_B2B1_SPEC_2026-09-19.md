@@ -1,6 +1,6 @@
 # B2b1 实施交接：产检与待产包
 
-状态：方案准备，**必须等 B2a 经 Codex 验收并提交后才启动**。这只是把原 B2b 分为两个较小 review 单元：B2b1 产检/待产包，B2b2 报告/附件。不新增功能范围，不提前部署。ZCode 实现，Codex 独立 review，通过后提交推送。
+状态：B2a R5 已经 Codex 本地独立验收，**阶段提交完成后启动本方案**。这只是把原 B2b 分为两个较小 review 单元：B2b1 产检/待产包，B2b2 报告/附件。不新增功能范围，不提前部署。ZCode 实现，Codex 独立 review，通过后提交推送。
 
 先读 `DELIVERY_STATUS.md`、`REMAINING_PHASE_ACCEPTANCE.md`、DESIGN 和 B2a 已验收交接。沿用 B2a 的权威身份、版本、持久待办与隔离缓存；不得复制出另一套稍有差别的同步规则。若需改公共模块，先列出兼容影响，再保留原回归。
 

@@ -27,6 +27,10 @@ async function scenario(name, fn) {
 // ───────────────────────── 组装真实云函数产物 ─────────────────────────
 cp.execFileSync('node', [path.join(root, 'cloud/assemble.mjs')], { stdio: 'pipe' })
 const DIST = path.join(root, 'dist/cloud-functions')
+// B1 服务端契约测试：旧集合业务写入已默认关闭（B2a/R3-5），显式开启测试开关
+// 验证历史契约语义（生产不配置 MC_ALLOW_LEGACY_WRITES）
+process.env.MC_ALLOW_LEGACY_WRITES = 'true'
+
 const handlers = {
   identity: require(path.join(DIST, 'mc-identity/index.js')),
   shared: require(path.join(DIST, 'mc-shared-records/index.js')),
@@ -811,6 +815,16 @@ async function clientMain() {
     assert.equal(api.getPendingUpload(), null)
   })
 
+  // ── 边界5收敛精细化门控 ──
+  // 只跳过依赖已移除编辑器（handleSaveShared/handleSavePrivate/sharedInput/privateInput）
+  // 的场景；上传待办/goDemo/页面加载等仍是家庭页有效功能，改造导出后继续运行。
+  const familyVue = fs.readFileSync(path.join(root, 'pages/family/index.vue'), 'utf8')
+  const familyPageHasEditing = familyVue.includes('handleSaveShared')
+  if (!familyPageHasEditing) {
+    console.log('SKIP  仅跳过依赖已移除共享/私人编辑器的场景；上传待办/goDemo/页面加载等仍有效测试保留运行（等价编辑器行为由 B2a 套件权威源路径覆盖）')
+  }
+  const maybePage = familyPageHasEditing ? (name, fn) => scenario(name, fn) : (name, fn) => { void name; void fn }
+
   // ── 页面：整段打包真实 <script setup>（只替换视觉/生命周期，不复制函数体）──
   function buildFamilyPage() {
     const vue = fs.readFileSync(path.join(root, 'pages/family/index.vue'), 'utf8')
@@ -823,11 +837,8 @@ async function clientMain() {
     // 模拟 MP-WEIXIN 构建：剔除 H5 专属 fallback 块
     code = code.replace(/\/\* #ifndef MP-WEIXIN \*\/[\s\S]*?\/\* #endif \*\//g, '')
     // 暴露页面处理器与状态；钩子从真实模块导入（与页面同一实例）
-    code = `import { __setCloudConfigForTests } from '@/utils/cloudConfig.js'
-import { __setWxCloud } from '@/services/cloudAdapter.js'
-import { __resetForTests } from '@/services/sessionService.js'
-` + code + `
-export {
+    const exportBlock = familyVue.includes('handleSaveShared')
+      ? `export {
   handleConfirm, handleSaveShared, loadShared, handleSavePrivate, handleUploadImage,
   discardPendingUpload, refreshPendingUpload, goDemo,
   session, sharedInput, sharedRecord, sharedMsg, sharedMsgWarn,
@@ -835,6 +846,15 @@ export {
   stashDraft, mergeDraft, pendingDrafts, clearDraftFields,
   __setCloudConfigForTests as __cfg, __setWxCloud as __wx, __resetForTests as __reset
 }`
+      : `export {
+  handleConfirm, handleUploadImage, discardPendingUpload, refreshPendingUpload, goDemo,
+  session, uploadEnabled, uploadMsg, uploadMsgWarn, pendingUploadInfo, registeredFileId, filePolicyText,
+  __setCloudConfigForTests as __cfg, __setWxCloud as __wx, __resetForTests as __reset
+}`
+    code = `import { __setCloudConfigForTests } from '@/utils/cloudConfig.js'
+import { __setWxCloud } from '@/services/cloudAdapter.js'
+import { __resetForTests } from '@/services/sessionService.js'
+` + code + '\n' + exportBlock
     const outFile = path.join(temp, 'family-page.cjs')
     esbuild.buildSync({
       stdin: { contents: code, resolveDir: path.join(root, 'pages/family'), loader: 'js' },
@@ -846,13 +866,19 @@ export {
     return require(outFile)
   }
 
-  await scenario('B1-页面：真实 script setup 打包可加载', async () => {
+  await scenario('B1-页面：真实 script setup 打包可加载（收敛后仍存在的处理器）', async () => {
     const page = buildFamilyPage()
-    assert.equal(typeof page.handleSaveShared, 'function')
+    // 收敛后仍有效的核心功能：身份确认、上传闭环、导航
+    assert.equal(typeof page.handleConfirm, 'function')
     assert.equal(typeof page.handleUploadImage, 'function')
+    assert.equal(typeof page.discardPendingUpload, 'function')
+    assert.equal(typeof page.goDemo, 'function')
+    // 已移除的编辑器不再导出（收敛验证）
+    assert.equal(page.handleSaveShared, undefined)
+    assert.equal(page.handleSavePrivate, undefined)
   })
 
-  await scenario('B1-页面：冲突路径读取顶层 currentRevision 不再 TypeError，输入保留（Item7）', async () => {
+  await maybePage('B1-页面：冲突路径读取顶层 currentRevision 不再 TypeError，输入保留（Item7）', async () => {
     api.__resetForTests()
     // 全栈：页面 → 适配器 → 伪造 wx.cloud → 真实 mc-* handler → 契约 mock
     const cloud = makeMockCloud()
@@ -892,7 +918,7 @@ export {
     assert.equal(page.sharedRecord.value.revision, 2, '服务端版本展示已刷新')
   })
 
-  await scenario('B1-页面：共享保存成功只清共享草稿字段（Item7）', async () => {
+  await maybePage('B1-页面：共享保存成功只清共享草稿字段（Item7）', async () => {
     api.__resetForTests()
     const cloud = makeMockCloud()
     setServerEnv()
@@ -922,7 +948,7 @@ export {
     assert.equal(d.privateNote, 'still pending note', '私人草稿保留')
   })
 
-  await scenario('B1-页面：成员缓存先行离线恢复 + 云端刷新（Item7）', async () => {
+  await maybePage('B1-页面：成员缓存先行离线恢复 + 云端刷新（Item7）', async () => {
     api.__resetForTests()
     const cloud = makeMockCloud()
     setServerEnv()
@@ -1174,7 +1200,7 @@ export {
     api.__resetForTests()
   })
 
-  await scenario('R2-页面：身份切换清理敏感输入（Codex canary 复现）', async () => {
+  await maybePage('R2-页面：身份切换清理敏感输入（Codex canary 复现）', async () => {
     api.__setCloudConfigForTests('env-t', 'wxapp-t')
     const cloud = makeMockCloud()
     setServerEnv()
@@ -1220,7 +1246,7 @@ export {
     assert.ok(!JSON.stringify(page.sharedMsg.value).includes('CANARY'))
   })
 
-  await scenario('R2-页面：明确拒绝时清理敏感输入', async () => {
+  await maybePage('R2-页面：明确拒绝时清理敏感输入', async () => {
     api.__setCloudConfigForTests('env-t', 'wxapp-t')
     let rejectNext = false
     const wxCloud = freshFakeWxCloud({
@@ -1299,7 +1325,7 @@ export {
     storage.delete('cached_articles')
   })
 
-  await scenario('R2-页面竞态：私人保存跨身份切换，草稿留在原成员、零 UI 污染（Item6 复现）', async () => {
+  await maybePage('R2-页面竞态：私人保存跨身份切换，草稿留在原成员、零 UI 污染（Item6 复现）', async () => {
     api.__setCloudConfigForTests('env-t', 'wxapp-t')
     const cloud = makeMockCloud()
     setServerEnv()
@@ -1359,7 +1385,7 @@ export {
     assert.equal(draft && draft.privateNote, 'MAMA_SAVE_CANARY', '妈妈的草稿保留在原成员名下')
   })
 
-  await scenario('R2-页面竞态：共享保存跨身份切换同样零污染', async () => {
+  await maybePage('R2-页面竞态：共享保存跨身份切换同样零污染', async () => {
     api.__setCloudConfigForTests('env-t', 'wxapp-t')
     const cloud = makeMockCloud()
     setServerEnv()
@@ -1408,7 +1434,7 @@ export {
     assert.equal(page.pendingDrafts().weightKg, '66.6')
   })
 
-  await scenario('R2-页面：瞬时离线确认保留未保存输入', async () => {
+  await maybePage('R2-页面：瞬时离线确认保留未保存输入', async () => {
     storage.clear() // 场景隔离：清除前序场景遗留的草稿/缓存键
     api.__setCloudConfigForTests('env-t', 'wxapp-t')
     let offline = false
@@ -1435,7 +1461,7 @@ export {
     assert.equal(page.privateInput.value, 'UNSAVED_KEEP_ME')
   })
 
-  await scenario('R2-页面：业务身份拒绝立即锁定清屏（不依赖下一次确认）', async () => {
+  await maybePage('R2-页面：业务身份拒绝立即锁定清屏（不依赖下一次确认）', async () => {
     api.__setCloudConfigForTests('env-t', 'wxapp-t')
     const cloud = makeMockCloud()
     setServerEnv()
@@ -1472,7 +1498,7 @@ export {
     assert.equal(page.privateInput.value, '')
   })
 
-  await scenario('R2-页面：暂存失败如实上报，不声称已保存本机（Item6 探针2）', async () => {
+  await maybePage('R2-页面：暂存失败如实上报，不声称已保存本机（Item6 探针2）', async () => {
     api.__setCloudConfigForTests('env-t', 'wxapp-t')
     storage.clear()
     // 让草稿键写入失败（真实存储配额/不可写形状），云调用同时离线失败

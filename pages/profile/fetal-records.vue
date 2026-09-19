@@ -83,19 +83,91 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
+import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 import NavBar from '@/components/NavBar.vue'
 
 const healthStore = useHealthStore()
+const familyStore = useFamilyStore()
+const dataSource = ref(isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt'))
+// 响应式会话门控：权威会话失效（退出/锁定/切换）立即离开 family 展示
+const __sessionVersion = subscribeSession()
+watch(__sessionVersion, () => {
+  dataSource.value = isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt')
+})
+if (dataSource.value === 'family') {
+  familyStore.restoreFromCache()
+  familyStore.pullAll().catch(() => {})
+}
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
 // 从 store 获取统计数据
-const stats = computed(() => healthStore.getFetalStats())
+const famFetalEntries = computed(() => {
+  if (dataSource.value !== 'family') return []
+  // 区分"明确记录 0"与"未记录"：fetalCount 字段存在（含 0）即为已记录
+  return familyStore.dailyHistoryAsc()
+    .filter(r => r.fields && r.fields.fetalCount !== undefined)
+    .map(r => ({ date: r.dateKey, count: Number(r.fields.fetalCount) }))
+})
+
+// 正式热力图：从权威源记录生成模板需要的形状（month/firstDayOfWeek/data），
+// 与旧 store 热力图同构；月份基于记录的上海日号
+const famFetalHeatmap = computed(() => {
+  const entries = famFetalEntries.value
+  if (entries.length === 0) return null
+  // 取最新记录月份（dateKey YYYY-MM-DD）
+  const latest = entries[entries.length - 1].date
+  const [y, m] = latest.split('-').map(Number)
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const firstDayOfWeek = new Date(y, m - 1, 1).getDay()
+  const byDate = {}
+  for (const e of entries) byDate[e.date] = e.count
+  void healthStore.today // 与 stats 同一响应式上海时钟（跨日重算 isToday）
+  const todaySh = new Date(healthStore.today.getTime() + (8 * 60 + healthStore.today.getTimezoneOffset()) * 60000)
+  const todayKey = `${todaySh.getFullYear()}-${String(todaySh.getMonth() + 1).padStart(2, '0')}-${String(todaySh.getDate()).padStart(2, '0')}`
+  const data = []
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dk = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const count = byDate[dk] !== undefined ? byDate[dk] : 0
+    data.push({ day: d, count, heatClass: count > 0 ? 'heat-1' : 'heat-0', isToday: dk === todayKey })
+  }
+  return { year: y, month: m - 1, daysInMonth, firstDayOfWeek, data }
+})
+const todayKeyStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+const famFetalStats = computed(() => {
+  void healthStore.today // 响应式跨日：App 时钟推进时今日/昨日重算
+  const entries = famFetalEntries.value // 已含明确 0（不再过滤）
+  const todaySh = new Date(healthStore.today.getTime() + (8 * 60 + healthStore.today.getTimezoneOffset()) * 60000)
+  const tk = `${todaySh.getFullYear()}-${String(todaySh.getMonth()+1).padStart(2,'0')}-${String(todaySh.getDate()).padStart(2,'0')}`
+  const ySh = new Date(todaySh.getTime() - 86400000)
+  const yk = `${ySh.getFullYear()}-${String(ySh.getMonth()+1).padStart(2,'0')}-${String(ySh.getDate()).padStart(2,'0')}`
+  return {
+    today: entries.find(e => e.date === tk)?.count ?? 0,
+    yesterday: entries.find(e => e.date === yk)?.count ?? 0,
+    count: entries.length
+  }
+})
+const stats = computed(() => {
+  if (dataSource.value === 'family') return famFetalStats.value
+  if (dataSource.value === 'demo') return healthStore.getFetalStats()
+  return { today: 0, yesterday: 0, count: 0 } // prompt：空态不读旧 store
+})
 
 // 从 store 获取胎动历史和热力图数据
-const fetalData = computed(() => healthStore.getFetalHistory())
+const fetalData = computed(() => {
+  if (dataSource.value === 'family') {
+    return {
+      // 已记录条目（含 0）降序；未记录日期不出现（count>0 过滤已移除）
+      entries: famFetalEntries.value.slice().reverse().map(e => ({ date: e.date, dateDisplay: e.date, week: '', count: e.count })),
+      heatmap: famFetalHeatmap.value
+    }
+  }
+  if (dataSource.value !== 'demo') return { entries: [], heatmap: null }
+  return healthStore.getFetalHistory()
+})
 
 function goHome() {
   uni.switchTab({ url: '/pages/index/index' })

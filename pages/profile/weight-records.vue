@@ -120,12 +120,25 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
+import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 import NavBar from '@/components/NavBar.vue'
 
 console.log('[weight-records] setup start')
 const healthStore = useHealthStore()
+const familyStore = useFamilyStore()
+const dataSource = ref(isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt'))
+// 响应式会话门控：权威会话失效（退出/锁定/切换）立即离开 family 展示
+const __sessionVersion = subscribeSession()
+watch(__sessionVersion, () => {
+  dataSource.value = isExplicitDemo() ? 'demo' : (getSessionState().status === 'confirmed' && !isExplicitLoggedOut() ? 'family' : 'prompt')
+})
+if (dataSource.value === 'family') {
+  familyStore.restoreFromCache()
+  familyStore.pullAll().catch(() => {})
+}
 console.log('[weight-records] store ready')
 
 onMounted(() => {
@@ -136,11 +149,49 @@ onMounted(() => {
 const rangeTabs = ['1月', '3月', '全程']
 const activeRange = ref(1)
 
+// 数据源：正式=家庭云（权威），演示=旧演示 store，未确认=空
+const famStats = computed(() => {
+  if (dataSource.value !== 'family') return null
+  const hist = familyStore.dailyHistoryAsc().map(r => ({
+    date: r.dateKey, weight: r.fields && r.fields.weightKg != null ? String(r.fields.weightKg) : ''
+  })).filter(r => r.weight !== '')
+  if (hist.length === 0) return { latest: null, gain: null, count: 0 }
+  const latest = hist[hist.length - 1].weight
+  const pre = familyStore.pregnancy && familyStore.pregnancy.fields && familyStore.pregnancy.fields.preWeightKg
+  let gain = null
+  if (pre) gain = (parseFloat(latest) - Number(pre)).toFixed(1)
+  return { latest: parseFloat(latest).toFixed(1), gain: gain !== null ? (gain >= 0 ? `+${gain}` : gain) : null, count: hist.length, preWeight: pre || null }
+})
+
 // 从 store 获取统计数据
-const stats = computed(() => healthStore.getWeightStats())
+const stats = computed(() => {
+  if (dataSource.value === 'family') return famStats.value
+  if (dataSource.value === 'demo') return healthStore.getWeightStats()
+  return { latest: null, gain: null, count: 0, preWeight: null }
+})
+
+// 历史（权威源转换）
+const famHistory = computed(() => {
+  if (dataSource.value !== 'family') return []
+  const hist = familyStore.dailyHistoryAsc().map(r => ({
+    date: r.dateKey, weight: r.fields && r.fields.weightKg != null ? String(r.fields.weightKg) : ''
+  })).filter(r => r.weight !== '')
+  return hist.slice().reverse().map((h, i, arr) => {
+    const prev = arr[i + 1]
+    const diff = prev ? (parseFloat(h.weight) - parseFloat(prev.weight)).toFixed(1) : null
+    return { ...h, dateDisplay: h.date, diff: diff === null ? '±0' : (diff >= 0 ? `+${diff}` : diff) }
+  })
+})
 
 // 从 store 获取历史记录
 const historyList = computed(() => {
+  if (dataSource.value === 'family') {
+    return famHistory.value.map(item => ({
+      ...item,
+      dotColor: parseFloat(item.diff) > 0 ? '#C45070' : parseFloat(item.diff) < 0 ? '#4CAF82' : '#9C9890'
+    }))
+  }
+  if (dataSource.value !== 'demo') return [] // family 已在上方返回；prompt/rejected 空
   const list = healthStore.getWeightHistory()
   return list.map(item => ({
     ...item,
@@ -148,9 +199,14 @@ const historyList = computed(() => {
   }))
 })
 
-// 生成图表点位
+// 生成图表点位（正式=权威源，演示=旧 store）
+const chartSource = computed(() => {
+  if (dataSource.value === 'family') return famHistory.value
+  if (dataSource.value === 'demo') return healthStore.getWeightHistory()
+  return []
+})
 const chartPoints = computed(() => {
-  const list = healthStore.getWeightHistory()
+  const list = chartSource.value
   if (list.length === 0) return []
 
   const reversed = [...list].reverse()
@@ -168,7 +224,7 @@ const chartPoints = computed(() => {
 
 // Y 轴标签
 const yLabels = computed(() => {
-  const list = healthStore.getWeightHistory()
+  const list = chartSource.value
   if (list.length === 0) return ['--', '--', '--']
   const weights = list.map(r => parseFloat(r.weight))
   const maxW = Math.ceil(Math.max(...weights))

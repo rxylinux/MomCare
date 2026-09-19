@@ -41,7 +41,7 @@ node cloud/assemble.mjs        # 生成 dist/cloud-functions/<fn>/（含锁定�
 
 1. 微信开发者工具 → 云开发 → 云函数 → 新建/上传（目录内执行「上传并部署：云端安装依赖」），或 CLI `tcb fn deploy`。
 2. 配置环境变量（上表四项）。
-3. 集合创建：按 `cloud/collections.json` 创建 4 个集合并建索引。
+3. 集合创建：按 `cloud/collections.json` 创建 7 个集合（含 B2a 的 mc_pregnancy / mc_health_daily / mc_moods）并建索引（daily/mood 需 dateKey 复合索引支撑游标分页）。
 4. 数据库安全规则：应用 `cloud/rules/database.rules.json`（`read:false, write:false`——客户端零直接读写，全部经云函数）。
 5. 存储安全规则：应用 `cloud/rules/storage.rules.json`（默认全部拒绝，客户端直传保持关闭）。
 
@@ -57,12 +57,14 @@ mc-identity {}  // 期望 { ok:false, code:'not-configured' }（或先只配 MC_
 mc-identity {}  // 期望 { ok:true, data:{ memberId:'mama'|'papa', displayName, familyId } }
 // 第三台设备（非成员）调用 → { ok:false, code:'not-family-member' }
 
-// 3) 共享记录读写 + 幂等
-mc-shared-records { action:'upsert', dateKey:'2026-09-20', payload:{ weightKg: 58.5 }, expectedRevision: 0, operationId:'op-test-1' }
+// 3) 共享健康数字读写 + 幂等（B2a 权威源 mc-health；旧 mc-shared-records 已无页面消费者，仅保留为契约测试对象）
+mc-health { action:'daily.upsert', schemaVersion:1, dateKey:'2026-09-20', payload:{ weightKg: 58.5 }, expectedRevision: 0, operationId:'op-test-1' }
 // 重复同一请求 → { ok:true, data:{ replayed:true, record:<首次结果> } }
 // 同 operationId 换内容 → { ok:false, code:'operation-id-conflict' }
+// 单字段提交保留其他字段；fetalCount:0 合法；null/空串=清除
 
-// 4) 私人笔记：另一成员用同一 dateKey 读取 → 只会得到自己的（或 null），绝不返回对方内容
+// 4) 私人心情/备注：另一成员用同一 dateKey 读取 → 只会得到自己的（或 null），绝不返回对方内容
+mc-health { action:'mood.get', schemaVersion:1, dateKey:'2026-09-20' }
 ```
 
 ## 4. 真机 smoke（用户执行）

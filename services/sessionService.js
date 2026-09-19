@@ -8,8 +8,21 @@
 //   丢弃，不得写入新身份的缓存
 // - 缓存键按 env/AppID/member/schema 隔离；缓存键不是身份验证
 
+import { ref } from 'vue'
 import { callCloudFunction, cloudRuntimeState } from '@/services/cloudAdapter.js'
 import { CLOUD_CONFIG } from '@/utils/cloudConfig.js'
+
+// 响应式会话版本：status/member/epoch/confirming 任一变化时推进，
+// 供 familyStore watch 与页面 computed 订阅权威失效
+const sessionVersion = ref(0)
+
+function bumpSessionVersion() {
+  sessionVersion.value += 1
+}
+
+export function subscribeSession() {
+  return sessionVersion
+}
 
 const SCHEMA = 'b1'
 const SESSION_KEY_PREFIX = 'mc_session'
@@ -49,7 +62,9 @@ export function getSessionState() {
     status: state.status,
     member: state.member ? { ...state.member } : null,
     rejectCode: state.rejectCode,
-    epoch: state.epoch
+    epoch: state.epoch,
+    confirming: state.confirming,
+    autoRecheckEligible: state.autoRecheckEligible
   }
 }
 
@@ -58,6 +73,25 @@ export function currentEpoch() {
 }
 
 // 冷启动：只报告是否存在已持久化的"已确认"会话记录；未联网确认前不使用它加载缓存
+// 显式演示模式：enterDemoMode 写入的 demo-explicit 标记（优先于一切自动复核；
+// 即便此前有已确认家庭会话，切演示后 App/页面不得发送正式业务请求）
+export function isExplicitDemo() {
+  try {
+    return uni.getStorageSync('mc_session_mode') === 'demo-explicit'
+  } catch (e) {
+    return false
+  }
+}
+
+// 显式退出：endSession 写入的 logged-out 标记
+export function isExplicitLoggedOut() {
+  try {
+    return uni.getStorageSync('mc_session_mode') === 'logged-out'
+  } catch (e) {
+    return false
+  }
+}
+
 export function persistedSessionExists() {
   if (cloudRuntimeState() === 'not-configured') return false
   try {
@@ -65,6 +99,58 @@ export function persistedSessionExists() {
   } catch (e) {
     return false
   }
+}
+
+// 回前台身份复核：App 与页面 onShow 的唯一确认入口（去重、不竞争）。
+// - in-flight 复用同一 Promise（多个 onShow 同时触发只发一次网络）
+// - 成功后若成员变化，epoch/sessionVersion 已在 confirmIdentity 内推进，
+//   familyStore watch 会清空旧成员数据并以新成员快照恢复
+// - 明确拒绝 → 锁定；临时离线 → 暖离线（已确认会话保留可用性）
+let foregroundRecheckPromise = null
+export function foregroundRecheck() {
+  // 演示优先（复验：已确认用户切演示后 App.onShow 不得发正式请求）
+  if (isExplicitDemo()) {
+    return Promise.resolve({ ok: false, code: 'demo-explicit', message: '演示模式：不自动复核正式身份' })
+  }
+  if (isExplicitLoggedOut() || !state.autoRecheckEligible) {
+    return Promise.resolve({ ok: false, code: 'recheck-ineligible', message: '当前会话不自动复核身份（显式退出或未确认）' })
+  }
+  if (foregroundRecheckPromise) return foregroundRecheckPromise
+  foregroundRecheckPromise = (async () => {
+    try {
+      return await confirmIdentity()
+    } finally {
+      foregroundRecheckPromise = null
+    }
+  })()
+  return foregroundRecheckPromise
+}
+
+// 冷启动确认（复现20修复）：持久会话标记存在时的首次联网确认。
+// 标记只触发网络确认，不放行缓存（确认成功前 status 仍 unconfirmed，
+// 成员缓存/正式数据均不可见）。与 foregroundRecheck 共享同一 in-flight
+// Promise——App.onShow 与页面 onShow/mounted 同时触发只发一次请求；
+// 显式演示/退出标记仍优先阻止。成功后 autoRecheckEligible 建立。
+export function coldStartConfirm() {
+  if (isExplicitDemo()) {
+    return Promise.resolve({ ok: false, code: 'demo-explicit', message: '演示模式：不确认正式身份' })
+  }
+  if (isExplicitLoggedOut()) {
+    return Promise.resolve({ ok: false, code: 'recheck-ineligible', message: '已显式退出，不自动确认' })
+  }
+  // 无持久标记且未确认：不自动确认（用户需主动进入家庭空间）
+  if (!persistedSessionExists() && state.status !== 'confirmed') {
+    return Promise.resolve({ ok: false, code: 'no-persisted-session', message: '无已确认会话标记，请进入家庭空间确认身份' })
+  }
+  if (foregroundRecheckPromise) return foregroundRecheckPromise // 与复核共享去重
+  foregroundRecheckPromise = (async () => {
+    try {
+      return await confirmIdentity()
+    } finally {
+      foregroundRecheckPromise = null
+    }
+  })()
+  return foregroundRecheckPromise
 }
 
 // 联网确认身份（冷启动/手动刷新共用）。拒绝即锁定，不自动重试；
@@ -84,13 +170,16 @@ export async function confirmIdentity() {
     return { ok: false, code: state.rejectCode || 'rejected', locked: true }
   }
   state.epoch += 1 // 使在途旧请求失效（含上一次确认的迟到响应）
+  bumpSessionVersion()
   const epochAtStart = state.epoch
   state.confirming = true
+  bumpSessionVersion()
   let res
   try {
     res = await callCloudFunction('mc-identity', { action: 'whoami' })
   } finally {
     state.confirming = false
+    bumpSessionVersion()
   }
   if (state.epoch !== epochAtStart) {
     return { ok: false, code: 'stale-session' }
@@ -99,6 +188,7 @@ export async function confirmIdentity() {
     if (isIdentityRefusal(res.code)) {
       state.epoch += 1 // 使确认期间发出的业务请求全部失效
       state.status = 'rejected'
+      bumpSessionVersion()
       state.rejectCode = res.code
       state.member = null
       try { uni.removeStorageSync(sessionKey()) } catch (e) { /* 忽略 */ }
@@ -110,9 +200,12 @@ export async function confirmIdentity() {
   state.epoch += 1 // 确认落地同样推进纪元：确认在途的旧成员业务请求全部失效
   state.status = 'confirmed'
   state.member = res.data
+  bumpSessionVersion()
   state.rejectCode = ''
+  state.autoRecheckEligible = true // 显式确认成功：建立自动复核资格
   try {
     uni.setStorageSync(sessionKey(), JSON.stringify({ ...res.data, confirmedAt: Date.now() }))
+    uni.removeStorageSync('mc_session_mode') // 显式确认清除退出/演示标记
   } catch (e) {
     // 会话标记写失败不影响本次已确认状态；下次冷启动需重新联网确认
   }
@@ -129,6 +222,9 @@ export async function fetchMyOpenid() {
 // 不删除（未同步草稿不静默丢失）、不展示给下一个身份
 export function endSession() {
   state.epoch += 1
+  state.autoRecheckEligible = false // 显式退出：取消自动复核资格
+  try { uni.setStorageSync('mc_session_mode', 'logged-out') } catch (e) { /* 忽略 */ }
+  bumpSessionVersion()
   state.status = 'unconfirmed'
   state.member = null
   state.rejectCode = ''
@@ -299,6 +395,7 @@ export async function familyCall(name, data) {
     state.status = 'rejected'
     state.rejectCode = res.code
     state.member = null
+    bumpSessionVersion()
     try { uni.removeStorageSync(sessionKey()) } catch (e) { /* 忽略 */ }
     return { ok: false, code: res.code, locked: true, message: '身份被服务端拒绝，会话已锁定' }
   }

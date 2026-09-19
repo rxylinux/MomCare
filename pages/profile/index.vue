@@ -90,7 +90,7 @@
 		<view class="logout-overlay" v-if="showLogoutModal" @tap="showLogoutModal = false">
 		<view class="logout-card" @tap.stop>
 			<text class="logout-modal-title">退出登录</text>
-			<text class="logout-modal-desc">确定要退出当前账号吗？\n本机记录不会被删除；云端数据以登录后的同步为准。</text>
+			<text class="logout-modal-desc">{{ logoutDesc }}</text>
 				<view class="logout-modal-actions">
 					<view class="logout-btn logout-btn-cancel" @tap="showLogoutModal = false">
 						<text>取消</text>
@@ -110,6 +110,7 @@ import { useHealthStore, getTrimesterName } from '@/stores/health.js'
 import { navigateToPage } from '@/utils/navigation.js'
 import { removeToken } from '@/utils/api.js'
 import { endSession } from '@/services/sessionService.js'
+import { getOutbox } from '@/services/outbox.js'
 import ProfileHero from '@/components/profile/ProfileHero.vue'
 import DueCountdownRing from '@/components/common/DueCountdownRing.vue'
 import ProfileSection from '@/components/profile/ProfileSection.vue'
@@ -117,6 +118,31 @@ import CustomTabBar from '@/components/CustomTabBar.vue'
 
 const healthStore = useHealthStore()
 const showLogoutModal = ref(false)
+const logoutPendingCount = ref(0)
+const logoutConflictCount = ref(0)
+
+// 退出提示：有未同步/冲突内容时如实说明保留在本人账户（不默认丢弃、不给下一身份）
+const logoutDesc = computed(() => {
+  const pending = logoutPendingCount.value
+  const conflicts = logoutConflictCount.value
+  const lines = ['确定要退出当前账号吗？']
+  if (pending > 0 || conflicts > 0) {
+    lines.push(`你有 ${pending} 项待同步${conflicts > 0 ? `、${conflicts} 项冲突待处理` : ''}，将保留在你的账户下，重新确认身份后可继续处理。`)
+  }
+  lines.push('本机记录不会被删除；云端数据以登录后的同步为准。')
+  return lines.join('\n')
+})
+
+function refreshLogoutStatus() {
+  try {
+    const entries = getOutbox()
+    logoutPendingCount.value = entries.filter(e => !e.conflict).length
+    logoutConflictCount.value = entries.filter(e => e.conflict).length
+  } catch (e) {
+    logoutPendingCount.value = 0
+    logoutConflictCount.value = 0
+  }
+}
 
 function confirmLogout() {
 	// 真实退出：清除会话与身份标记（含云身份会话）；本地数据保留（删除属危险操作，见隐私页）
@@ -401,6 +427,7 @@ function handleTodoTap(item) {
 
 function handleSettingTap(item) {
 	if (item.action === 'logout') {
+		refreshLogoutStatus()
 		showLogoutModal.value = true
 		return
 	}
