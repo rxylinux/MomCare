@@ -50,6 +50,11 @@
 				<text class="btn-text">登 录</text>
 			</view>
 
+			<!-- 演示模式入口：示例数据独立存储，明确标注，不进入正式档案 -->
+			<view class="btn-guest" @tap="handleGuestLogin">
+				<text class="btn-guest-text">🚀 演示模式 · 用示例数据体验</text>
+			</view>
+
 			<!-- Register link -->
 			<view class="bottom-link">
 				<text class="link-text">还没有账号？</text>
@@ -90,12 +95,21 @@ async function handleLogin() {
 
 		uni.hideLoading()
 
-		if (res.data && res.data.code === 0) {
+		if (res.data && res.data.code === 0 && res.data.data && res.data.data.token) {
 			const { token, user } = res.data.data
 			setToken(token)
-			uni.setStorageSync('momcare_user', JSON.stringify(user))
+			try {
+				uni.setStorageSync('momcare_user', JSON.stringify(user))
+			} catch (cacheErr) {
+				console.warn('momcare_user cache write failed:', cacheErr)
+			}
 
 			const healthStore = useHealthStore()
+			// 恢复正式档案；模式切换失败时不继续（不把演示数据当正式档案）
+			if (!healthStore.afterRealLogin()) {
+				uni.showToast({ title: '进入正式模式失败，请重试', icon: 'none', duration: 2500 })
+				return
+			}
 			await healthStore.syncCloudData()
 
 			uni.showToast({ title: '登录成功', icon: 'success' })
@@ -111,12 +125,31 @@ async function handleLogin() {
 		}
 	} catch (e) {
 		uni.hideLoading()
-		uni.showToast({ title: '网络错误', icon: 'none' })
+		const offline = e && e.networkError
+		uni.showToast({ title: offline ? '网络不可用，请检查网络后重试' : '登录失败，请重试', icon: 'none', duration: 2500 })
 	}
 }
 
 function goRegister() {
 	uni.navigateTo({ url: '/pages/register/index' })
+}
+
+async function handleGuestLogin() {
+	uni.showLoading({ title: '进入体验中...' })
+	try {
+		const healthStore = useHealthStore()
+		// 显式进入演示模式：示例数据只写入演示存储，不影响正式档案
+		const ok = healthStore.enterDemoMode()
+		uni.hideLoading()
+		if (!ok) {
+			uni.showToast({ title: '进入演示模式失败，请重试', icon: 'none', duration: 2500 })
+			return
+		}
+		uni.switchTab({ url: '/pages/index/index' })
+	} catch (e) {
+		uni.hideLoading()
+		uni.showToast({ title: '进入演示模式失败，请重试', icon: 'none', duration: 2500 })
+	}
 }
 </script>
 
@@ -255,5 +288,28 @@ function goRegister() {
 	font-size: 26rpx;
 	color: #C45070;
 	font-weight: 600;
+}
+
+.btn-guest {
+	margin-top: 24rpx;
+	height: 88rpx;
+	border-radius: 44rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #FFF0F5;
+	border: 2rpx solid #F8BBD0;
+	cursor: pointer;
+}
+
+.btn-guest:active {
+	opacity: 0.8;
+	transform: scale(0.98);
+}
+
+.btn-guest-text {
+	font-size: 28rpx;
+	font-weight: 600;
+	color: #C2185B;
 }
 </style>

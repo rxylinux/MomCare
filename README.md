@@ -2,6 +2,8 @@
 
 > 一款结合 AI 大模型的孕期健康伴侣 App，为准妈妈提供智能健康追踪与产检报告解读。
 
+> **2026-09-19 部署决定：** 本项目仅供夫妻两人使用，目标后端确定为微信云开发 CloudBase，迁移待 ZCode 实现；Codex 负责方案和代码 review。下方功能介绍不代表已全部验收，特别是云同步、OCR 和 DeepSeek 调用仍需真实联调。以 [PRD](PRD.md)、[实施规划](DEVELOPMENT_PLAN_6_FEATURES.md)和 [CloudBase 方案](docs/CLOUDBASE_PLAN.md)为当前交付依据。
+
 ---
 
 ## 🌟 为什么选择孕途伴侣？
@@ -31,11 +33,13 @@
 | 层级 | 技术 | 说明 |
 | --- | --- | --- |
 | **前端** | UniApp + Vue 3 + Pinia | 跨平台微信小程序 / H5，Composition API |
-| **边缘计算** | Cloudflare Worker | 全球分布式 API 网关，零冷启动 |
-| **数据库** | Cloudflare D1 (SQLite) | Serverless 关系型数据库，边缘就近读取 |
-| **对象存储** | Cloudflare R2 | 产检报告图片存储，无出站流量费 |
-| **AI 大模型** | DeepSeek-V3 | 产检报告智能解读，指标分析与建议 |
-| **OCR** | PaddleOCR (SiliconFlow) | 产检报告图片文字提取 |
+| **服务端（目标）** | 微信云开发 CloudBase 云函数 | 两成员身份校验、业务读写和 AI 调用；无需自管服务器 |
+| **数据库（目标）** | CloudBase 文档数据库 | 共同档案与共享记录；私人内容隔离 |
+| **文件存储（目标）** | CloudBase 云存储 | 报告原件，受访问权限保护 |
+| **AI 大模型（待联调）** | DeepSeek | 云函数调用，密钥仅存服务端；模型版本实施时确认 |
+| **OCR（待确认）** | 服务商与模型实施时核实 | 旧文档提及 PaddleOCR / SiliconFlow，尚不能据此认定已接通 |
+
+当前客户端仍有旧 Cloudflare 接口依赖；上表是已确定的目标架构，不代表云环境已创建或代码已迁移。
 
 ```
 MomCare/
@@ -103,13 +107,14 @@ npm install
 
 ### 后端部署
 
-后端基于 Cloudflare Worker + D1 + R2 边缘计算架构：
+已选择微信云开发 CloudBase，按 [部署与迁移方案](docs/CLOUDBASE_PLAN.md)执行：
 
-1. 在 [Cloudflare 控制台](https://dash.cloudflare.com/) 创建 D1 数据库和 R2 存储桶
-2. 在 Worker 控制台 **Settings > Variables** 配置环境变量（JWT_SECRET、AI_API_KEY）
-3. 部署 Worker 服务
+1. 用户准备真实小程序 AppID、开通并关联云开发环境、添加两位体验成员。
+2. ZCode 实现云函数、数据库和存储权限、客户端接入及数据迁移，完成两台手机联调。
+3. DeepSeek / OCR 密钥由用户直接配置到云端环境变量或密钥管理；不写入前端、仓库或交接文档。
+4. Codex review 实现与验收证据后再确认可交付。无需购买 CVM/轻量服务器；原生云调用路线不以自购 API 域名为前置条件，小程序平台手续仍需按实际账号要求完成。
 
-> **安全提醒：** 切勿将 API 密钥或密签字符串写入代码，所有敏感配置通过环境变量注入。
+旧 Cloudflare 资源如有真实数据，先备份和验证迁移；不在迁移前删除，也不将其作为自动降级写入端。
 
 ---
 
@@ -139,12 +144,12 @@ git push origin feature/amazing-feature
 
 ## 📊 发展路线
 
-- [x] AI 产检报告 OCR + 智能解读
+- [ ] AI 产检报告 OCR + 智能解读真实联调与验收（已有前端流程）
 - [x] 健康数据追踪（体重 / 血压 / 胎动）
 - [x] 产检提醒与倒计时
 - [x] 孕期知识库 + 每周指南
 - [x] 报告分享海报生成
-- [x] Cloudflare 边缘计算架构迁移
+- [ ] 微信云开发 CloudBase 迁移与两人共享验收（选型已确定）
 - [ ] 孕期社区交流
 - [ ] 数据导出与备份
 - [ ] 智能饮食建议

@@ -270,11 +270,15 @@ function buildHistoryGroups() {
 	historyPlanGroups.value = groups
 }
 
-// 切换今日计划完成状态
-function toggleTodayPlan(idx) {
+// 切换今日计划完成状态：写盘失败回滚显示并提示，不表现伪完成
+async function toggleTodayPlan(idx) {
 	const plans = [...currentPlans.value]
 	plans[idx].done = !plans[idx].done
-	healthStore.saveRecord(new Date(), { plans })
+	const result = await healthStore.saveRecord(new Date(), { plans })
+	if (result && result.persisted) return
+	plans[idx].done = !plans[idx].done
+	await healthStore.saveRecord(new Date(), { plans })
+	uni.showToast({ title: '本机保存失败，已还原，请重试', icon: 'none', duration: 2500 })
 }
 
 // 切换历史计划组展开状态
@@ -282,20 +286,28 @@ function toggleGroup(gIdx) {
 	historyPlanGroups.value[gIdx].expanded = !historyPlanGroups.value[gIdx].expanded
 }
 
-// 切换历史计划完成状态
-function toggleHistoryPlan(gIdx, pIdx) {
+// 切换历史计划完成状态：写盘失败回滚显示并提示
+async function toggleHistoryPlan(gIdx, pIdx) {
 	const group = historyPlanGroups.value[gIdx]
 	const plans = [...group.plans]
 	plans[pIdx].done = !plans[pIdx].done
 
 	// 保存到对应的日期
 	const date = new Date(group.dateKey)
-	healthStore.saveRecord(date, { plans })
+	const result = await healthStore.saveRecord(date, { plans })
 
-	// 更新组状态
-	group.plans = plans
-	group.completedCount = plans.filter(p => p.done).length
-	group.allDone = group.completedCount === group.totalCount
+	if (result && result.persisted) {
+		// 更新组状态
+		group.plans = plans
+		group.completedCount = plans.filter(p => p.done).length
+		group.allDone = group.completedCount === group.totalCount
+		return
+	}
+
+	// 写盘失败：还原勾选并保持组状态不变
+	plans[pIdx].done = !plans[pIdx].done
+	await healthStore.saveRecord(date, { plans })
+	uni.showToast({ title: '本机保存失败，已还原，请重试', icon: 'none', duration: 2500 })
 }
 
 // 跳转到首页

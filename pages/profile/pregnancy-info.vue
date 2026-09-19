@@ -201,7 +201,7 @@
 <script setup>
 import { ref, computed, reactive, onMounted, nextTick } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
-import { isLoggedIn as isAuthed } from '@/utils/api.js'
+import { isRealAuthed } from '@/utils/api.js'
 import NavBar from '@/components/NavBar.vue'
 
 const healthStore = useHealthStore()
@@ -352,18 +352,29 @@ async function handleSave() {
 	uni.showLoading({ title: '保存中...' })
 
 	try {
-		await healthStore.saveUserProfile()
+		const saveResult = await healthStore.saveUserProfile()
 
-		// 已登录用户同步到云端
-		if (isAuthed()) {
+		// 本机持久化（含产检迁移的二次写入）失败：不显示成功、不返回，表单内容保留
+		if (!saveResult || !saveResult.ok) {
+			uni.hideLoading()
+			uni.showToast({ title: '本地保存失败，内容已保留，请重试', icon: 'none', duration: 2500 })
+			return
+		}
+
+		// 已登录用户同步到云端（演示模式为纯本地保存）
+		if (isRealAuthed()) {
 			const cloudOk = await healthStore.syncProfileToCloud()
 			if (!cloudOk) {
 				// 回滚本地修改
 				Object.assign(healthStore.userInfo, oldUserInfo)
 				healthStore.lmpDate = oldLmpDate
 				healthStore.dueDate = oldDueDate
-				await healthStore.saveUserProfile()
+				const rollback = await healthStore.saveUserProfile()
 				uni.hideLoading()
+				if (!rollback.ok) {
+					uni.showToast({ title: '云端同步失败，且本地回滚未完成，请重新保存', icon: 'none', duration: 3000 })
+					return
+				}
 				uni.showToast({ title: '同步云端失败，请重试', icon: 'error', duration: 2000 })
 				return
 			}

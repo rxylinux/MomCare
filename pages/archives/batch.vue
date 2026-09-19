@@ -152,88 +152,66 @@ async function confirmArchive() {
   }
   isArchiving.value = true
 
-  const selected = items.value.filter(i => i.selected)
-  const unselected = items.value.filter(i => !i.selected)
-
-  if (selected.length === 0) {
-    // 所有条目进入未归档
-    uni.showLoading({ title: '处理中…' })
-    try {
-      for (const item of unselected) {
-        await reportStore.createReport({
-          report_type: item.reportType || '',
-          file_urls: [item.fileUrl],
-          file_type: 'image',
-          report_date: parseDateText(item.dateText),
-          archive_status: 'unarchived',
-          _serverReportId: item.reportId || undefined,
-          _serverImageUrl: item.fileUrl || undefined,
-        })
-      }
-      uni.hideLoading()
-      uni.showToast({ title: '已跳过所有报告', icon: 'none' })
-      isArchiving.value = false
-      reportStore.pendingUpload = null
-      reportStore.batchItemUpdate = null
-      setTimeout(() => uni.navigateBack(), 1500)
-    } catch (e) {
-      uni.hideLoading()
-      uni.showToast({ title: e.message || '保存失败，请重试', icon: 'none' })
-      isArchiving.value = false
-    }
-    return
-  }
-
   uni.showLoading({ title: '保存中…' })
-  const createdIds = []
-  let hasError = false
+  let savedCount = 0
+  let failedCount = 0
+  let hasPending = false
 
   try {
-    // 已选中条目入档 — use server-issued report_id & image_url
-    for (const item of selected) {
-      try {
-        const id = await reportStore.createReport({
-          report_type: item.reportType || 'other',
-          file_urls: [item.fileUrl],
-          file_type: 'image',
-          report_date: parseDateText(item.dateText),
-          archive_status: 'archived',
-          _serverReportId: item.reportId || undefined,
-          _serverImageUrl: item.fileUrl || undefined,
-        })
-        if (id) createdIds.push(id)
-      } catch (e) {
-        console.error('Failed to create report for item:', item, e)
-        hasError = true
+    for (const item of items.value) {
+      // 幂等重试：上一轮已确认保存成功的条目直接跳过，不重复创建
+      if (item.createdId) {
+        savedCount++
+        continue
+      }
+
+      const created = await reportStore.createReport({
+        report_type: item.reportType || 'other',
+        file_urls: [item.fileUrl],
+        file_type: 'image',
+        report_date: parseDateText(item.dateText),
+        archive_status: item.selected ? 'archived' : 'unarchived',
+        _serverReportId: item.reportId || undefined,
+        _serverImageUrl: item.fileUrl || undefined,
+        // 失败后重试以原 ID 重建同一记录，不产生第二个报告 ID
+        _draftId: item.draftId || undefined,
+      })
+
+      // 只有确认持久化成功才计入已保存；失败项留在页面等待重试
+      if (created && created.id && created.persisted !== false) {
+        item.createdId = created.id
+        savedCount++
+        if (created.pendingSync) hasPending = true
+      } else {
+        // 记住失败次已分配的 ID：恢复后以原 ID 重试
+        if (created && created.id) item.draftId = created.id
+        failedCount++
       }
     }
-
-    // 未选中条目进入未归档
-    for (const item of unselected) {
-      try {
-        await reportStore.createReport({
-          report_type: item.reportType || '',
-          file_urls: [item.fileUrl],
-          file_type: 'image',
-          report_date: parseDateText(item.dateText),
-          archive_status: 'unarchived',
-          _serverReportId: item.reportId || undefined,
-          _serverImageUrl: item.fileUrl || undefined,
-        })
-      } catch (e) {
-        console.error('Failed to create unarchived report for item:', item, e)
-        hasError = true
-      }
-    }
-
-    // 统一刷新列表
-    await reportStore.syncReportsFromCloud()
 
     uni.hideLoading()
-    if (hasError) {
-      uni.showToast({ title: `${createdIds.length} 份报告已入档，部分失败`, icon: 'none' })
+
+    if (failedCount > 0) {
+      // 任一条目未确认保存：不清草稿、不离开页面，图片引用与已填信息保留
+      uni.showToast({
+        title: `${failedCount} 项保存失败已保留；已成功 ${savedCount} 项不会重复保存，可点击重试`,
+        icon: 'none',
+        duration: 3000
+      })
+      isArchiving.value = false
+      return
+    }
+
+    // 全部条目确认保存成功后才刷新列表、清草稿并离开
+    await reportStore.syncReportsFromCloud()
+
+    const archivedCount = items.value.filter(i => i.selected).length
+    if (archivedCount === 0) {
+      uni.showToast({ title: '已跳过所有报告', icon: 'none' })
+    } else if (hasPending) {
+      uni.showToast({ title: `${archivedCount} 份已入档，信息待同步`, icon: 'none', duration: 2500 })
     } else {
-      uni.showToast({ title: `${createdIds.length} 份报告已入档`, icon: 'none' })
+      uni.showToast({ title: `${archivedCount} 份报告已入档`, icon: 'none' })
     }
     isArchiving.value = false
 

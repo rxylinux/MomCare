@@ -14,6 +14,11 @@
 
       <!-- Content Body -->
       <view class="content-body">
+        <!-- 保存失败持续提示（不只靠 toast） -->
+        <view v-if="saveFailed" class="save-failed-banner">
+          <text class="save-failed-text">上次更改未能保存到本机，当前显示可能未持久；再次点击任意项目可重试保存。</text>
+        </view>
+
         <!-- Progress Card -->
         <view class="progress-card">
           <view class="progress-row">
@@ -193,17 +198,30 @@ function loadItems() {
 
 const items = ref(loadItems())
 
+// 最近一次保存是否失败（界面持续提示，避免"看起来已保存"）
+const saveFailed = ref(false)
+
 // 持久化到本地存储
 function saveItems() {
   try {
     uni.setStorageSync('hospital_bag_items', JSON.stringify(items.value))
+    saveFailed.value = false
+    return true
   } catch (e) {
     console.error('saveItems error:', e)
+    saveFailed.value = true
+    uni.showToast({ title: '本机保存失败，更改仍显示在页面中，请重试', icon: 'none', duration: 2500 })
+    return false
   }
 }
 
 // 监听变化自动保存
 watch(items, saveItems, { deep: true })
+
+// 手动重试保存
+function retrySave() {
+  saveItems()
+}
 
 // 距预产期天数
 const daysUntilDue = computed(() => healthStore.daysUntilDue)
@@ -404,6 +422,21 @@ function badgeLabel(category) {
 .content-body {
   padding: 28rpx 28rpx 0;
   box-sizing: border-box;
+}
+
+/* ── 保存失败横幅 ── */
+.save-failed-banner {
+  background: #FEF4E3;
+  border: 2rpx solid rgba(240, 169, 64, 0.4);
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.save-failed-text {
+  font-size: 24rpx;
+  color: #B07818;
+  line-height: 1.6;
 }
 
 /* ── Progress Card ── */

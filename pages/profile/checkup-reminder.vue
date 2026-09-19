@@ -221,15 +221,22 @@ const infoHospital = computed(() => {
 })
 
 // 交互
-function handleToggleItem(itemIdx) {
+async function handleToggleItem(itemIdx) {
 	if (!nextCheckup.value || !nextCheckup.value._id) return
-	healthStore.toggleExamItem(nextCheckup.value._id, itemIdx)
+	const ok = await healthStore.toggleExamItem(nextCheckup.value._id, itemIdx)
+	if (!ok) {
+		uni.showToast({ title: '本机保存失败，已还原，请重试', icon: 'none', duration: 2500 })
+	}
 }
 
 async function handleMarkCompleted() {
 	if (!nextCheckup.value || !nextCheckup.value._id) return
-	await healthStore.markCheckupCompleted(nextCheckup.value._id)
-	uni.showToast({ title: '已标记完成', icon: 'success' })
+	const ok = await healthStore.markCheckupCompleted(nextCheckup.value._id)
+	if (ok) {
+		uni.showToast({ title: '已标记完成', icon: 'success' })
+	} else {
+		uni.showToast({ title: '本机保存失败，已还原，请重试', icon: 'none', duration: 2500 })
+	}
 }
 
 const showSkipModal = ref(false)
@@ -241,8 +248,12 @@ function handleSkipCheckup() {
 
 async function doSkipCheckup() {
 	if (nextCheckup.value && nextCheckup.value._id) {
-		await healthStore.skipCheckup(nextCheckup.value._id)
-		uni.showToast({ title: '已跳过', icon: 'success' })
+		const ok = await healthStore.skipCheckup(nextCheckup.value._id)
+		if (ok) {
+			uni.showToast({ title: '已跳过', icon: 'success' })
+		} else {
+			uni.showToast({ title: '本机保存失败，已还原，请重试', icon: 'none', duration: 2500 })
+		}
 	}
 }
 
@@ -253,8 +264,12 @@ function handleAddItem() {
 async function doAddItem(text) {
 	const trimmed = (text || '').trim()
 	if (trimmed && nextCheckup.value && nextCheckup.value._id) {
-		await healthStore.addCustomExamItem(nextCheckup.value._id, trimmed)
-		uni.showToast({ title: '已添加', icon: 'success' })
+		const ok = await healthStore.addCustomExamItem(nextCheckup.value._id, trimmed)
+		if (ok) {
+			uni.showToast({ title: '已添加', icon: 'success' })
+		} else {
+			uni.showToast({ title: '本机保存失败，已还原，请重试', icon: 'none', duration: 2500 })
+		}
 	}
 }
 

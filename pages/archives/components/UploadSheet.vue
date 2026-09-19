@@ -43,7 +43,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useReportStore } from '@/stores/report'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import { request, API_BASE } from '@/utils/api.js'
+import { request, API_BASE, getToken, isGuestMode } from '@/utils/api.js'
 
 const props = defineProps({
   show: {
@@ -135,6 +135,12 @@ async function onGallery() {
 async function handleUploadResult(tempFilePaths) {
   if (!tempFilePaths || tempFilePaths.length === 0) return
 
+  // 演示模式没有真实后端身份：明确不可上传，不发起请求、不产生假成功
+  if (isGuestMode()) {
+    uni.showToast({ title: '演示模式不支持上传报告，请退出演示后使用', icon: 'none', duration: 2500 })
+    return
+  }
+
   uni.showLoading({ title: '上传中…' })
   const uploadedItems = []   // { report_id, image_url }
   const localPaths = []      // 本地临时路径（用于预览）
@@ -159,7 +165,9 @@ async function handleUploadResult(tempFilePaths) {
       }
 
       // Upload via uni.uploadFile (binary, not base64)
-      const token = uni.getStorageSync('token') || ''
+      // token 读取与登录模块统一使用 momcare_token 键（getToken），
+      // 不再读旧的 'token' 键导致鉴权头缺失
+      const token = getToken()
       const uploadRes = await new Promise((resolve, reject) => {
         uni.uploadFile({
           url: API_BASE + '/api/reports/upload',
@@ -193,12 +201,12 @@ async function handleUploadResult(tempFilePaths) {
   uni.hideLoading()
 
   if (failedCount > 0 && uploadedItems.length === 0) {
-    uni.showToast({ title: '上传失败，请检查网络', icon: 'none' })
+    uni.showToast({ title: '上传失败，请检查网络后重试', icon: 'none', duration: 2500 })
     return
   }
 
   if (failedCount > 0) {
-    uni.showToast({ title: `${failedCount} 张上传失败，已跳过`, icon: 'none' })
+    uni.showToast({ title: `${failedCount} 张上传失败已跳过，${uploadedItems.length} 张成功`, icon: 'none', duration: 2500 })
   }
 
   // Store upload data with server-issued ids

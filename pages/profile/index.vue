@@ -1,6 +1,18 @@
 <template>
 	<view class="page">
 		<scroll-view scroll-y class="scroll-content">
+			<!-- 本地数据归属待确认横幅：确认前不上传、不绑定当前账号 -->
+			<view v-if="healthStore.needsLegacyConfirm" class="legacy-banner">
+				<text class="legacy-banner-icon">⚠️</text>
+				<view class="legacy-banner-body">
+					<text class="legacy-banner-title">本机数据归属待确认</text>
+					<text class="legacy-banner-desc">这些记录尚未确认属于当前登录账号（可能来自旧版本或其他账号）。确认前不会上传到云端，也不会绑定当前账号；数据已在本机保留。完整迁移确认将在后续版本提供。</text>
+				</view>
+				<view class="legacy-banner-btn" @tap="confirmLegacyData">
+					<text class="legacy-banner-btn-text">是我的</text>
+				</view>
+			</view>
+
 			<!-- Hero 区域 -->
 			<ProfileHero
 				:userInfo="healthStore.userInfo"
@@ -76,9 +88,9 @@
 
 		<!-- 退出登录确认弹窗 -->
 		<view class="logout-overlay" v-if="showLogoutModal" @tap="showLogoutModal = false">
-			<view class="logout-card" @tap.stop>
-				<text class="logout-modal-title">退出登录</text>
-				<text class="logout-modal-desc">确定要退出当前账号吗？\n您的数据已安全保存在云端。</text>
+		<view class="logout-card" @tap.stop>
+			<text class="logout-modal-title">退出登录</text>
+			<text class="logout-modal-desc">确定要退出当前账号吗？\n本机记录不会被删除；云端数据以登录后的同步为准。</text>
 				<view class="logout-modal-actions">
 					<view class="logout-btn logout-btn-cancel" @tap="showLogoutModal = false">
 						<text>取消</text>
@@ -106,10 +118,27 @@ const healthStore = useHealthStore()
 const showLogoutModal = ref(false)
 
 function confirmLogout() {
-	showLogoutModal.value = false
+	// 真实退出：清除会话与身份标记；本地数据保留（删除属于危险操作，见隐私页）
+	const ok = healthStore.exitSession()
+	if (!ok) {
+		uni.showToast({ title: '退出失败：本地模式切换未生效，请重试', icon: 'none', duration: 2500 })
+		return
+	}
 	removeToken()
-	uni.removeStorageSync('momcare_user')
+	showLogoutModal.value = false
 	uni.reLaunch({ url: '/pages/login/index' })
+}
+
+// 显式确认旧数据归属本人：确认后才恢复云上传通路
+function confirmLegacyData() {
+	const result = healthStore.confirmLegacyOrigin()
+	uni.showToast({
+		title: result.ok
+			? (result.changed ? '已确认，恢复同步' : '无需确认')
+			: (result.message || '确认未保存成功，请重试'),
+		icon: 'none',
+		duration: 2500
+	})
 }
 
 // #ifdef H5
@@ -270,6 +299,12 @@ const todoItems = computed(() => {
 		}
 	}
 
+	// 今日计划：只显示真实记录里的计划，没有则显示空状态，不编造内容
+	const todayPlans = healthStore.getRecord(new Date())?.plans || []
+	const dailyPlanSubtitle = todayPlans.length > 0
+		? `今日 ${todayPlans.filter(p => p.done).length} / ${todayPlans.length} 项完成`
+		: '今天还没有计划'
+
 	return [
 		{
 			icon: '🗓',
@@ -291,7 +326,7 @@ const todoItems = computed(() => {
 			icon: '📋',
 			iconBg: '#EAF7EF',
 			title: '今日计划',
-			subtitle: '产检 · 练习呼吸法 · 整理报告',
+			subtitle: dailyPlanSubtitle,
 			action: 'dailyPlan'
 		}
 	]
@@ -373,12 +408,8 @@ function handleToggle(idx) {
 	settingItems[idx].toggle = !settingItems[idx].toggle
 }
 
-// 加载产检日程（用于首页卡片显示）
-healthStore.loadCheckupSchedules().then(() => {
-	if (healthStore.checkupSchedules.length === 0) {
-		healthStore.initCheckupSchedules()
-	}
-})
+// 加载产检日程（仅展示；建档/保存孕期资料时才生成，不在浏览时自动填充）
+healthStore.loadCheckupSchedules()
 </script>
 
 <style scoped lang="scss">
@@ -405,6 +436,57 @@ healthStore.loadCheckupSchedules().then(() => {
 
 .bottom-spacer {
 	height: calc(120rpx + env(safe-area-inset-bottom));
+}
+
+/* 旧数据来源待确认横幅 */
+.legacy-banner {
+	display: flex;
+	align-items: flex-start;
+	gap: 16rpx;
+	margin: 20rpx 24rpx 0;
+	padding: 24rpx;
+	background: #FEF4E3;
+	border: 2rpx solid rgba(240, 169, 64, 0.4);
+	border-radius: 24rpx;
+}
+
+.legacy-banner-icon {
+	font-size: 32rpx;
+	flex-shrink: 0;
+	line-height: 1.4;
+}
+
+.legacy-banner-body {
+	flex: 1;
+}
+
+.legacy-banner-title {
+	display: block;
+	font-size: 26rpx;
+	font-weight: 600;
+	color: #8A5A10;
+	margin-bottom: 6rpx;
+}
+
+.legacy-banner-desc {
+	display: block;
+	font-size: 22rpx;
+	color: #B07818;
+	line-height: 1.6;
+}
+
+.legacy-banner-btn {
+	flex-shrink: 0;
+	background: #F0A940;
+	border-radius: 999rpx;
+	padding: 12rpx 26rpx;
+	margin-left: 8rpx;
+}
+
+.legacy-banner-btn-text {
+	font-size: 24rpx;
+	font-weight: 600;
+	color: #FFFFFF;
 }
 
 .ios-homescreen-card {

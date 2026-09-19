@@ -113,6 +113,7 @@ const serverReportId = ref('')  // 服务端返回的 report_id（上传阶段�
 const serverImageUrl = ref('')  // 服务端返回的 image_url（上传阶段获得）
 const previewUrl = ref('')
 const ocrDateHint = ref(false)
+const lastDraftId = ref('') // 本地创建落盘失败后记住的草稿 ID，重试复用
 
 const todayStr = computed(() => {
   const d = new Date()
@@ -216,7 +217,7 @@ async function save() {
     // 从 P6 进入 - 更新已有记录
     uni.showLoading({ title: '保存中…' })
     try {
-      await reportStore.updateReport(reportId.value, {
+      const result = await reportStore.updateReport(reportId.value, {
         report_type: selectedType.value,
         report_date: reportDate.value,
         week_of_pregnancy: gestationWeek.value ? Number(gestationWeek.value) : null,
@@ -225,7 +226,16 @@ async function save() {
         archive_status: 'archived'
       })
       uni.hideLoading()
-      uni.showToast({ title: '报告已归档', icon: 'none' })
+      if (!result || !result.ok) {
+        uni.showToast({ title: (result && result.message) || '保存失败，请重试', icon: 'none', duration: 2500 })
+        return
+      }
+      if (result.persisted === false) {
+        // 本机写盘失败：不显示归档成功，留在页面让用户重试
+        uni.showToast({ title: result.message || '本机保存失败，请重试', icon: 'none', duration: 2500 })
+        return
+      }
+      uni.showToast({ title: result.pendingSync ? '已归档到本机，联网后同步' : '报告已归档', icon: 'none' })
       setTimeout(() => uni.navigateBack(), 1500)
     } catch (e) {
       uni.hideLoading()
@@ -256,7 +266,7 @@ async function save() {
   // 其他流程：立即创建本地记录（服务端记录已在上传阶段创建）
   uni.showLoading({ title: '保存中…' })
   try {
-    const id = await reportStore.createReport({
+    const created = await reportStore.createReport({
       report_type: selectedType.value,
       report_name: typeInfo.label,
       file_urls: fileUrls.value,
@@ -268,13 +278,22 @@ async function save() {
       archive_status: 'archived',
       _serverReportId: serverReportId.value || undefined,
       _serverImageUrl: serverImageUrl.value || undefined,
+      // 失败后重试以原 ID 重建同一记录
+      _draftId: lastDraftId.value || undefined,
     })
     uni.hideLoading()
-    if (id) {
+    if (created && created.id && created.persisted === false) {
+      // 记录未落盘：记住分配的 ID、不清理 pendingUpload、不返回，如实提示
+      lastDraftId.value = created.id
+      uni.showToast({ title: created.message || '本机保存失败，请重试', icon: 'none', duration: 2500 })
+      return
+    }
+    if (created && created.id) {
       // 非批量流程，清理 pendingUpload
       reportStore.pendingUpload = null
+      lastDraftId.value = ''
 
-      uni.showToast({ title: '1 份报告已入档', icon: 'none' })
+      uni.showToast({ title: created.pendingSync ? '图片已上传，信息待同步' : '1 份报告已入档', icon: 'none' })
       setTimeout(() => {
         uni.navigateBack()
       }, 1500)

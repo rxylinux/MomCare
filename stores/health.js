@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { request, isLoggedIn as isAuthed } from '@/utils/api.js'
+import { request, isLoggedIn as isAuthed, isRealAuthed, isGuestMode, setToken, removeToken, getToken, GUEST_TOKEN, tokenFingerprint } from '@/utils/api.js'
 import { useReportStore } from '@/stores/report.js'
+import {
+  getDataMode, setDataMode, healthStorageKey, ensureLegacyBackup,
+  createFormalBackups, FORMAL_HEALTH_KEY, FORMAL_REPORTS_KEY,
+  DEMO_HEALTH_KEY, DEMO_REPORTS_KEY
+} from '@/utils/storage.js'
 
 // 孕期计算工具函数
 export function calcPregDay(lmpDate, targetDate) {
@@ -11,6 +16,7 @@ export function calcPregDay(lmpDate, targetDate) {
 }
 
 export function calcWeekInfo(lmpDate, targetDate) {
+	if (!lmpDate || !targetDate) return null
 	const n = calcPregDay(lmpDate, targetDate)
 	if (n < 0) return null
 	return { week: Math.floor(n / 7), day: n % 7, total: n }
@@ -28,43 +34,43 @@ export function getTrimesterName(t) {
 
 // 宝宝大小比喻数据
 const FRUIT_DATA = {
-  4: { emoji: '🫘', name: '罂粟籽' },
-  5: { emoji: '🍎', name: '苹果籽' },
-  6: { emoji: '🫛', name: '甜豌豆' },
-  7: { emoji: '🫐', name: '蓝莓' },
-  8: { emoji: '🍇', name: '葡萄' },
-  9: { emoji: '🍒', name: '樱桃' },
-  10: { emoji: '🍓', name: '草莓' },
-  11: { emoji: '🍋', name: '青柠' },
-  12: { emoji: '🥝', name: '猕猴桃' },
-  13: { emoji: '🍑', name: '桃子' },
-  14: { emoji: '🍋', name: '柠檬' },
-  15: { emoji: '🍎', name: '苹果' },
-  16: { emoji: '🥑', name: '牛油果' },
-  17: { emoji: '🧅', name: '洋葱' },
-  18: { emoji: '🫑', name: '甜椒' },
-  19: { emoji: '🍅', name: '大番茄' },
-  20: { emoji: '🍌', name: '香蕉' },
-  21: { emoji: '🥕', name: '胡萝卜' },
-  22: { emoji: '🥭', name: '芒果' },
-  23: { emoji: '🍠', name: '红薯' },
-  24: { emoji: '🌽', name: '玉米' },
-  25: { emoji: '🥦', name: '花椰菜' },
-  26: { emoji: '🥬', name: '生菜' },
-  27: { emoji: '🍆', name: '小茄子' },
-  28: { emoji: '🍆', name: '长茄子' },
-  29: { emoji: '🥥', name: '小椰子' },
-  30: { emoji: '🥥', name: '椰子' },
-  31: { emoji: '🍍', name: '菠萝' },
-  32: { emoji: '🥬', name: '大白菜' },
-  33: { emoji: '🍈', name: '哈密瓜' },
-  34: { emoji: '🍈', name: '甜瓜' },
-  35: { emoji: '🍯', name: '小蜜瓜' },
-  36: { emoji: '🍯', name: '蜜瓜' },
-  37: { emoji: '🍉', name: '小西瓜' },
-  38: { emoji: '🍉', name: '西瓜' },
-  39: { emoji: '🎃', name: '南瓜' },
-  40: { emoji: '🍉', name: '大西瓜' }
+	4: { emoji: '🫘', name: '罂粟籽' },
+	5: { emoji: '🍎', name: '苹果籽' },
+	6: { emoji: '🫛', name: '甜豌豆' },
+	7: { emoji: '🫐', name: '蓝莓' },
+	8: { emoji: '🍇', name: '葡萄' },
+	9: { emoji: '🍒', name: '樱桃' },
+	10: { emoji: '🍓', name: '草莓' },
+	11: { emoji: '🍋', name: '青柠' },
+	12: { emoji: '🥝', name: '猕猴桃' },
+	13: { emoji: '🍑', name: '桃子' },
+	14: { emoji: '🍋', name: '柠檬' },
+	15: { emoji: '🍎', name: '苹果' },
+	16: { emoji: '🥑', name: '牛油果' },
+	17: { emoji: '🧅', name: '洋葱' },
+	18: { emoji: '🫑', name: '甜椒' },
+	19: { emoji: '🍅', name: '大番茄' },
+	20: { emoji: '🍌', name: '香蕉' },
+	21: { emoji: '🥕', name: '胡萝卜' },
+	22: { emoji: '🥭', name: '芒果' },
+	23: { emoji: '🍠', name: '红薯' },
+	24: { emoji: '🌽', name: '玉米' },
+	25: { emoji: '🥦', name: '花椰菜' },
+	26: { emoji: '🥬', name: '生菜' },
+	27: { emoji: '🍆', name: '小茄子' },
+	28: { emoji: '🍆', name: '长茄子' },
+	29: { emoji: '🥥', name: '小椰子' },
+	30: { emoji: '🥥', name: '椰子' },
+	31: { emoji: '🍍', name: '菠萝' },
+	32: { emoji: '🥬', name: '大白菜' },
+	33: { emoji: '🍈', name: '哈密瓜' },
+	34: { emoji: '🍈', name: '甜瓜' },
+	35: { emoji: '🍯', name: '小蜜瓜' },
+	36: { emoji: '🍯', name: '蜜瓜' },
+	37: { emoji: '🍉', name: '小西瓜' },
+	38: { emoji: '🍉', name: '西瓜' },
+	39: { emoji: '🎃', name: '南瓜' },
+	40: { emoji: '🍉', name: '大西瓜' }
 };
 
 // 标准产检推荐时间表
@@ -171,13 +177,17 @@ export function getFruitComparison(week) {
 	return result
 }
 
-// ── 本地存储辅助 ──
-const STORAGE_KEY = 'YUNTU_HEALTH_DATA'
 const AI_INTERPRET_DAILY_LIMIT = 5
 
 function _loadStorage() {
+	const key = healthStorageKey()
+	if (!key) {
+		// 模式未知（读取报错）：拒绝读取，防止读错命名空间
+		console.error('_loadStorage: storage mode unknown, refuse to read')
+		return null
+	}
 	try {
-		const raw = uni.getStorageSync(STORAGE_KEY)
+		const raw = uni.getStorageSync(key)
 		return raw ? JSON.parse(raw) : null
 	} catch (e) {
 		console.error('_loadStorage error:', e)
@@ -185,19 +195,31 @@ function _loadStorage() {
 	}
 }
 
+// 写盘失败必须可观测：返回 boolean，由调用方决定如何提示，不再吞掉错误。
+// 模式未知时拒绝写入（fail closed），避免演示数据覆盖正式档案
 function _saveStorage(data) {
+	const key = healthStorageKey()
+	if (!key) {
+		console.error('_saveStorage: storage mode unknown, refuse to write')
+		return false
+	}
 	try {
-		uni.setStorageSync(STORAGE_KEY, JSON.stringify(data))
+		uni.setStorageSync(key, JSON.stringify(data))
+		return true
 	} catch (e) {
 		console.error('_saveStorage error:', e)
+		return false
 	}
 }
 
-// 一次性迁移旧存储键到统一键
+// 一次性迁移更早版本的独立存储键到统一键（只搬真实历史数据，不注入默认值）
 function _migrateOldKeys() {
+	if (isGuestModeByMode()) return
 	if (_loadStorage()) return
 
 	const data = {
+		schemaVersion: 2,
+		origin: 'formal',
 		lmpDate: null,
 		dueDate: null,
 		userInfo: { nickname: '', avatar: '🌸', hospital: '', babyNickname: '' },
@@ -207,27 +229,38 @@ function _migrateOldKeys() {
 		aiInterpretUsage: null
 	}
 
+	let migratedAny = false
 	try {
 		const profileRaw = uni.getStorageSync('user_profile')
 		if (profileRaw) {
 			const profile = JSON.parse(profileRaw)
-			if (profile.lmpDate) data.lmpDate = profile.lmpDate
-			if (profile.dueDate) data.dueDate = profile.dueDate
-			if (profile.userInfo) Object.assign(data.userInfo, profile.userInfo)
+			if (profile.lmpDate) { data.lmpDate = profile.lmpDate; migratedAny = true }
+			if (profile.dueDate) { data.dueDate = profile.dueDate; migratedAny = true }
+			if (profile.userInfo) { Object.assign(data.userInfo, profile.userInfo); migratedAny = true }
 		}
 
 		const recordsRaw = uni.getStorageSync('health_records')
 		if (recordsRaw) {
 			data.records = JSON.parse(recordsRaw)
+			migratedAny = true
 		}
 
 		const guestId = uni.getStorageSync('guest_id')
-		if (guestId) data.openid = guestId
+		if (guestId) { data.openid = guestId; migratedAny = true }
 	} catch (e) {
 		console.warn('_migrateOldKeys: migration partial', e)
+		migratedAny = true
 	}
 
+	if (migratedAny) {
+		// 来源未经用户确认，标记为 legacy；是否包含演示数据由用户在迁移时决定
+		data.origin = 'legacy-unverified'
+	}
 	_saveStorage(data)
+}
+
+function isGuestModeByMode() {
+	return getDataMode() === 'demo'
 }
 
 export const useHealthStore = defineStore('health', () => {
@@ -236,6 +269,8 @@ export const useHealthStore = defineStore('health', () => {
 	const dueDate = ref(null)
 	const records = ref({})
 	const userProfileLoaded = ref(false)
+	const dataMode = ref(getDataMode())
+	const lastPersistError = ref('')
 
 	const userInfo = ref({
 		nickname: '',
@@ -251,11 +286,44 @@ export const useHealthStore = defineStore('health', () => {
 		date: '',
 		used: 0
 	})
+	// 数据来源：'formal'（用户确认/全新）| 'legacy-unverified'（旧版本遗留，未确认归属）
+	// | 'demo'。legacy-unverified 在用户显式确认前不得上传或绑定当前身份
+	const dataOrigin = ref('formal')
+	// 归属确认记录：数据归属被确认时所在登录身份的令牌指纹。
+	// schemaVersion/origin 字段是结构信息，不代表用户同意；只有本字段与当前
+	// token 指纹一致才允许上传。换 token 登录即失配，需重新确认
+	const ownerFingerprint = ref('')
+	// 当前会话身份的响应式镜像：token 读取不是响应式依赖，镜像只在
+	// 身份相关入口（初始化/登录/退出/云同步/确认）刷新供界面横幅使用；
+	// 上传守卫一律在动作时新鲜读取，不依赖镜像
+	const sessionTokenFp = ref('')
+	const sessionAuthed = ref(false)
+	const lastSyncBlockReason = ref('')
 
-	// ── Persist helper: serialize current state to localStorage ──
+	function _refreshSessionIdentity() {
+		sessionTokenFp.value = tokenFingerprint(getToken())
+		sessionAuthed.value = isRealAuthed()
+	}
+	_refreshSessionIdentity()
+
+	// 动作时新鲜求值：本地是否存在未绑定当前身份的数据（上传/确认守卫用）
+	function _unclaimedDataNow() {
+		if (dataMode.value === 'demo') return false
+		if (!hasLocalData.value) return false
+		if (dataOrigin.value === 'legacy-unverified') return true
+		if (!isRealAuthed()) return false
+		return ownerFingerprint.value !== tokenFingerprint(getToken())
+	}
+
+	// ── Persist helper: serialize current state to storage; surface failures ──
+	// origin/ownerTokenFingerprint 随状态携带：普通保存、重启不改变来源与归属；
+	// legacy-unverified 或归属失配只有显式确认才解除
 	function _persist() {
 		normalizeAiInterpretUsage()
-		_saveStorage({
+		const ok = _saveStorage({
+			schemaVersion: 2,
+			origin: dataMode.value === 'demo' ? 'demo' : dataOrigin.value,
+			ownerTokenFingerprint: dataMode.value === 'demo' ? '' : ownerFingerprint.value,
 			lmpDate: lmpDate.value ? lmpDate.value.toISOString() : null,
 			dueDate: dueDate.value ? dueDate.value.toISOString() : null,
 			userInfo: { ...userInfo.value },
@@ -264,12 +332,36 @@ export const useHealthStore = defineStore('health', () => {
 			openid: openid.value,
 			aiInterpretUsage: { ...aiInterpretUsage.value }
 		})
+		lastPersistError.value = ok ? '' : '本地保存失败：存储空间不足或不可写，数据暂保留在内存中'
+		return ok
 	}
 
 	// ── Getters ──
-	const today = computed(() => new Date())
+	// today 为响应式 ref：由 refreshToday() 在回前台/跨日时刷新，依赖它的孕周等计算随之更新
+	const today = ref(new Date())
+
+	function refreshToday(now) {
+		today.value = new Date(now ?? Date.now())
+	}
 
 	const pregInfoSet = computed(() => lmpDate.value !== null)
+
+	// 本地是否存在实质数据（用于判断"有数据待归属确认"）
+	const hasLocalData = computed(() =>
+		Boolean(lmpDate.value || userInfo.value.nickname ||
+			Object.keys(records.value).length > 0 || checkupSchedules.value.length > 0)
+	)
+
+	// 存在未绑定当前身份的本地数据：来源未确认，或归属指纹与当前登录令牌失配
+	//（换账号登录、旧版本数据都属此类）。确认前禁止上传/绑定当前身份。
+	// 响应式镜像驱动界面横幅；上传守卫用 _unclaimedDataNow 动作时新鲜求值
+	const needsLegacyConfirm = computed(() => {
+		if (dataMode.value === 'demo') return false
+		if (!hasLocalData.value) return false
+		if (dataOrigin.value === 'legacy-unverified') return true
+		if (!sessionAuthed.value) return false
+		return ownerFingerprint.value !== sessionTokenFp.value
+	})
 
 	const todayWeekInfo = computed(() => {
 		if (!lmpDate.value) return null
@@ -344,7 +436,7 @@ export const useHealthStore = defineStore('health', () => {
 	}
 
 	function normalizeAiInterpretUsage(input = aiInterpretUsage.value) {
-		const todayKey = getRecordKey(new Date())
+		const todayKey = getRecordKey(today.value)
 		const source = input && typeof input === 'object' ? input : {}
 		const hasUsageFields = source.used != null ||
 			source.used_today != null ||
@@ -386,7 +478,7 @@ export const useHealthStore = defineStore('health', () => {
 	}
 
 	async function syncAiInterpretQuotaToCloud() {
-		if (!isAuthed()) return false
+		if (!isRealAuthed()) return false
 		try {
 			return await syncProfileToCloud()
 		} catch (e) {
@@ -401,7 +493,7 @@ export const useHealthStore = defineStore('health', () => {
 
 	function hasRecord(date) {
 		const r = getRecord(date)
-		return r && (r.weight || r.bp || r.mood || r.fetal || r.note)
+		return Boolean(r && (r.weight || r.bp || r.mood || r.fetal || r.note))
 	}
 
 	function getWeekInfo(date) {
@@ -415,12 +507,27 @@ export const useHealthStore = defineStore('health', () => {
 	}
 
 	function isDueDate(date) {
+		if (!dueDate.value) return false
 		return date.getFullYear() === dueDate.value.getFullYear() &&
 			date.getMonth() === dueDate.value.getMonth() &&
-			date.getDate() === today.value.getDate()
+			date.getDate() === dueDate.value.getDate()
 	}
 
 	// ── 用户资料 ──
+
+	function _applyPersisted(data) {
+		if (!data) return
+		if (data.origin) dataOrigin.value = data.origin
+		// 归属指纹可能不存在（旧版本/全新数据）：留空即视为未绑定当前身份
+		ownerFingerprint.value = typeof data.ownerTokenFingerprint === 'string' ? data.ownerTokenFingerprint : ''
+		if (data.lmpDate) lmpDate.value = new Date(data.lmpDate)
+		if (data.dueDate) dueDate.value = new Date(data.dueDate)
+		if (data.userInfo) Object.assign(userInfo.value, data.userInfo)
+		if (data.records) records.value = data.records
+		if (data.checkupSchedules) checkupSchedules.value = data.checkupSchedules
+		if (data.openid) openid.value = data.openid
+		if (data.aiInterpretUsage) normalizeAiInterpretUsage(data.aiInterpretUsage)
+	}
 
 	async function loadUserProfile() {
 		const data = _loadStorage()
@@ -434,13 +541,44 @@ export const useHealthStore = defineStore('health', () => {
 		userProfileLoaded.value = true
 	}
 
+	// 保存资料；若末次月经发生变化则迁移未完成产检安排（保留历史与手动日期）。
+	// 返回 { ok, schedulesMigrated }：ok 只有在“全部需要落盘的写入都成功”时才为 true
 	async function saveUserProfile() {
-		_persist()
+		const persisted = _loadStorage()
+		const previousLmp = persisted && persisted.lmpDate ? new Date(persisted.lmpDate) : null
+		const lmpChanged = lmpDate.value && previousLmp &&
+			getRecordKey(lmpDate.value) !== getRecordKey(previousLmp)
+
+		// 首次设置孕期资料时初始化标准产检时间表（用户显式保存动作触发）
+		if (lmpDate.value && checkupSchedules.value.length === 0) {
+			initCheckupSchedulesInternal()
+		}
+
+		const profilePersisted = _persist()
+		let schedulesPersisted = true
+		let schedulesMigrated = false
+
+		if (profilePersisted && lmpChanged) {
+			schedulesMigrated = true
+			// 迁移后的第二次写入结果不能忽略：失败时 ok 必须为 false
+			schedulesPersisted = migrateCheckupSchedulesForNewLmp(lmpDate.value)
+		}
+		return { ok: profilePersisted && schedulesPersisted, schedulesMigrated }
 	}
 
-	// Sync all profile data to backend D1 (write-through)
+	// Sync all profile data to backend D1 (write-through)。
+	// 旧缓存来源未经确认时禁止上传：不把未确认数据自动归属到当前登录者。
+	// 身份判断在动作时新鲜读取（token 变更不依赖响应式缓存）
 	async function syncProfileToCloud() {
-		if (!isAuthed()) return false
+		if (!isRealAuthed()) return false
+		if (_unclaimedDataNow()) {
+			console.warn('syncProfileToCloud blocked: local data not claimed by current identity')
+			lastSyncBlockReason.value = '本机数据尚未确认归属当前账号；确认前不会上传或绑定（我的页面可确认）'
+			_refreshSessionIdentity()
+			return false
+		}
+		_refreshSessionIdentity()
+		lastSyncBlockReason.value = ''
 
 		const updateData = {}
 		if (dueDate.value) {
@@ -483,7 +621,7 @@ export const useHealthStore = defineStore('health', () => {
 
 	// Fetch profile from backend and overwrite local state (cloud is source of truth)
 	async function syncProfileFromCloud() {
-		if (!isAuthed()) return false
+		if (!isRealAuthed()) return false
 
 		try {
 			const res = await request({
@@ -531,15 +669,17 @@ export const useHealthStore = defineStore('health', () => {
 				_persist()
 				return true
 			}
+			return false
 		} catch (e) {
+			// 网络失败：本地数据保持不动，不伪装成同步成功
 			console.error('syncProfileFromCloud failed:', e)
+			return false
 		}
-		return false
 	}
 
 	// Unified cloud sync: pull both profile and reports from cloud
 	async function syncCloudData() {
-		if (!isAuthed()) return false
+		if (!isRealAuthed()) return false
 
 		let profileOk = false
 		let reportsOk = false
@@ -569,10 +709,12 @@ export const useHealthStore = defineStore('health', () => {
 		}
 	}
 
+	// 返回 { ok, persisted }：写盘失败时内存保留记录，调用方必须向用户提示失败
 	async function saveRecord(date, data) {
 		const key = getRecordKey(date)
 		records.value[key] = { ...records.value[key], ...data }
-		_persist()
+		const persisted = _persist()
+		return { ok: persisted, persisted }
 	}
 
 	// ── 产检日程（纯本地） ──
@@ -606,7 +748,7 @@ export const useHealthStore = defineStore('health', () => {
 		}
 	}
 
-	async function initCheckupSchedules() {
+	function initCheckupSchedulesInternal() {
 		if (!lmpDate.value) return
 		const hospitalDefault = userInfo.value.hospital || ''
 		checkupSchedules.value = CHECKUP_TEMPLATES.map(template =>
@@ -615,37 +757,106 @@ export const useHealthStore = defineStore('health', () => {
 		_persist()
 	}
 
+	async function initCheckupSchedules() {
+		initCheckupSchedulesInternal()
+	}
+
+	// 末次月经调整后迁移产检安排：
+	// - 只重算“可确认由模板生成、未完成、未手动改期”的安排（模板槽位）
+	// - 已完成/已跳过/手动日期/自定义安排，以及同孕周的多条历史记录，全部原样保留
+	// - 不用“同孕周”推断同一条记录：同周第二条起视为独立历史/自定义安排
+	function migrateCheckupSchedulesForNewLmp(newLmpDate) {
+		if (!newLmpDate) return false
+		const hospitalDefault = userInfo.value.hospital || ''
+		const existing = [...checkupSchedules.value]
+		const consumed = new Set()
+		const result = []
+
+		const isTemplateSlot = s => s && s.status === 'upcoming' && !s.date_manually_set &&
+			typeof s._id === 'string' && s._id.startsWith('local_')
+
+		for (const template of CHECKUP_TEMPLATES) {
+			const candidates = existing.filter(s => s.week_of_pregnancy === template.week && !consumed.has(s._id))
+			const slot = candidates.find(isTemplateSlot)
+			if (slot) {
+				consumed.add(slot._id)
+				const fresh = _templateToSchedule(template, newLmpDate, slot.hospital || hospitalDefault)
+				result.push({
+					...slot,
+					checkup_date: fresh.checkup_date,
+					exam_items: slot.exam_items && slot.exam_items.length
+						? slot.exam_items
+						: fresh.exam_items
+				})
+			} else if (candidates.length === 0) {
+				// 该孕周完全没有记录时才新增模板安排；已有历史/手动记录则不重复添加
+				result.push(_templateToSchedule(template, newLmpDate, hospitalDefault))
+			}
+		}
+
+		// 未被模板槽位消费的记录（同孕周历史、手动日期、自定义安排）全部保留
+		for (const s of existing) {
+			if (!consumed.has(s._id)) {
+				result.push(s)
+			}
+		}
+
+		result.sort((a, b) => a.checkup_date.localeCompare(b.checkup_date))
+		checkupSchedules.value = result
+		return _persist()
+	}
+
 	async function updateCheckupSchedule(scheduleId, data) {
 		const idx = checkupSchedules.value.findIndex(s => s._id === scheduleId)
 		if (idx >= 0) {
 			checkupSchedules.value[idx] = { ...checkupSchedules.value[idx], ...data }
 		}
-		_persist()
+		return _persist()
 	}
 
 	async function toggleExamItem(scheduleId, itemIdx) {
 		const schedule = checkupSchedules.value.find(s => s._id === scheduleId)
-		if (!schedule) return
+		if (!schedule) return false
 
 		const items = schedule.exam_items.map(item => ({ ...item }))
 		items[itemIdx].done = !items[itemIdx].done
-		await updateCheckupSchedule(scheduleId, { exam_items: items })
+		const ok = await updateCheckupSchedule(scheduleId, { exam_items: items })
+		if (!ok) {
+			// 写盘失败回滚，避免界面显示与持久层不一致
+			items[itemIdx].done = !items[itemIdx].done
+			await updateCheckupSchedule(scheduleId, { exam_items: items })
+		}
+		return ok
 	}
 
 	async function markCheckupCompleted(scheduleId) {
-		await updateCheckupSchedule(scheduleId, { status: 'completed' })
+		const schedule = checkupSchedules.value.find(s => s._id === scheduleId)
+		const prev = schedule ? schedule.status : null
+		const ok = await updateCheckupSchedule(scheduleId, { status: 'completed' })
+		if (!ok && prev) await updateCheckupSchedule(scheduleId, { status: prev })
+		return ok
 	}
 
 	async function skipCheckup(scheduleId) {
-		await updateCheckupSchedule(scheduleId, { status: 'skipped' })
+		const schedule = checkupSchedules.value.find(s => s._id === scheduleId)
+		const prev = schedule ? schedule.status : null
+		const ok = await updateCheckupSchedule(scheduleId, { status: 'skipped' })
+		if (!ok && prev) await updateCheckupSchedule(scheduleId, { status: prev })
+		return ok
 	}
 
 	async function addCustomExamItem(scheduleId, text) {
 		const schedule = checkupSchedules.value.find(s => s._id === scheduleId)
-		if (!schedule) return
+		if (!schedule) return false
 		const items = schedule.exam_items.map(item => ({ ...item }))
 		items.push({ text, required: false, done: false })
-		await updateCheckupSchedule(scheduleId, { exam_items: items })
+		const ok = await updateCheckupSchedule(scheduleId, { exam_items: items })
+		if (!ok) {
+			// 写盘失败：移除刚加入的条目，保持与持久层一致
+			const reverted = schedule.exam_items.filter(i => i !== items[items.length - 1])
+			await updateCheckupSchedule(scheduleId, { exam_items: reverted })
+		}
+		return ok
 	}
 
 	// ── 统计方法 ──
@@ -710,8 +921,8 @@ export const useHealthStore = defineStore('health', () => {
 	}
 
 	function getFetalStats() {
-		const todayKey = getRecordKey(new Date())
-		const yesterday = new Date()
+		const todayKey = getRecordKey(today.value)
+		const yesterday = new Date(today.value)
 		yesterday.setDate(yesterday.getDate() - 1)
 		const yesterdayKey = getRecordKey(yesterday)
 
@@ -804,7 +1015,7 @@ export const useHealthStore = defineStore('health', () => {
 		}
 		entries.sort((a, b) => b.date.localeCompare(a.date))
 
-		const now = new Date()
+		const now = today.value
 		const year = now.getFullYear()
 		const month = now.getMonth()
 		const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -851,7 +1062,7 @@ export const useHealthStore = defineStore('health', () => {
 
 	function getGreeting() {
 		const name = userInfo.value.nickname || '宝妈'
-		const hour = new Date().getHours()
+		const hour = today.value.getHours()
 		if (hour < 6) return `夜深了，${name}`
 		if (hour < 11) return `早上好，${name}`
 		if (hour < 14) return `中午好，${name}`
@@ -859,50 +1070,280 @@ export const useHealthStore = defineStore('health', () => {
 		return `晚上好，${name}`
 	}
 
-	// ── 游客登录（纯本地） ──
+	// ── 会话与数据模式 ──
 
-	function generateGuestId() {
-		const timestamp = Date.now()
-		const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0')
-		return `guest_${timestamp}${random}`
+	function _resetState() {
+		lmpDate.value = null
+		dueDate.value = null
+		records.value = {}
+		checkupSchedules.value = []
+		openid.value = ''
+		userInfo.value = { nickname: '', avatar: '🌸', hospital: '', babyNickname: '' }
+		aiInterpretUsage.value = { date: '', used: 0 }
+		dataOrigin.value = 'formal'
+		ownerFingerprint.value = ''
+		sessionTokenFp.value = ''
+		sessionAuthed.value = false
+		lastSyncBlockReason.value = ''
 	}
 
-	function generateGuestNickname() {
-		const num = String(Math.floor(Math.random() * 100000)).padStart(5, '0')
-		return `宝妈${num}`
-	}
-
-	async function silentLogin() {
+	// 启动初始化：恢复持久化数据；正式模式绝不注入演示数据、
+	// 不自动生成 token 或用户身份。旧数据先做一次性可恢复备份。
+	function initializeApp() {
 		try {
-			_migrateOldKeys()
+			_refreshSessionIdentity()
+			ensureLegacyBackup()
+			dataMode.value = getDataMode()
 
-			const data = _loadStorage()
-			if (data) {
-				if (data.lmpDate) lmpDate.value = new Date(data.lmpDate)
-				if (data.dueDate) dueDate.value = new Date(data.dueDate)
-				if (data.userInfo) Object.assign(userInfo.value, data.userInfo)
-				if (data.records) records.value = data.records
-				if (data.checkupSchedules) checkupSchedules.value = data.checkupSchedules
-				if (data.openid) openid.value = data.openid
-				if (data.aiInterpretUsage) normalizeAiInterpretUsage(data.aiInterpretUsage)
+			if (dataMode.value === 'demo') {
+				// 恢复演示会话：演示数据在演示键内，缺失则补齐演示样例
+				setToken(GUEST_TOKEN)
+				_migrateDemoKeys()
+				const data = _loadStorage()
+				_applyPersisted(data)
+				isLoggedIn.value = true
+				userProfileLoaded.value = true
+				_persist()
+				return true
 			}
 
-			if (!openid.value) {
-				openid.value = generateGuestId()
-				if (!userInfo.value.nickname) {
-					userInfo.value.nickname = generateGuestNickname()
+			_migrateOldKeys()
+			const data = _loadStorage()
+			_applyPersisted(data)
+
+			// 旧版本遗留的游客 token 不再伪装为登录态：清除后由用户真实登录或显式进入演示
+			if (isGuestMode()) {
+				removeToken()
+				try { uni.removeStorageSync('momcare_user') } catch (e) { /* ignore */ }
+			}
+
+			// 旧版本数据（无 schemaVersion）：来源未经用户确认，标记为
+			// legacy-unverified；不删除、不清洗任何内容，确认前禁止上传/认领
+			if (data && !data.schemaVersion) {
+				dataOrigin.value = 'legacy-unverified'
+				_persist()
+			}
+
+			// 正式模式身份只来自真实登录；此处不设置 token、不造假用户
+			isLoggedIn.value = isAuthed()
+			userProfileLoaded.value = true
+			return true
+		} catch (e) {
+			console.error('initializeApp error:', e)
+			return false
+		}
+	}
+
+	function _migrateDemoKeys() {
+		if (_loadStorage()) return
+		_saveStorage({
+			schemaVersion: 2,
+			origin: 'demo',
+			lmpDate: null,
+			dueDate: null,
+			userInfo: { nickname: '', avatar: '🌸', hospital: '', babyNickname: '' },
+			records: {},
+			checkupSchedules: [],
+			openid: '',
+			aiInterpretUsage: null
+		})
+	}
+
+	// 显式进入演示模式（登录页"一键体验"按钮）：
+	// 示例数据只写入演示存储，正式档案不受影响。
+	// 模式标记写入或读回失败时中止，避免演示数据落到正式存储键
+	function enterDemoMode() {
+		try {
+			ensureLegacyBackup()
+			if (!setDataMode('demo') || getDataMode() !== 'demo') {
+				console.error('enterDemoMode: cannot persist demo mode, abort')
+				return false
+			}
+			_refreshSessionIdentity()
+			dataMode.value = 'demo'
+			setToken(GUEST_TOKEN)
+
+			_resetState()
+			_migrateDemoKeys()
+
+			const now = new Date()
+			const defaultLmp = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 112)
+			lmpDate.value = defaultLmp
+			dueDate.value = new Date(defaultLmp.getTime() + 280 * 86400000)
+			openid.value = generateGuestId()
+			userInfo.value = {
+				nickname: '幸福准妈妈',
+				avatar: '🌸',
+				babyNickname: '小糯米',
+				preWeight: '52',
+				height: '165',
+				hospital: '市妇幼保健院'
+			}
+
+			initCheckupSchedulesInternal()
+
+			// 演示示例记录：字段名与真实记录一致（bp/fetal/note），展示统计一致
+			const y = now.getFullYear()
+			const m = String(now.getMonth() + 1).padStart(2, '0')
+			const d = String(now.getDate()).padStart(2, '0')
+			records.value = {
+				[`${y}-${m}-${d}`]: {
+					weight: 55.8,
+					bp: '116/76',
+					fetal: 8,
+					mood: 'happy',
+					note: '今天宝宝在肚子里轻轻动了一下，感觉很幸福！'
 				}
 			}
 
 			isLoggedIn.value = true
 			userProfileLoaded.value = true
 			_persist()
-			console.log('silentLogin: 本地登录成功', openid.value)
 			return true
 		} catch (e) {
-			console.error('silentLogin error:', e)
+			console.error('enterDemoMode error:', e)
 			return false
 		}
+	}
+
+	// 退出当前会话（演示或登录）：清 token 与身份标记；
+	// 本地健康数据不删除（保留待用户处理），模式回到正式。
+	// 模式未知或从演示切回正式的写入失败时中止退出并返回 false，
+	// 不允许在错误命名空间继续运行
+	function exitSession() {
+		const mode = getDataMode()
+		if (mode === null) {
+			console.error('exitSession: storage mode unknown, abort')
+			lastPersistError.value = '退出失败：本地存储状态未知，请重启应用后重试'
+			return false
+		}
+		if (mode === 'demo') {
+			if (!setDataMode('formal') || getDataMode() !== 'formal') {
+				console.error('exitSession: cannot persist formal mode, abort logout')
+				lastPersistError.value = '退出失败：本地模式切换未生效，请重试'
+				return false
+			}
+		}
+		try {
+			uni.removeStorageSync('momcare_user')
+		} catch (e) {
+			console.warn('exitSession remove user failed:', e)
+		}
+		dataMode.value = 'formal'
+		_resetState()
+		_refreshSessionIdentity()
+		isLoggedIn.value = false
+		userProfileLoaded.value = false
+		return true
+	}
+
+	// 登录/注册成功后恢复正式档案（云端资料由调用方另行同步）。
+	// 模式标记写入或读回失败时中止：避免把演示存储当成正式档案加载
+	function afterRealLogin() {
+		if (!setDataMode('formal') || getDataMode() !== 'formal') {
+			console.error('afterRealLogin: cannot persist formal mode, abort')
+			lastPersistError.value = '进入正式模式失败：本地模式切换未生效，请重试'
+			return false
+		}
+		dataMode.value = 'formal'
+		ensureLegacyBackup()
+		_resetState()
+		_refreshSessionIdentity()
+		const data = _loadStorage()
+		_applyPersisted(data)
+		// 登录前本机没有实质数据 = 全新账号：此后新建的数据直接归属当前身份；
+		// 若已有数据（无论 origin 字段写什么），登录本身不构成归属确认
+		const dataExisted = Boolean(data && (data.lmpDate || (data.userInfo && data.userInfo.nickname) ||
+			Object.keys(data.records || {}).length > 0 || (data.checkupSchedules || []).length > 0))
+		if (!dataExisted) {
+			ownerFingerprint.value = tokenFingerprint(getToken())
+			_persist()
+		} else if (data && !data.schemaVersion) {
+			// 旧版本数据：保持未确认来源
+			dataOrigin.value = 'legacy-unverified'
+			_persist()
+		}
+		isLoggedIn.value = true
+		userProfileLoaded.value = true
+		return true
+	}
+
+	// 清除本机数据：只作用于当前模式的存储键。
+	// - 演示模式：只清演示键，绝不触碰正式数据
+	// - 正式模式：先写备份，备份全部成功才清除；随后全量重置内存
+	//   （含档案/身份字段），避免后续持久化把旧内容写回
+	function clearLocalData() {
+		const mode = getDataMode()
+		if (mode === null) {
+			// 模式未知：清除属危险操作，一律拒绝
+			return { ok: false, scope: 'unknown', message: '本地存储状态未知，为保护数据已取消操作' }
+		}
+		if (mode === 'demo') {
+			try {
+				uni.removeStorageSync(DEMO_HEALTH_KEY)
+				uni.removeStorageSync(DEMO_REPORTS_KEY)
+			} catch (e) {
+				console.error('clearLocalData: demo keys remove failed:', e)
+				return { ok: false, scope: 'demo', message: '清除失败，请重试' }
+			}
+			_resetState()
+			try {
+				const reportStore = useReportStore()
+				reportStore.resetLocalState()
+			} catch (e) {
+				console.warn('clearLocalData: report store reset failed:', e)
+			}
+			return { ok: true, scope: 'demo', message: '演示数据已清除' }
+		}
+
+		const backup = createFormalBackups()
+		if (!backup.ok) {
+			return { ok: false, scope: 'formal', message: '备份写入不成功，已保留原数据' }
+		}
+		try {
+			uni.removeStorageSync(FORMAL_HEALTH_KEY)
+			uni.removeStorageSync(FORMAL_REPORTS_KEY)
+		} catch (e) {
+			console.error('clearLocalData: formal keys remove failed:', e)
+			return { ok: false, scope: 'formal', message: '清除失败，请重试' }
+		}
+		_resetState()
+		try {
+			const reportStore = useReportStore()
+			reportStore.resetLocalState()
+		} catch (e) {
+			console.warn('clearLocalData: report store reset failed:', e)
+		}
+		return { ok: true, scope: 'formal', message: backup.healthKey || backup.reportsKey
+			? '已清除，已自动创建备份'
+			: '已清除（本机原本没有数据）' }
+	}
+
+	// 用户显式确认本地数据归属当前登录身份：写入与当前令牌绑定的归属指纹，
+	// 此后才恢复上传通路。换 token 登录会令指纹失配、重新进入待确认。
+	// 确认动作本身落盘成功才算完成；身份判断动作时新鲜读取
+	function confirmLegacyOrigin() {
+		if (!_unclaimedDataNow()) return { ok: true, changed: false }
+		const prevOrigin = dataOrigin.value
+		const prevOwner = ownerFingerprint.value
+		dataOrigin.value = 'formal'
+		ownerFingerprint.value = tokenFingerprint(getToken())
+		const ok = _persist()
+		if (!ok) {
+			// 落盘失败回滚，保持未确认状态
+			dataOrigin.value = prevOrigin
+			ownerFingerprint.value = prevOwner
+			return { ok: false, changed: false, message: '确认未保存成功，请重试' }
+		}
+		_refreshSessionIdentity()
+		lastSyncBlockReason.value = ''
+		return { ok: true, changed: true }
+	}
+
+	function generateGuestId() {
+		const timestamp = Date.now()
+		const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0')
+		return `guest_${timestamp}${random}`
 	}
 
 	// ── 头像选择（H5 本地） ──
@@ -918,9 +1359,14 @@ export const useHealthStore = defineStore('health', () => {
 				})
 			})
 			if (res.tempFilePaths && res.tempFilePaths.length > 0) {
+				const prevAvatar = userInfo.value.avatar
 				userInfo.value.avatar = res.tempFilePaths[0]
-				_persist()
-				uni.showToast({ title: '头像已更新', icon: 'success' })
+				if (_persist()) {
+					uni.showToast({ title: '头像已更新', icon: 'success' })
+				} else {
+					userInfo.value.avatar = prevAvatar
+					uni.showToast({ title: '头像保存失败，请重试', icon: 'none' })
+				}
 				return true
 			}
 		} catch (e) {
@@ -939,6 +1385,8 @@ export const useHealthStore = defineStore('health', () => {
 		userInfo,
 		userProfileLoaded,
 		pregInfoSet,
+		dataMode,
+		lastPersistError,
 		// getters
 		today,
 		todayWeekInfo,
@@ -954,6 +1402,7 @@ export const useHealthStore = defineStore('health', () => {
 		getWeekInfo,
 		isToday,
 		isDueDate,
+		refreshToday,
 		// profile
 		loadUserProfile,
 		saveUserProfile,
@@ -977,6 +1426,7 @@ export const useHealthStore = defineStore('health', () => {
 		syncAiInterpretQuotaToCloud,
 		loadCheckupSchedules,
 		initCheckupSchedules,
+		migrateCheckupSchedulesForNewLmp,
 		updateCheckupSchedule,
 		toggleExamItem,
 		markCheckupCompleted,
@@ -991,10 +1441,19 @@ export const useHealthStore = defineStore('health', () => {
 		getFetalHistory,
 		// greeting
 		getGreeting,
-		// login
+		// session / mode
 		isLoggedIn,
-		openid,
-		silentLogin,
+	openid,
+	dataOrigin,
+	ownerFingerprint,
+	needsLegacyConfirm,
+	lastSyncBlockReason,
+	confirmLegacyOrigin,
+		initializeApp,
+		enterDemoMode,
+		exitSession,
+		afterRealLogin,
+		clearLocalData,
 		chooseAvatar,
 	}
 })

@@ -1,37 +1,30 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import dailyJson from '@/static/data/pregnancy-daily.json'
+import weeklyJson from '@/static/data/pregnancy-weekly-guide.json'
 
+function _parseList(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw
+}
+
+// 静态内容改为构建期打包 import：
+// - 小程序不再依赖 H5 站点路径语义的网络请求
+// - 不存在“请求 404 但标记已加载”的假成功；数据随包分发，加载即真实
 export const useStaticDataStore = defineStore('staticData', () => {
-	const dailyData = ref([])
-	const weeklyGuideData = ref([])
-	const loaded = ref(false)
-	const loadError = ref(false)
+	const dailyData = ref(_parseList(dailyJson))
+	const weeklyGuideData = ref(_parseList(weeklyJson))
+	const loaded = ref(dailyData.value.length > 0 && weeklyGuideData.value.length > 0)
+	const loadError = ref(!loaded.value)
 
+	// 保留异步接口供既有调用方使用；打包数据加载是同步且确定性的
 	async function loadData() {
-		if (loaded.value) return
-
-		try {
-			const [dailyRes, weeklyRes] = await Promise.all([
-				uni.request({ url: '/static/data/pregnancy-daily.json', responseType: 'text' }),
-				uni.request({ url: '/static/data/pregnancy-weekly-guide.json', responseType: 'text' })
-			])
-
-			if (dailyRes.statusCode === 200 && dailyRes.data) {
-				const raw = typeof dailyRes.data === 'string' ? dailyRes.data : JSON.stringify(dailyRes.data)
-				dailyData.value = JSON.parse(raw)
-			}
-
-			if (weeklyRes.statusCode === 200 && weeklyRes.data) {
-				const raw = typeof weeklyRes.data === 'string' ? weeklyRes.data : JSON.stringify(weeklyRes.data)
-				weeklyGuideData.value = JSON.parse(raw)
-			}
-
-			loaded.value = true
-			console.log(`staticData loaded: ${dailyData.value.length} daily, ${weeklyGuideData.value.length} weekly`)
-		} catch (e) {
-			console.error('staticData load error:', e)
-			loadError.value = true
-		}
+		if (loaded.value) return true
+		dailyData.value = _parseList(dailyJson)
+		weeklyGuideData.value = _parseList(weeklyJson)
+		loaded.value = dailyData.value.length > 0 && weeklyGuideData.value.length > 0
+		loadError.value = !loaded.value
+		return loaded.value
 	}
 
 	function getDailyByTotalDays(totalDays) {

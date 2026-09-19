@@ -91,7 +91,10 @@ const editVisible = ref(false)
 const editMode = ref('weight')
 const dailySlides = ref([]) // 每日变化云端数据
 
-const greeting = computed(() => healthStore.getGreeting())
+const greeting = computed(() => {
+	const base = healthStore.getGreeting()
+	return healthStore.dataMode === 'demo' ? `演示模式 · ${base}` : base
+})
 
 const currentRecord = computed(() => {
 	return healthStore.getRecord(selectedDate.value) || {}
@@ -99,23 +102,15 @@ const currentRecord = computed(() => {
 
 onMounted(async () => {
 	try {
-		const [_, __] = await Promise.all([
+		await Promise.all([
 			healthStore.loadUserProfile(),
 			healthStore.loadRecords()
 		])
-		// 预取每日变化摘要数据（与 loading 解耦，不阻塞首页渲染）
-			// 未登录 → 跳转登录页
-			if (!isLoggedIn()) {
-				uni.redirectTo({ url: '/pages/login/index' })
-				return
-			}
 
-		if (!healthStore.pregInfoSet) {
-
-			uni.redirectTo({ url: '/pages/profile/onboarding' })
-
+		// 正式模式未登录时进入登录页；不再自动注入演示身份或示例数据
+		if (!isLoggedIn()) {
+			uni.redirectTo({ url: '/pages/login/index' })
 			return
-
 		}
 
 		loadDailySlides()
@@ -146,8 +141,14 @@ function openEdit(mode) {
 	editVisible.value = true
 }
 
-function handleSave(data) {
-	healthStore.saveRecord(selectedDate.value, data)
+async function handleSave(data) {
+	// 保存失败（如存储空间不足）时不关闭弹层，保留用户输入以便重试
+	const result = await healthStore.saveRecord(selectedDate.value, data)
+	if (result && result.persisted) {
+		editVisible.value = false
+	} else {
+		uni.showToast({ title: '本地保存失败，内容已保留，请重试', icon: 'none', duration: 2500 })
+	}
 }
 
 function goProfile() {

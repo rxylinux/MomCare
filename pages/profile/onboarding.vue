@@ -191,6 +191,7 @@
 <script setup>
 import { ref, computed, reactive } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
+import { isRealAuthed } from '@/utils/api.js'
 
 const healthStore = useHealthStore()
 
@@ -302,11 +303,21 @@ async function nextStep() {
 
 	uni.showLoading({ title: '保存中...' })
 	try {
-		await healthStore.saveUserProfile()
+		const saveResult = await healthStore.saveUserProfile()
+		if (!saveResult || !saveResult.ok) {
+			// 本机持久化失败：停留在建档页，已填内容保留
+			uni.hideLoading()
+			uni.showToast({ title: '本地保存失败，内容已保留，请重试', icon: 'none', duration: 2500 })
+			return
+		}
 		await healthStore.initCheckupSchedules()
 		// Persist expected_due_date to cloud (D1 database)
-		await healthStore.syncProfileToCloud()
+		const cloudOk = await healthStore.syncProfileToCloud()
 		uni.hideLoading()
+		if (!cloudOk && isRealAuthed()) {
+			// 本机已保存成功；云端同步失败如实提示，不阻塞进入应用
+			uni.showToast({ title: '已保存到本机，云端同步失败，可稍后重试', icon: 'none', duration: 2500 })
+		}
 		uni.reLaunch({ url: '/pages/index/index' })
 	} catch (e) {
 		uni.hideLoading()

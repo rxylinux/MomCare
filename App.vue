@@ -1,6 +1,9 @@
 <script>
 	import { useHealthStore } from '@/stores/health.js'
-	import { isLoggedIn } from '@/utils/api.js'
+	import { isRealAuthed } from '@/utils/api.js'
+
+	// 跨日/回前台刷新 today：孕周等依赖日期的计算随 ref 更新
+	let dayClockTimer = null
 
 	export default {
 		globalData: {
@@ -11,13 +14,16 @@
 		onLaunch: function() {
 			console.log('MomCare Launch')
 
-			// 游客自动登录
+			// 初始化本地数据（正式模式不注入演示数据，不自动生成身份）
 			try {
 				const healthStore = useHealthStore()
-				healthStore.silentLogin()
+				healthStore.initializeApp()
 			} catch (e) {
-				console.warn('自动登录失败:', e)
+				console.warn('初始化失败:', e)
 			}
+
+			// 启动跨日时钟：每分钟检查一次日期变化
+			this.startDayClock()
 
 			try {
 				// 使用新 API 获取窗口信息（替代已废弃的 getSystemInfoSync）
@@ -51,8 +57,16 @@
 		onShow: function() {
 			console.log('MomCare Show')
 
-			// Silent cloud sync: if user has a valid token, pull latest data
-			if (isLoggedIn()) {
+			// 回前台重新计算真实经过时间（含跨日）
+			try {
+				const healthStore = useHealthStore()
+				healthStore.refreshToday()
+			} catch (e) {
+				console.warn('refreshToday failed:', e)
+			}
+
+			// 云同步仅对真实认证身份执行；失败保留本地数据，不伪成功
+			if (isRealAuthed()) {
 				try {
 					const healthStore = useHealthStore()
 					healthStore.syncCloudData().catch(e => {
@@ -65,6 +79,25 @@
 		},
 		onHide: function() {
 			console.log('MomCare Hide')
+		},
+		methods: {
+			startDayClock() {
+				if (dayClockTimer) clearInterval(dayClockTimer)
+				dayClockTimer = setInterval(() => {
+					try {
+						const healthStore = useHealthStore()
+						const now = new Date()
+						const sameDay = healthStore.today.getFullYear() === now.getFullYear() &&
+							healthStore.today.getMonth() === now.getMonth() &&
+							healthStore.today.getDate() === now.getDate()
+						if (!sameDay) {
+							healthStore.refreshToday(now)
+						}
+					} catch (e) {
+						// 时钟失败不影响其他功能
+					}
+				}, 60000)
+			}
 		}
 	}
 </script>

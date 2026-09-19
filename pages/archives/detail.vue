@@ -354,7 +354,7 @@ async function saveEdit() {
   const typeInfo = getTypeInfo(editForm.value.report_type)
   uni.showLoading({ title: '保存中…' })
   try {
-    await reportStore.updateReport(reportId.value, {
+    const result = await reportStore.updateReport(reportId.value, {
       report_type: editForm.value.report_type,
       report_name: typeInfo.label,
       report_date: editForm.value.report_date,
@@ -362,10 +362,20 @@ async function saveEdit() {
       hospital: editForm.value.hospital,
       notes: editForm.value.notes
     })
+    uni.hideLoading()
+    if (!result || !result.ok) {
+      // 失败保留编辑表单内容，用户可重试
+      uni.showToast({ title: (result && result.message) || '保存失败，请重试', icon: 'none', duration: 2500 })
+      return
+    }
+    if (result.persisted === false) {
+      // 云端/本地已更新但本机缓存写失败：如实说明，保留编辑态
+      uni.showToast({ title: result.message || '云端已保存，但本机缓存写入失败', icon: 'none', duration: 3000 })
+      return
+    }
     await loadReport()
     isEditing.value = false
-    uni.hideLoading()
-    uni.showToast({ title: '已保存', icon: 'none' })
+    uni.showToast({ title: result.pendingSync ? '已保存到本机，联网后同步' : '已保存', icon: 'none', duration: 2000 })
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: e.message || '保存失败，请重试', icon: 'none' })
@@ -594,10 +604,15 @@ async function doDelete() {
   showDeleteConfirm.value = false
   uni.showLoading({ title: '删除中…' })
   try {
-    await reportStore.deleteReport(reportId.value)
+    const result = await reportStore.deleteReport(reportId.value)
     uni.hideLoading()
-    uni.showToast({ title: '已删除', icon: 'none' })
-    setTimeout(() => uni.navigateBack(), 1000)
+    if (result && result.ok && result.persisted !== false) {
+      uni.showToast({ title: '已删除', icon: 'none' })
+      setTimeout(() => uni.navigateBack(), 1000)
+    } else {
+      // 云端未确认删除或本机写入失败：不显示删除成功
+      uni.showToast({ title: (result && result.message) || '删除失败，请重试', icon: 'none', duration: 2500 })
+    }
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: e.message || '删除失败，请重试', icon: 'none' })

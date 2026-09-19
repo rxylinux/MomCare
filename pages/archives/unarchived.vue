@@ -170,10 +170,14 @@ async function doBatchArchive() {
   const ids = reportStore.unarchivedReports.map(r => r._id)
   uni.showLoading({ title: '归档中…' })
   try {
-    await reportStore.batchArchive(ids)
+    const result = await reportStore.batchArchive(ids)
     await reportStore.syncReportsFromCloud()
     uni.hideLoading()
-    uni.showToast({ title: '全部归档成功', icon: 'none' })
+    if (result && result.failed && result.failed.length > 0) {
+      uni.showToast({ title: `部分归档失败：${result.failed.length} 份，请重试`, icon: 'none', duration: 2500 })
+      return
+    }
+    uni.showToast({ title: result && result.pending ? '全部归档成功，部分待同步' : '全部归档成功', icon: 'none' })
     setTimeout(() => uni.navigateBack(), 1500)
   } catch (e) {
     uni.hideLoading()
@@ -190,10 +194,16 @@ async function doDelete() {
   showDeleteConfirm.value = false
   uni.showLoading({ title: '删除中…' })
   try {
-    await reportStore.deleteReport(deleteTargetId.value)
-    await reportStore.syncReportsFromCloud()
-    uni.hideLoading()
-    uni.showToast({ title: '已删除', icon: 'none' })
+    const result = await reportStore.deleteReport(deleteTargetId.value)
+    if (result && result.ok && result.persisted !== false) {
+      await reportStore.syncReportsFromCloud()
+      uni.hideLoading()
+      uni.showToast({ title: '已删除', icon: 'none' })
+    } else {
+      uni.hideLoading()
+      // 云端未确认删除或本机写入失败：本地保留/如实提示，不显示删除成功
+      uni.showToast({ title: (result && result.message) || '删除失败，请重试', icon: 'none', duration: 2500 })
+    }
   } catch (e) {
     uni.hideLoading()
     uni.showToast({ title: e.message || '删除失败，请重试', icon: 'none' })

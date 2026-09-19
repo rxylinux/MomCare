@@ -237,8 +237,8 @@ function handleSave() {
 			result.plans = formData.value.plans
 			break
 	}
+	// 只上报保存内容；是否关闭弹层由父页面根据持久化结果决定（失败保留输入）
 	emit('save', result)
-	emit('update:visible', false)
 }
 </script>
 

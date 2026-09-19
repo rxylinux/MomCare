@@ -17,5 +17,14 @@
     }
   },
   "app-plus": {},
-  "mp-weixin": {}
+  "mp-weixin": {
+    "appid": "touristappid",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "postcss": true,
+      "minified": true
+    },
+    "usingComponents": true
+  }
 }

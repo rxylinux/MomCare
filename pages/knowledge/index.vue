@@ -243,8 +243,12 @@ const feedList = computed(() => {
 				})
 				if (res.statusCode === 200 && res.data && res.data.code === 0) {
 					allArticles.value = res.data.data || []
-					// Cache to localStorage for detail page use
-					uni.setStorageSync('cached_articles', JSON.stringify(allArticles.value))
+					// Cache to localStorage for detail page use（缓存写失败不掩盖已加载的数据）
+					try {
+						uni.setStorageSync('cached_articles', JSON.stringify(allArticles.value))
+					} catch (cacheErr) {
+						console.warn('cached_articles write failed:', cacheErr)
+					}
 				}
 			}
 

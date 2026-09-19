@@ -89,8 +89,13 @@ async function handleConfirm() {
 		// 更新 store
 		healthStore.userInfo.nickname = nickname.value.trim()
 
-		// 保存到云端
-		await healthStore.saveUserProfile()
+		// 保存到本机
+		const saveResult = await healthStore.saveUserProfile()
+		if (!saveResult || !saveResult.ok) {
+			loading.value = false
+			uni.showToast({ title: '本地保存失败，请重试', icon: 'none', duration: 2500 })
+			return
+		}
 
 		loading.value = false
 		emit('update:visible', false)
