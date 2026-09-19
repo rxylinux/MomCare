@@ -191,7 +191,7 @@
 <script setup>
 import { ref, computed, reactive } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
-import { isRealAuthed } from '@/utils/api.js'
+import { legacyHttpEnabled } from '@/utils/backendGate.js'
 
 const healthStore = useHealthStore()
 
@@ -311,12 +311,13 @@ async function nextStep() {
 			return
 		}
 		await healthStore.initCheckupSchedules()
-		// Persist expected_due_date to cloud (D1 database)
-		const cloudOk = await healthStore.syncProfileToCloud()
 		uni.hideLoading()
-		if (!cloudOk && isRealAuthed()) {
-			// 本机已保存成功；云端同步失败如实提示，不阻塞进入应用
-			uni.showToast({ title: '已保存到本机，云端同步失败，可稍后重试', icon: 'none', duration: 2500 })
+		// B1：旧云同步停用；档案仅存本机（新共享数据源在家庭共享页）
+		if (legacyHttpEnabled() && isRealAuthed()) {
+			const cloudOk = await healthStore.syncProfileToCloud()
+			if (!cloudOk) {
+				uni.showToast({ title: '已保存到本机，云端同步失败，可稍后重试', icon: 'none', duration: 2500 })
+			}
 		}
 		uni.reLaunch({ url: '/pages/index/index' })
 	} catch (e) {

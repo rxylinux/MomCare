@@ -157,14 +157,22 @@
 				"backgroundColor": "#FBF7F2"
 			}
 		},
-		{
-			"path": "pages/profile/privacy",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"backgroundColor": "#FBF7F2"
-			}
-		},
+			{
+				"path": "pages/profile/privacy",
+				"style": {
+					"navigationStyle": "custom",
+					"navigationBarTextStyle": "black",
+					"backgroundColor": "#FBF7F2"
+				}
+			},
+			{
+				"path": "pages/family/index",
+				"style": {
+					"navigationStyle": "custom",
+					"navigationBarTextStyle": "black",
+					"backgroundColor": "#FBF7F2"
+				}
+			},
 		{
 			"path": "pages/profile/about",
 			"style": {

@@ -205,47 +205,33 @@ function goBack() {
 }
 
 // ── Fetch article by ID ──
-onLoad(async (options) => {
+// B1/R2：旧文章接口已集中停用（request 层 fail closed）；本地缓存可用则展示，
+// 否则如实说明内容服务未接入，不发起旧 HTTP 请求
+async function loadArticleById(options) {
 	if (!options || !options.id) {
 		error.value = '缺少文章ID'
 		loading.value = false
 		return
 	}
-
-	try {
-		// Try API first
-		const res = await request({
-			url: '/api/articles/' + options.id,
-			method: 'GET',
-		})
-		if (res.statusCode === 200 && res.data && res.data.code === 0) {
-			article.value = res.data.data
-		} else {
-			// Fallback to cached articles
-			const cached = uni.getStorageSync('cached_articles')
-			if (cached) {
-				const found = JSON.parse(cached).find(a => a.id === options.id || a._id === options.id)
-				if (found) {
-					article.value = found
-				} else {
-					error.value = '文章不存在'
-				}
-			} else {
-				error.value = '暂无文章数据'
-			}
-		}
-	} catch (e) {
-		console.error('fetchArticle error:', e)
-		// Fallback to cached articles on network error
-		const cached = uni.getStorageSync('cached_articles')
-		if (cached) {
+	const cached = uni.getStorageSync('cached_articles')
+	if (cached) {
+		try {
 			const found = JSON.parse(cached).find(a => a.id === options.id || a._id === options.id)
-			if (found) article.value = found
+			if (found) {
+				article.value = found
+				loading.value = false
+				return
+			}
+		} catch (e) {
+			console.warn('cached_articles parse failed:', e)
 		}
-		if (!article.value) error.value = '加载失败，请重试'
-	} finally {
-		loading.value = false
 	}
+	error.value = '内容服务尚未接入新云环境（阶段 B 配置后启用），且本机无该文章缓存'
+	loading.value = false
+}
+
+onLoad(async (options) => {
+	await loadArticleById(options)
 })
 </script>
 

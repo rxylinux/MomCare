@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
 import { request, API_BASE, getToken, isRealAuthed, isGuestMode } from '@/utils/api.js'
-import { reportsStorageKey, isDemoMode } from '@/utils/storage.js'
+import { reportsStorageKey, isDemoMode, FORMAL_REPORTS_KEY } from '@/utils/storage.js'
+import { legacyFormalStoresEnabled, formalStoresQuarantineMessage, legacyHttpEnabled, legacyDisabledMessage } from '@/utils/backendGate.js'
 
 // 报告类型映射
 export const REPORT_TYPES = [
@@ -69,11 +70,15 @@ function mapChineseTypeToKey(chineseType) {
   return ''
 }
 
+// 旧正式键隔离（R2）：非演示模式下 YUNTU_REPORTS_DATA 读取返回空、写入拒绝，
+// 数据保留磁盘待 B3 迁移
 function _loadStorage() {
   const key = reportsStorageKey()
   if (!key) {
-    // 模式未知（读取报错）：拒绝读取，防止读错命名空间
     console.error('_loadStorage: storage mode unknown, refuse to read')
+    return null
+  }
+  if (!legacyFormalStoresEnabled() && key === FORMAL_REPORTS_KEY) {
     return null
   }
   try {
@@ -91,6 +96,10 @@ function _saveStorage(data) {
   const key = reportsStorageKey()
   if (!key) {
     console.error('_saveStorage: storage mode unknown, refuse to write')
+    return false
+  }
+  if (!legacyFormalStoresEnabled() && key === FORMAL_REPORTS_KEY) {
+    console.warn('_saveStorage: formal key quarantined until B3 migration')
     return false
   }
   try {
@@ -172,7 +181,11 @@ export const useReportStore = defineStore('report', () => {
       reports: reports.value,
       unarchivedReports: unarchivedReports.value
     })
-    lastPersistError.value = ok ? '' : '本地保存失败：存储空间不足或不可写，数据暂保留在内存中'
+    if (!ok && !legacyFormalStoresEnabled() && !isDemoMode()) {
+      lastPersistError.value = formalStoresQuarantineMessage()
+    } else {
+      lastPersistError.value = ok ? '' : '本地保存失败：存储空间不足或不可写，数据暂保留在内存中'
+    }
     return ok
   }
 
@@ -779,6 +792,13 @@ function _markUnverifiedOnRead(list) {
   async function uploadAndCreateReport(data) {
     if (!data.report_type || !data.report_date) {
       uni.showToast({ title: '请选择报告类型和日期', icon: 'none' })
+      return null
+    }
+
+    // 集中边界门（R2）：旧二进制上传与 request() 同属旧 Cloudflare 正式路径，
+    // 未开启旧 HTTP 时 fail closed——不得绕过 utils/api 的集中关闭直连 workers.dev
+    if (!legacyHttpEnabled()) {
+      uni.showToast({ title: legacyDisabledMessage(), icon: 'none', duration: 2500 })
       return null
     }
 

@@ -1,0 +1,322 @@
+// 家庭身份会话与成员隔离缓存（B1）。
+// 规则：
+// - 冷启动：身份未确认（unconfirmed）前不加载任何成员缓存（含私人内容）
+// - 明确拒绝（非成员/错 AppID）→ 立即锁定（rejected），后续调用短路
+// - 已验证会话内可离线暂存草稿；草稿按成员命名空间保存，退出/切换不删除、
+//   也不展示给下一个身份
+// - 会话纪元（epoch）：身份确认/退出/切换时递增；携带旧纪元的异步响应一律
+//   丢弃，不得写入新身份的缓存
+// - 缓存键按 env/AppID/member/schema 隔离；缓存键不是身份验证
+
+import { callCloudFunction, cloudRuntimeState } from '@/services/cloudAdapter.js'
+import { CLOUD_CONFIG } from '@/utils/cloudConfig.js'
+
+const SCHEMA = 'b1'
+const SESSION_KEY_PREFIX = 'mc_session'
+const CACHE_PREFIX = 'mc_cache'
+const DRAFT_PREFIX = 'mc_draft'
+
+// 可信身份拒绝（锁定）与暂时性失败（不锁定）必须区分：
+// - 拒绝 = 服务端明确说"你不是本家庭成员/上下文非法/未配置" → 立即锁定
+// - 暂时 = 网络/函数不可用/返回异常 → 保持未确认，可重试；冷启动离线不放行缓存
+const IDENTITY_REFUSAL_CODES = [
+  'not-family-member', 'wrong-appid', 'unauthenticated', 'not-configured'
+]
+const TRANSIENT_CODES = ['cloud-call-failed', 'malformed-result', 'init-failed', 'stale-session']
+
+function isIdentityRefusal(code) {
+  return IDENTITY_REFUSAL_CODES.includes(code)
+}
+
+const state = {
+  status: 'unconfirmed', // unconfirmed | confirmed | rejected | unavailable | not-configured
+  member: null,          // { memberId, displayName, familyId }
+  rejectCode: '',
+  epoch: 0,
+  confirming: false      // 身份确认在途：期间限制业务请求与成员缓存访问
+}
+
+function sessionKey() {
+  return `${SESSION_KEY_PREFIX}_${CLOUD_CONFIG.envId}_${CLOUD_CONFIG.appId}`
+}
+
+function namespaced(prefix, schema, key) {
+  return `${prefix}_${CLOUD_CONFIG.envId}_${CLOUD_CONFIG.appId}_${state.member ? state.member.memberId : 'anon'}_${schema}_${key}`
+}
+
+export function getSessionState() {
+  return {
+    status: state.status,
+    member: state.member ? { ...state.member } : null,
+    rejectCode: state.rejectCode,
+    epoch: state.epoch
+  }
+}
+
+export function currentEpoch() {
+  return state.epoch
+}
+
+// 冷启动：只报告是否存在已持久化的"已确认"会话记录；未联网确认前不使用它加载缓存
+export function persistedSessionExists() {
+  if (cloudRuntimeState() === 'not-configured') return false
+  try {
+    return Boolean(uni.getStorageSync(sessionKey()))
+  } catch (e) {
+    return false
+  }
+}
+
+// 联网确认身份（冷启动/手动刷新共用）。拒绝即锁定，不自动重试；
+// 暂时性网络失败不锁定（保持未确认、不放行缓存）。
+// 每次确认尝试都推进纪元：确认期间/结果更换身份 → 此前的在途请求全部失效。
+export async function confirmIdentity() {
+  const runtime = cloudRuntimeState()
+  if (runtime === 'not-configured') {
+    state.status = 'not-configured'
+    return { ok: false, code: 'not-configured' }
+  }
+  if (runtime === 'unavailable-platform') {
+    state.status = 'unavailable'
+    return { ok: false, code: 'unavailable-platform' }
+  }
+  if (state.status === 'rejected') {
+    return { ok: false, code: state.rejectCode || 'rejected', locked: true }
+  }
+  state.epoch += 1 // 使在途旧请求失效（含上一次确认的迟到响应）
+  const epochAtStart = state.epoch
+  state.confirming = true
+  let res
+  try {
+    res = await callCloudFunction('mc-identity', { action: 'whoami' })
+  } finally {
+    state.confirming = false
+  }
+  if (state.epoch !== epochAtStart) {
+    return { ok: false, code: 'stale-session' }
+  }
+  if (!res.ok) {
+    if (isIdentityRefusal(res.code)) {
+      state.epoch += 1 // 使确认期间发出的业务请求全部失效
+      state.status = 'rejected'
+      state.rejectCode = res.code
+      state.member = null
+      try { uni.removeStorageSync(sessionKey()) } catch (e) { /* 忽略 */ }
+      return { ok: false, code: res.code, locked: true }
+    }
+    // 暂时性失败：不改变既有状态——已确认会话保持可离线使用，未确认保持未确认
+    return { ok: false, code: res.code, transient: true }
+  }
+  state.epoch += 1 // 确认落地同样推进纪元：确认在途的旧成员业务请求全部失效
+  state.status = 'confirmed'
+  state.member = res.data
+  state.rejectCode = ''
+  try {
+    uni.setStorageSync(sessionKey(), JSON.stringify({ ...res.data, confirmedAt: Date.now() }))
+  } catch (e) {
+    // 会话标记写失败不影响本次已确认状态；下次冷启动需重新联网确认
+  }
+  return { ok: true, member: { ...res.data } }
+}
+
+// 设置期自取 OpenID（受控通道）：返回调用者自己的 OpenID
+export async function fetchMyOpenid() {
+  const res = await callCloudFunction('mc-identity', { action: 'my-openid' })
+  return res
+}
+
+// 退出/切换身份：清会话标记与内存态；成员缓存数据与草稿保留在各自命名空间，
+// 不删除（未同步草稿不静默丢失）、不展示给下一个身份
+export function endSession() {
+  state.epoch += 1
+  state.status = 'unconfirmed'
+  state.member = null
+  state.rejectCode = ''
+  try { uni.removeStorageSync(sessionKey()) } catch (e) { /* 忽略 */ }
+}
+
+// ── 成员缓存（确认后可用）──
+
+export function getMemberCache(key) {
+  if (state.status !== 'confirmed' || !state.member || state.confirming) return null
+  try {
+    const raw = uni.getStorageSync(namespaced(CACHE_PREFIX, SCHEMA, key))
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+export function setMemberCache(key, value, epochAtWrite) {
+  if (state.status !== 'confirmed' || !state.member || state.confirming) return false
+  if (epochAtWrite !== undefined && epochAtWrite !== state.epoch) return false
+  try {
+    uni.setStorageSync(namespaced(CACHE_PREFIX, SCHEMA, key), JSON.stringify(value))
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// ── 离线草稿（按当前已确认成员命名空间；退出不清除）──
+// 生产 API 不接受任意 memberId：只能为"当前已确认身份"暂存/读取/清除，
+// 未确认身份一律拒绝——不依赖调用者自觉维持边界。
+
+function draftKeyForMember(memberId) {
+  return `${DRAFT_PREFIX}_${CLOUD_CONFIG.envId}_${CLOUD_CONFIG.appId}_${memberId}_${SCHEMA}`
+}
+
+// 合并式暂存：只更新本次提交的字段，保留草稿中其他未同步字段
+// （如共享保存不应清掉草稿里尚未同步的私人笔记，反之亦然）
+export function mergeDraft(partial) {
+  if (state.status !== 'confirmed' || !state.member) return false
+  const key = draftKeyForMember(state.member.memberId)
+  try {
+    const raw = uni.getStorageSync(key)
+    const existing = raw ? JSON.parse(raw) : {}
+    const merged = { ...existing, ...partial, stashedAt: Date.now() }
+    // 去掉空串字段，避免空值覆盖既有草稿内容
+    for (const k of Object.keys(merged)) {
+      if (merged[k] === '' || merged[k] === undefined) delete merged[k]
+    }
+    if (Object.keys(merged).filter(k => k !== 'stashedAt').length === 0) return true
+    uni.setStorageSync(key, JSON.stringify(merged))
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+export function stashDraft(draft) {
+  if (state.status !== 'confirmed' || !state.member) return false
+  try {
+    uni.setStorageSync(draftKeyForMember(state.member.memberId), JSON.stringify({ ...draft, stashedAt: Date.now() }))
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+export function pendingDrafts() {
+  if (state.status !== 'confirmed' || !state.member) return null
+  try {
+    const raw = uni.getStorageSync(draftKeyForMember(state.member.memberId))
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+export function clearDraft() {
+  if (state.status !== 'confirmed' || !state.member) return false
+  try {
+    uni.removeStorageSync(draftKeyForMember(state.member.memberId))
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// 分字段清除草稿：保存共享体重只清 weightKg，保留尚未同步的私人笔记（反之亦然）；
+// 全部字段清空后删除草稿键，避免旧草稿之后覆盖新内容
+export function clearDraftFields(...fields) {
+  if (state.status !== 'confirmed' || !state.member) return false
+  const key = draftKeyForMember(state.member.memberId)
+  try {
+    const raw = uni.getStorageSync(key)
+    if (!raw) return true
+    const draft = JSON.parse(raw)
+    for (const f of fields) delete draft[f]
+    delete draft.stashedAt
+    const rest = Object.keys(draft).filter(k => draft[k] !== undefined && draft[k] !== '')
+    if (rest.length === 0) {
+      uni.removeStorageSync(key)
+    } else {
+      uni.setStorageSync(key, JSON.stringify(draft))
+    }
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// ── 待上传文件状态（按当前确认成员持久化；CLOUDBASE_PLAN 4.1）──
+// 重试必须继续同一待办文件；换新图是显式新操作（先丢弃待办）。
+// 保存失败必须如实返回 false，页面不得显示"已暂存"。
+
+function pendingUploadKeyForMember(memberId) {
+  return `mc_pending_upload_${CLOUD_CONFIG.envId}_${CLOUD_CONFIG.appId}_${memberId}_${SCHEMA}`
+}
+
+export function savePendingUpload(pending) {
+  if (state.status !== 'confirmed' || !state.member) return false
+  try {
+    uni.setStorageSync(pendingUploadKeyForMember(state.member.memberId), JSON.stringify({ ...pending, savedAt: Date.now() }))
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+export function getPendingUpload() {
+  if (state.status !== 'confirmed' || !state.member) return null
+  try {
+    const raw = uni.getStorageSync(pendingUploadKeyForMember(state.member.memberId))
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+export function clearPendingUpload() {
+  if (state.status !== 'confirmed' || !state.member) return false
+  try {
+    uni.removeStorageSync(pendingUploadKeyForMember(state.member.memberId))
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// ── 云函数调用包装：纪元守卫 + 业务身份拒绝即锁定 ──
+
+export async function familyCall(name, data) {
+  if (state.confirming) {
+    // 确认在途：旧成员身份的业务请求不得跨越身份变更窗口
+    return { ok: false, code: 'confirming', message: '身份确认进行中，请稍候' }
+  }
+  if (state.status !== 'confirmed' || !state.member) {
+    return { ok: false, code: 'unauthenticated-session', message: '身份未确认' }
+  }
+  const epochAtStart = state.epoch
+  const res = await callCloudFunction(name, data)
+  if (state.epoch !== epochAtStart) {
+    return { ok: false, code: 'stale-session', message: '会话已切换，响应已丢弃' }
+  }
+  // 业务函数返回可信身份拒绝（伪造/第三成员/白名单变化）→ 立即锁定会话
+  if (!res.ok && isIdentityRefusal(res.code)) {
+    state.epoch += 1
+    state.status = 'rejected'
+    state.rejectCode = res.code
+    state.member = null
+    try { uni.removeStorageSync(sessionKey()) } catch (e) { /* 忽略 */ }
+    return { ok: false, code: res.code, locked: true, message: '身份被服务端拒绝，会话已锁定' }
+  }
+  return res
+}
+
+// 测试辅助：直接注入已确认状态（不经网络）
+export function __adoptSessionForTests(member) {
+  state.status = 'confirmed'
+  state.member = member
+  state.rejectCode = ''
+  state.epoch += 1
+}
+
+export function __resetForTests() {
+  state.status = 'unconfirmed'
+  state.member = null
+  state.rejectCode = ''
+  state.epoch = 0
+  state.confirming = false
+}

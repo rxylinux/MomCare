@@ -109,6 +109,7 @@ import { ref, computed, reactive } from 'vue'
 import { useHealthStore, getTrimesterName } from '@/stores/health.js'
 import { navigateToPage } from '@/utils/navigation.js'
 import { removeToken } from '@/utils/api.js'
+import { endSession } from '@/services/sessionService.js'
 import ProfileHero from '@/components/profile/ProfileHero.vue'
 import DueCountdownRing from '@/components/common/DueCountdownRing.vue'
 import ProfileSection from '@/components/profile/ProfileSection.vue'
@@ -118,12 +119,14 @@ const healthStore = useHealthStore()
 const showLogoutModal = ref(false)
 
 function confirmLogout() {
-	// 真实退出：清除会话与身份标记；本地数据保留（删除属于危险操作，见隐私页）
+	// 真实退出：清除会话与身份标记（含云身份会话）；本地数据保留（删除属危险操作，见隐私页）
 	const ok = healthStore.exitSession()
 	if (!ok) {
 		uni.showToast({ title: '退出失败：本地模式切换未生效，请重试', icon: 'none', duration: 2500 })
 		return
 	}
+	// 云身份会话同步失效（实际退出按钮必须让新会话边界立即生效）
+	endSession()
 	removeToken()
 	showLogoutModal.value = false
 	uni.reLaunch({ url: '/pages/login/index' })
@@ -333,23 +336,30 @@ const todoItems = computed(() => {
 })
 
 // 设置（含开关状态）
-const settingItems = reactive([
-		// 每日推送提醒、产检提醒、胎动记录提醒、隐私与数据 — 暂时隐藏，功能开发中
-		{
-			icon: 'ℹ️',
-			iconBg: '#F2F0EE',
-			title: '关于孕途伴侣',
-			subtitle: '版本 v1.0.0',
-			action: 'about'
-		},
-		{
-			icon: '🚪',
-			iconBg: '#F2F0EE',
-			title: '退出登录',
-			subtitle: '',
-			action: 'logout'
-		}
-	])
+	const settingItems = reactive([
+			{
+				icon: '👨‍👩‍👧',
+				iconBg: '#FDEEF1',
+				title: '家庭共享（云）',
+				subtitle: '两人共享记录 / 本人私人笔记（阶段 B 新入口）',
+				action: 'family'
+			},
+			// 每日推送提醒、产检提醒、胎动记录提醒、隐私与数据 — 暂时隐藏，功能开发中
+			{
+				icon: 'ℹ️',
+				iconBg: '#F2F0EE',
+				title: '关于孕途伴侣',
+				subtitle: '版本 v1.0.0',
+				action: 'about'
+			},
+			{
+				icon: '🚪',
+				iconBg: '#F2F0EE',
+				title: '退出登录',
+				subtitle: '',
+				action: 'logout'
+			}
+		])
 
 function handlePregInfoTap(item) {
 	navigateToPage('/pages/profile/pregnancy-info')
@@ -390,13 +400,14 @@ function handleTodoTap(item) {
 }
 
 function handleSettingTap(item) {
-		if (item.action === 'logout') {
-			showLogoutModal.value = true
-			return
-		}
+	if (item.action === 'logout') {
+		showLogoutModal.value = true
+		return
+	}
 
 	const routes = {
 		privacy: '/pages/profile/privacy',
+		family: '/pages/family/index',
 		about: '/pages/profile/about'
 	}
 	if (routes[item.action]) {

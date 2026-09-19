@@ -7,6 +7,7 @@ import {
   createFormalBackups, FORMAL_HEALTH_KEY, FORMAL_REPORTS_KEY,
   DEMO_HEALTH_KEY, DEMO_REPORTS_KEY
 } from '@/utils/storage.js'
+import { legacyFormalStoresEnabled, formalStoresQuarantineMessage } from '@/utils/backendGate.js'
 
 // 孕期计算工具函数
 export function calcPregDay(lmpDate, targetDate) {
@@ -179,11 +180,15 @@ export function getFruitComparison(week) {
 
 const AI_INTERPRET_DAILY_LIMIT = 5
 
+// 旧正式键隔离（R2）：非演示模式下 YUNTU_HEALTH_DATA 读取返回空、写入拒绝，
+// 数据保留磁盘待 B3 迁移；演示键与成员缓存不受影响
 function _loadStorage() {
 	const key = healthStorageKey()
 	if (!key) {
-		// 模式未知（读取报错）：拒绝读取，防止读错命名空间
 		console.error('_loadStorage: storage mode unknown, refuse to read')
+		return null
+	}
+	if (!legacyFormalStoresEnabled() && key === FORMAL_HEALTH_KEY) {
 		return null
 	}
 	try {
@@ -201,6 +206,10 @@ function _saveStorage(data) {
 	const key = healthStorageKey()
 	if (!key) {
 		console.error('_saveStorage: storage mode unknown, refuse to write')
+		return false
+	}
+	if (!legacyFormalStoresEnabled() && key === FORMAL_HEALTH_KEY) {
+		console.warn('_saveStorage: formal key quarantined until B3 migration')
 		return false
 	}
 	try {
@@ -332,7 +341,11 @@ export const useHealthStore = defineStore('health', () => {
 			openid: openid.value,
 			aiInterpretUsage: { ...aiInterpretUsage.value }
 		})
-		lastPersistError.value = ok ? '' : '本地保存失败：存储空间不足或不可写，数据暂保留在内存中'
+		if (!ok && !legacyFormalStoresEnabled() && dataMode.value !== 'demo') {
+			lastPersistError.value = formalStoresQuarantineMessage()
+		} else {
+			lastPersistError.value = ok ? '' : '本地保存失败：存储空间不足或不可写，数据暂保留在内存中'
+		}
 		return ok
 	}
 

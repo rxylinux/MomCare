@@ -102,8 +102,6 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { request, setToken } from '@/utils/api.js'
-import { useHealthStore } from '@/stores/health.js'
 
 const statusBarHeight = ref(0)
 const app = getApp()
@@ -135,54 +133,12 @@ function onDueDateChange(e) {
 
 async function handleRegister() {
 	if (!canRegister.value) return
-
-	uni.showLoading({ title: '注册中...' })
-	try {
-		const res = await request({
-			url: '/api/register',
-			method: 'POST',
-			data: {
-				phone: phone.value,
-				password: password.value,
-				expected_due_date: dueDate.value || undefined,
-			},
-			skipAuthRedirect: true,
-		})
-
-		uni.hideLoading()
-
-		if (res.data && res.data.code === 0 && res.data.data && res.data.data.token) {
-			const { token, user } = res.data.data
-			setToken(token)
-			try {
-				uni.setStorageSync('momcare_user', JSON.stringify(user))
-			} catch (cacheErr) {
-				console.warn('momcare_user cache write failed:', cacheErr)
-			}
-
-			const healthStore = useHealthStore()
-			if (!healthStore.afterRealLogin()) {
-				uni.showToast({ title: '进入正式模式失败，请重试', icon: 'none', duration: 2500 })
-				return
-			}
-			await healthStore.syncCloudData()
-
-			uni.showToast({ title: '注册成功', icon: 'success' })
-			setTimeout(() => {
-				if (healthStore.dueDate || healthStore.lmpDate) {
-					uni.switchTab({ url: '/pages/index/index' })
-				} else {
-					uni.redirectTo({ url: '/pages/profile/onboarding' })
-				}
-			}, 800)
-		} else {
-			uni.showToast({ title: (res.data && res.data.msg) || '注册失败', icon: 'none' })
-		}
-	} catch (e) {
-		uni.hideLoading()
-		const offline = e && e.networkError
-		uni.showToast({ title: offline ? '网络不可用，请检查网络后重试' : '注册失败，请重试', icon: 'none', duration: 2500 })
-	}
+	// B1：旧注册后端已停用；不发起旧 HTTP 请求、不伪造成功
+	uni.showToast({
+		title: '注册尚未接入新云环境（阶段 B 配置后启用）',
+		icon: 'none',
+		duration: 3000
+	})
 }
 
 function goBack() {

@@ -91,6 +91,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { navigateToPage } from '@/utils/navigation.js'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, getTypeInfo } from '@/stores/report'
+import { legacyHttpEnabled } from '@/utils/backendGate.js'
 
 const reportStore = useReportStore()
 const loading = ref(true)
@@ -106,11 +107,15 @@ const allRecognized = computed(() => {
 
 onShow(async () => {
   loading.value = true
-  try {
-    await reportStore.syncReportsFromCloud()
-  } catch (e) {
-    console.error('Failed to sync reports from cloud:', e)
-    // Fall back to local storage if cloud sync fails
+  // B1：旧云同步停用，直接使用本地数据（新数据源在家庭共享页）
+  if (legacyHttpEnabled()) {
+    try {
+      await reportStore.syncReportsFromCloud()
+    } catch (e) {
+      console.error('Failed to sync reports from cloud:', e)
+      await reportStore.fetchUnarchivedReports()
+    }
+  } else {
     await reportStore.fetchUnarchivedReports()
   }
   loading.value = false

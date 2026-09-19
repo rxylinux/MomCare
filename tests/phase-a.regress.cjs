@@ -14,13 +14,19 @@ esbuild.buildSync({
     contents: `export { createPinia, setActivePinia } from 'pinia';
       export * from './stores/health.js'; export * from './stores/report.js';
       export * from './stores/staticData.js';
-      export * from './utils/api.js'; export * from './utils/storage.js';`,
+      export * from './utils/api.js'; export * from './utils/storage.js';
+      export * from './utils/backendGate.js';`,
     resolveDir: root,
   },
   bundle: true, platform: 'node', format: 'cjs', alias: { '@': root },
   outfile: output, logLevel: 'silent',
 })
 const api = require(output)
+
+// 历史基线声明：本套件验证阶段 A 的数据安全语义（回滚/幂等/不伪成功），
+// 需显式开启已被 R2 集中关闭的旧传输与旧正式存储；生产恒为关闭（见 B1 套件）。
+api.__setLegacyHttpEnabledForTests(true)
+api.__setLegacyFormalStoresEnabledForTests(true)
 
 let passed = 0
 const failed = []
@@ -766,7 +772,7 @@ async function main() {
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
 
     w.report.pendingUpload = {
       fileUrls: ['srv://img1'], localPaths: ['local1'],
@@ -780,7 +786,7 @@ async function main() {
     const isArchiving = { value: false }
 
     w.failWrites(['YUNTU_REPORTS_DATA'])
-    const runArchive1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const runArchive1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => runArchive1())
     // 失败：不清草稿、不离开页面、失败项保留
     assert.equal(w.navigateBackCount, 0)
@@ -789,7 +795,7 @@ async function main() {
     assert.ok(w.toasts.some(t => /保存失败/.test(t)))
     // 存储恢复后重试：成功、无重复、清草稿并返回
     w.failWrites([])
-    const runArchive2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const runArchive2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => runArchive2())
     assert.equal(w.navigateBackCount, 1)
     assert.equal(w.report.pendingUpload, null)
@@ -802,7 +808,7 @@ async function main() {
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
 
     w.report.pendingUpload = {
       fileUrls: ['srv://img2'], localPaths: ['local2'],
@@ -816,14 +822,14 @@ async function main() {
     const isArchiving = { value: false }
 
     w.failWrites(['YUNTU_REPORTS_DATA'])
-    const runArchive3 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const runArchive3 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => runArchive3())
     assert.equal(w.navigateBackCount, 0)
     assert.ok(w.report.pendingUpload !== null)
     assert.equal(w.report.reports.length, 0)
 
     w.failWrites([])
-    const runArchive4 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const runArchive4 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => runArchive4())
     assert.equal(w.navigateBackCount, 1)
     assert.equal(w.report.pendingUpload, null)
@@ -837,7 +843,7 @@ async function main() {
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
 
     w.report.pendingUpload = {
       fileUrls: ['srv://a', 'srv://b'], localPaths: ['la', 'lb'],
@@ -852,7 +858,7 @@ async function main() {
 
     // 第一项成功、第二项失败：第 1 次写允许成功，之后失败
     w.failWritesAfter('YUNTU_REPORTS_DATA', 1)
-    const runArchive5 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const runArchive5 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => runArchive5())
     assert.equal(w.navigateBackCount, 0)
     assert.ok(w.report.pendingUpload !== null)
@@ -860,7 +866,7 @@ async function main() {
     assert.equal(items.value[1].createdId, undefined)
 
     w.failWrites([])
-    const runArchive6 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const runArchive6 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => runArchive6())
     assert.equal(w.navigateBackCount, 1)
     // 两项各一份，成功项未重复
@@ -1055,7 +1061,7 @@ async function main() {
     seedFormal(w)
     const parseDateText = extractPageFn('pages/archives/batch.vue', 'parseDateText', ['dateText'])()
     const confirmArchive = extractPageFn('pages/archives/batch.vue', 'confirmArchive',
-      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText'])
+      ['isArchiving', 'items', 'reportStore', 'uni', 'parseDateText', 'legacyHttpEnabled'])
 
     // 无 serverReportId 的本地图片
     w.report.pendingUpload = {
@@ -1069,14 +1075,14 @@ async function main() {
     const isArchiving = { value: false }
 
     w.failWrites(['YUNTU_REPORTS_DATA'])
-    const run1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const run1 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => run1())
     assert.equal(w.navigateBackCount, 0)
     assert.equal(w.report.reports.length, 0)
     assert.ok(items.value[0].draftId, '失败次已分配的 ID 应被记住')
 
     w.failWrites([])
-    const run2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText)
+    const run2 = confirmArchive(isArchiving, items, w.report, global.uni, parseDateText, () => false)
     await withImmediateTimers(() => run2())
     assert.equal(w.navigateBackCount, 1)
     // 恰好一份，且 ID 与失败次相同（未生成第二个 rpt ID）

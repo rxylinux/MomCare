@@ -1,6 +1,7 @@
 <script>
 	import { useHealthStore } from '@/stores/health.js'
 	import { isRealAuthed } from '@/utils/api.js'
+	import { legacyHttpEnabled } from '@/utils/backendGate.js'
 
 	// 跨日/回前台刷新 today：孕周等依赖日期的计算随 ref 更新
 	let dayClockTimer = null
@@ -65,8 +66,9 @@
 				console.warn('refreshToday failed:', e)
 			}
 
-			// 云同步仅对真实认证身份执行；失败保留本地数据，不伪成功
-			if (isRealAuthed()) {
+			// B1：旧 Cloudflare 云同步停用（正式后端切换 CloudBase，入口在家庭共享页）；
+			// 失败保留本地数据，不伪成功
+			if (legacyHttpEnabled() && isRealAuthed()) {
 				try {
 					const healthStore = useHealthStore()
 					healthStore.syncCloudData().catch(e => {

@@ -162,7 +162,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { navigateToPage } from '@/utils/navigation.js'
-	import { request } from '@/utils/api.js'
+	import { request } from '@/utils/api.js' // 传输层保留（阶段 A 回归语义）；B1 起本页不再调用
 import { useHealthStore } from '@/stores/health.js'
 import NavBar from '@/components/NavBar.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
@@ -226,6 +226,15 @@ const feedList = computed(() => {
 	}
 
 	async function fetchArticles(reset = true) {
+		// B1：旧文章接口停用（正式内容服务待阶段 B 接入），不发起旧 HTTP 请求
+		if (reset) {
+			loadError.value = '内容服务尚未接入新云环境（阶段 B 配置后启用）'
+			articleList.value = []
+		}
+		loading.value = false
+		loadingMore.value = false
+		return
+		/* eslint-disable no-unreachable */
 		if (reset) {
 			currentPage = 0
 			articleList.value = []

@@ -192,6 +192,7 @@ import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { navigateToPage } from '@/utils/navigation.js'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, REPORT_TYPES, getTypeInfo } from '@/stores/report'
+import { legacyHttpEnabled } from '@/utils/backendGate.js'
 import { useHealthStore } from '@/stores/health.js'
 
 const reportStore = useReportStore()
@@ -285,7 +286,9 @@ async function loadReport() {
   loading.value = true
   loadError.value = ''
   try {
-    await reportStore.syncReportsFromCloud()
+    if (legacyHttpEnabled()) {
+      await reportStore.syncReportsFromCloud()
+    }
     const found = reportStore.reports.find(r => r._id === reportId.value) ||
                   reportStore.unarchivedReports.find(r => r._id === reportId.value)
     if (found) {
@@ -383,6 +386,9 @@ async function saveEdit() {
 }
 
 async function onAiCardTap() {
+  // B1：AI 解读未接入新云服务（真实联调前保持未启用），不发起旧请求
+  uni.showToast({ title: 'AI 解读未启用（阶段 B 真实联调后开放）', icon: 'none', duration: 2500 })
+  return
   if (aiStatus.value === 'done') {
     navigateToPage(`/pages/archives/ai-result?id=${reportId.value}`)
   } else if (aiStatus.value === 'failed' || aiStatus.value === 'pending') {

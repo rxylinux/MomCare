@@ -1,5 +1,7 @@
 export const API_BASE = 'https://momcare-api.dpc7775223.workers.dev'
 
+import { legacyHttpEnabled, legacyDisabledMessage } from '@/utils/backendGate.js'
+
 const TOKEN_KEY = 'momcare_token'
 
 // 演示模式专用占位 token：不代表任何已认证身份，仅用于本地演示态判断
@@ -64,9 +66,17 @@ export function tokenFingerprint(token) {
 }
 
 // 网络层只负责传输结果：
+// - 集中边界门（R2）：legacyHttpEnabled()===false 时一律 fail closed 拒绝，
+//   不发起任何旧 HTTP 请求（覆盖 store 内部的同步/上传/分析与所有页面调用）
 // - 请求失败按失败传递（reject），绝不伪造成 200/业务成功
 // - 业务状态由调用方根据 statusCode 与 data.code 判断
 export function request(options = {}) {
+  if (!legacyHttpEnabled()) {
+    const err = new Error(legacyDisabledMessage())
+    err.code = 'legacy-disabled'
+    err.legacyDisabled = true
+    return Promise.reject(err)
+  }
   const token = getToken()
   const headers = {
     ...(options.header || options.headers || {})

@@ -86,6 +86,7 @@ async function handleConfirm() {
 	loading.value = true
 
 	try {
+		// B1：昵称仅保存本机（旧云同步停用；正式共享走家庭共享页）
 		// 更新 store
 		healthStore.userInfo.nickname = nickname.value.trim()
 

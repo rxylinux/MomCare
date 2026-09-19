@@ -1,0 +1,77 @@
+{
+  "collections": [
+    {
+      "name": "mc_shared_records",
+      "purpose": "家庭共享数字记录（体重/血压/胎动/共享短备注），文档 ID：familyId:type:dateKey",
+      "fields": {
+        "_id": "familyId:type:dateKey",
+        "familyId": "固定家庭标识（数据分区，非授权依据）",
+        "type": "记录类型（B1：daily）",
+        "dateKey": "YYYY-MM-DD",
+        "payload": "白名单字段：weightKg/systolic/diastolic/fetalCount/note",
+        "revision": "乐观并发版本号，每次成功写入 +1",
+        "updatedBy": "服务端生成的成员 ID（mama/papa）",
+        "updatedAt": "毫秒时间戳",
+        "lastOperationId": "最后一次写入的操作 ID（审计）"
+      },
+      "indexes": [
+        { "keys": [{ "name": "familyId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+      ]
+    },
+    {
+      "name": "mc_private_notes",
+      "purpose": "私人笔记，按成员隔离；文档 ID 内嵌 ownerId，另一成员无法命中",
+      "fields": {
+        "_id": "familyId:memberId:dateKey",
+        "familyId": "数据分区",
+        "ownerId": "服务端生成的成员 ID（仅本人可读写）",
+        "dateKey": "YYYY-MM-DD",
+        "content": "私人正文（≤2000 字）",
+        "revision": "乐观并发版本号",
+        "updatedBy": "= ownerId",
+        "updatedAt": "毫秒时间戳",
+        "lastOperationId": "操作 ID"
+      },
+      "indexes": [
+        { "keys": [{ "name": "ownerId", "direction": 1 }, { "name": "dateKey", "direction": -1 }], "unique": false }
+      ]
+    },
+    {
+      "name": "mc_operations",
+      "purpose": "操作去重（幂等）；文档 ID：memberId:operationId。存请求摘要与首次结果快照",
+      "fields": {
+        "_id": "memberId:operationId",
+        "memberId": "操作者",
+        "operationId": "客户端生成的稳定操作 ID",
+        "kind": "shared-record-upsert | private-note-upsert",
+        "requestHash": "业务参数确定性摘要；同 ID 不同摘要 → 拒绝",
+        "resultSnapshot": "首次成功结果（幂等重放用）",
+        "createdAt": "毫秒时间戳"
+      },
+      "indexes": [
+        { "keys": [{ "name": "memberId", "direction": 1 }, { "name": "createdAt", "direction": -1 }], "unique": false }
+      ]
+    },
+    {
+      "name": "mc_files",
+      "purpose": "报告文件登记（暂存→正式→登记完成）；文档 ID：memberId:uploadId",
+      "fields": {
+        "_id": "memberId:uploadId",
+        "fileId": "正式文件标识",
+        "familyId": "数据分区",
+        "uploaderId": "服务端生成的上传成员",
+        "stageFileID": "本人暂存目录 cloud fileID",
+        "formalFileID": "正式副本 cloud fileID（客户端不可写目录）",
+        "formalPath": "正式路径",
+        "contentType": "内容嗅探结果（image/jpeg|image/png）",
+        "sizeBytes": "字节数",
+        "status": "registered",
+        "createdAt": "毫秒时间戳",
+        "registeredAt": "毫秒时间戳"
+      },
+      "indexes": [
+        { "keys": [{ "name": "uploaderId", "direction": 1 }, { "name": "createdAt", "direction": -1 }], "unique": false }
+      ]
+    }
+  ]
+}

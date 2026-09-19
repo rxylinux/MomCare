@@ -202,6 +202,7 @@
 import { ref, computed, reactive, onMounted, nextTick } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
 import { isRealAuthed } from '@/utils/api.js'
+import { legacyHttpEnabled } from '@/utils/backendGate.js'
 import NavBar from '@/components/NavBar.vue'
 
 const healthStore = useHealthStore()
@@ -361,8 +362,8 @@ async function handleSave() {
 			return
 		}
 
-		// 已登录用户同步到云端（演示模式为纯本地保存）
-		if (isRealAuthed()) {
+		// 已登录用户同步到云端（B1：旧后端停用；演示模式为纯本地保存）
+		if (legacyHttpEnabled() && isRealAuthed()) {
 			const cloudOk = await healthStore.syncProfileToCloud()
 			if (!cloudOk) {
 				// 回滚本地修改

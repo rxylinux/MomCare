@@ -62,6 +62,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { navigateToPage } from '@/utils/navigation.js'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, getTypeInfo } from '@/stores/report'
+import { legacyHttpEnabled } from '@/utils/backendGate.js'
 
 const reportStore = useReportStore()
 
@@ -202,8 +203,10 @@ async function confirmArchive() {
       return
     }
 
-    // 全部条目确认保存成功后才刷新列表、清草稿并离开
-    await reportStore.syncReportsFromCloud()
+    // 全部条目确认保存成功后才刷新列表、清草稿并离开（B1：旧同步停用，仅本地刷新）
+    if (legacyHttpEnabled()) {
+      await reportStore.syncReportsFromCloud()
+    }
 
     const archivedCount = items.value.filter(i => i.selected).length
     if (archivedCount === 0) {

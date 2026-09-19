@@ -140,6 +140,9 @@ async function handleUploadResult(tempFilePaths) {
     uni.showToast({ title: '演示模式不支持上传报告，请退出演示后使用', icon: 'none', duration: 2500 })
     return
   }
+  // B1：旧上传后端停用；新文件闭环在「家庭共享（云）」页（服务端开关控制）
+  uni.showToast({ title: '此入口的上传服务已停用；请使用「我的 → 家庭共享（云）」', icon: 'none', duration: 3000 })
+  return
 
   uni.showLoading({ title: '上传中…' })
   const uploadedItems = []   // { report_id, image_url }
