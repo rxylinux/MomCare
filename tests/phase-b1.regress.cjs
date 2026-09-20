@@ -1306,23 +1306,35 @@ import { __resetForTests } from '@/services/sessionService.js'
     assert.equal(api.pendingDrafts().privateNote, 'mama draft kept')
   })
 
-  await scenario('R2-深链知识详情：缓存可用则展示，否则如实未接入，零旧 HTTP', async () => {
+  await scenario('R2-深链知识详情（Phase F 静态库）：本地命中即展示，未收录如实提示，零旧 HTTP', async () => {
+    // Phase F：详情直读 staticDataStore——extractFn 注入 store 桩（getArticleById 真语义）
     const loadArticleById = extractFn('pages/knowledge/detail.vue', 'loadArticleById',
-      ['error', 'loading', 'article', 'uni'])
+      ['error', 'loading', 'article', 'uni', 'staticDataStore'])
     const errRef = { value: '' }
     const loadingRef = { value: true }
     const articleRef = { value: null }
-    // 无缓存：如实提示，不发请求
-    await loadArticleById(errRef, loadingRef, articleRef, global.uni)({ id: 'a1' })
-    assert.ok(errRef.value.includes('尚未接入'))
+    const storeStub = {
+      async loadData() { return true },
+      getArticleById(id) {
+        if (id === 'a2') return { id: 'a2', title: '静态库文章' }
+        return null
+      }
+    }
+    // 未收录：如实提示，不发请求
+    await loadArticleById(errRef, loadingRef, articleRef, global.uni, storeStub)({ id: 'a1' })
+    assert.ok(errRef.value.includes('不存在'))
     assert.equal(loadingRef.value, false)
     assert.equal(uniCalls.requests, 0)
-    // 有缓存：展示缓存文章
-    storage.set('cached_articles', JSON.stringify([{ id: 'a2', title: '缓存文章' }]))
-    await loadArticleById(errRef, loadingRef, articleRef, global.uni)({ id: 'a2' })
-    assert.equal(articleRef.value.title, '缓存文章')
+    // 本地命中：展示文章（离线静态库——秒开）
+    errRef.value = ''
+    await loadArticleById(errRef, loadingRef, articleRef, global.uni, storeStub)({ id: 'a2' })
+    assert.equal(articleRef.value.title, '静态库文章')
+    assert.equal(errRef.value, '')
     assert.equal(uniCalls.requests, 0)
-    storage.delete('cached_articles')
+    // 缺参：如实错误
+    errRef.value = ''
+    await loadArticleById(errRef, loadingRef, articleRef, global.uni, storeStub)({})
+    assert.ok(errRef.value.includes('缺少文章ID'))
   })
 
   await maybePage('R2-页面竞态：私人保存跨身份切换，草稿留在原成员、零 UI 污染（Item6 复现）', async () => {

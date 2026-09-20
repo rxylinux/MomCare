@@ -162,12 +162,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { navigateToPage } from '@/utils/navigation.js'
-	import { request } from '@/utils/api.js' // 传输层保留（阶段 A 回归语义）；B1 起本页不再调用
+	import { useStaticDataStore } from '@/stores/staticData.js'
 import { useHealthStore } from '@/stores/health.js'
 import NavBar from '@/components/NavBar.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 
 const healthStore = useHealthStore()
+	const staticDataStore = useStaticDataStore()
 
 // ── State ──
 const currentWeek = computed(() => {
@@ -219,22 +220,13 @@ const feedList = computed(() => {
 })
 
 // ── Data Fetching ──
-	const allArticles = ref([])
 
 	function getDefaultSort() {
 		return activeTab.value === 'recommended' ? 'view_count' : 'publish_time'
 	}
 
 	async function fetchArticles(reset = true) {
-		// B1：旧文章接口停用（正式内容服务待阶段 B 接入），不发起旧 HTTP 请求
-		if (reset) {
-			loadError.value = '内容服务尚未接入新云环境（阶段 B 配置后启用）'
-			articleList.value = []
-		}
-		loading.value = false
-		loadingMore.value = false
-		return
-		/* eslint-disable no-unreachable */
+		// Phase F：孕育知识库离线静态化——全部读取走 staticDataStore（零网络零延时）
 		if (reset) {
 			currentPage = 0
 			articleList.value = []
@@ -244,53 +236,22 @@ const feedList = computed(() => {
 		}
 
 		try {
-			// Load from API on first call, then use cached allArticles
-			if (allArticles.value.length === 0) {
-				const res = await request({
-					url: '/api/articles',
-					method: 'GET',
-				})
-				if (res.statusCode === 200 && res.data && res.data.code === 0) {
-					allArticles.value = res.data.data || []
-					// Cache to localStorage for detail page use（缓存写失败不掩盖已加载的数据）
-					try {
-						uni.setStorageSync('cached_articles', JSON.stringify(allArticles.value))
-					} catch (cacheErr) {
-						console.warn('cached_articles write failed:', cacheErr)
-					}
-				}
-			}
-
-			let filtered = [...allArticles.value]
-
-			// Filter by category tab
-			if (activeTab.value !== 'recommended') {
-				filtered = filtered.filter(a => a.category === activeTab.value)
-			}
-
-			// Filter by search keyword
-			if (searchKeyword.value.trim()) {
-				const kw = searchKeyword.value.trim().toLowerCase()
-				filtered = filtered.filter(a => (a.title || '').toLowerCase().includes(kw))
-			}
-
-			// Sort
+			await staticDataStore.loadData()
 			const sort = sortBy.value || getDefaultSort()
-			if (sort === 'view_count') {
-				filtered.sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
-			} else {
-				filtered.sort((a, b) => new Date(b.publish_time || 0) - new Date(a.publish_time || 0))
-			}
-
-			// Paginate
-			const start = reset ? 0 : currentPage * pageSize
-			const page = filtered.slice(start, start + pageSize)
+			const result = staticDataStore.getArticles({
+				category: activeTab.value,
+				keyword: searchKeyword.value,
+				sortBy: sort,
+				page: currentPage,
+				pageSize
+			})
+			const page = result.items
 			if (reset) {
 				articleList.value = page
 			} else {
 				articleList.value = [...articleList.value, ...page]
 			}
-			hasMore.value = articleList.value.length < filtered.length
+			hasMore.value = result.hasMore
 		} catch (e) {
 			console.error('fetchArticles error:', e)
 		}

@@ -43,7 +43,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useReportStore } from '@/stores/report'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import { request, API_BASE, getToken, isGuestMode } from '@/utils/api.js'
+import { request, getToken, isGuestMode } from '@/utils/api.js'
 import { getSessionState, isExplicitDemo, isExplicitLoggedOut, currentEpoch } from '@/services/sessionService.js'
 import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
 

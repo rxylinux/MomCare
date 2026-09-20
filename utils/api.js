@@ -1,4 +1,6 @@
-export const API_BASE = 'https://momcare-api.dpc7775223.workers.dev'
+// Phase F：旧 Cloudflare Worker 域名彻底拔除——正式后端已全量切换微信云开发原生
+// （CloudBase 云函数），request() 仅作为 fail-closed 传输层保留给历史回归套件。
+export const API_BASE = ''
 
 import { legacyHttpEnabled, legacyDisabledMessage } from '@/utils/backendGate.js'
 

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
 import { request, API_BASE, getToken, isRealAuthed, isGuestMode } from '@/utils/api.js'
+import { useToolsStore } from '@/services/toolsStore.js'
 import { reportsStorageKey, isDemoMode, FORMAL_REPORTS_KEY } from '@/utils/storage.js'
 import { legacyFormalStoresEnabled, formalStoresQuarantineMessage, legacyHttpEnabled, legacyDisabledMessage } from '@/utils/backendGate.js'
 
@@ -678,7 +679,9 @@ function _markUnverifiedOnRead(list) {
     return { archived, failed: [], pending }
   }
 
-  // 触发 AI 解读流水线 — 同步处理，优化超时
+  // 触发 AI 解读流水线 — Phase F：全面转接 CloudBase 原生网关 mc-tools 的 ai.analyzeReport
+  // （经 toolsStore.analyzeReportWithAi → sessionService.familyCall('mc-tools')），
+  // 拔除旧 Cloudflare HTTP /api/analyze-report；未配置 Key 时优雅返回提示，不抛错不假死。
   async function triggerAiPipeline(reportId) {
     const report = _findReport(reportId)
     if (!report) {
@@ -711,27 +714,39 @@ function _markUnverifiedOnRead(list) {
     try {
       uni.showLoading({ title: 'AI 正在分析…', mask: true })
 
-      const res = await request({
-        url: '/api/analyze-report',
-        method: 'POST',
-        data: { report_id: reportId },
-        timeout: 120000,
-      })
+      const toolsStore = useToolsStore()
+      const res = await toolsStore.analyzeReportWithAi({ reportId })
 
       uni.hideLoading()
 
-      if (res.statusCode !== 200 || res.data.code !== 0) {
-        if (res.statusCode === 429 || res.data?.code === 429 || /次数|配额|quota|limit/i.test(res.data?.msg || '')) {
-          _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
-          uni.showToast({ title: res.data?.msg || '今日解读次数已用完，明天再来吧', icon: 'none', duration: 3000 })
-          return false
-        }
-        throw new Error(res.data?.msg || 'AI 解读请求失败')
+      if (!res.ok) {
+        // 云端调用失败（网络/鉴权/报告不存在等）：如实失败，不消耗次数
+        _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+        uni.showToast({ title: res.message || 'AI 解读失败，请稍后重试', icon: 'none', duration: 2500 })
+        return false
       }
 
-      const aiData = res.data.data
+      const data = res.data
 
-      // 结构校验：空结果/非预期结构不能标记完成，也不能当作成功扣次数
+      if (data.enabled === false) {
+        // 未配置 DeepSeek/OCR 服务：优雅提示（规格原文），不抛错、不改失败态、不扣次数
+        _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+        uni.showToast({
+          title: '报告自动 OCR / DeepSeek 解读服务未配置；请以原始检验单与主治医生诊断为准',
+          icon: 'none',
+          duration: 3500
+        })
+        return false
+      }
+
+      // 启用：把网关返回的解读文本包装成本地既有的 ai_result 结构
+      const aiData = {
+        overall_summary: String(data.answer || ''),
+        suggestions: ['以上内容为 AI 生成的一般性说明，不构成医疗诊断；请以原始检验单与主治医生诊断为准'],
+        disclaimer: data.disclaimer || ''
+      }
+
+      // 结构校验：空结果不能标记完成，也不能当作成功扣次数
       if (!isValidAiResult(aiData)) {
         console.warn('triggerAiPipeline: invalid AI payload, treated as failure:', aiData)
         _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
@@ -739,23 +754,13 @@ function _markUnverifiedOnRead(list) {
         return false
       }
 
-      const abnormalIndicators = Array.isArray(aiData.abnormal_indicators) ? aiData.abnormal_indicators : []
       const persisted = _updateReportField(reportId, {
-        file_urls: [aiData.image_url || report.file_urls[0]].filter(Boolean),
         ai_status: 'done',
         ocr_status: 'done',
-        ocr_text: aiData.ocr_text || '',
         ai_result: aiData,
-        abnormal_indicators: abnormalIndicators,
-        is_abnormal: abnormalIndicators.some(i => i.severity === 'danger' || i.severity === 'warning'),
-        ai_type_guess: aiData.report_type || '',
+        ocr_text: String(data.answer || '')
       })
-      // 次数只在结构校验通过后才记为已消耗
-      if (aiData.quota) {
-        health.updateAiInterpretQuota(aiData.quota)
-      } else {
-        await health.consumeAiInterpretQuota()
-      }
+      await health.consumeAiInterpretQuota()
 
       uni.showToast({
         title: persisted ? '解读完成' : '解读完成，但本机保存失败，重启后可能丢失',
@@ -766,19 +771,8 @@ function _markUnverifiedOnRead(list) {
     } catch (err) {
       console.error('AI pipeline failed:', err)
       uni.hideLoading()
-      const errMsg = err?.data?.msg || err?.message || ''
-      if (err?.statusCode === 429 || err?.data?.code === 429 || /次数|配额|quota|limit/i.test(errMsg)) {
-        _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
-        uni.showToast({ title: errMsg || '今日解读次数已用完，明天再来吧', icon: 'none', duration: 3000 })
-        return false
-      }
-      _updateReportField(reportId, { ai_status: 'failed', ocr_status: 'failed' })
-
-      if (err?.networkError || (err?.errMsg && err.errMsg.includes('timeout'))) {
-        uni.showToast({ title: err?.networkError ? '网络不可用，解读未完成（未扣次数）' : 'AI 解读超时，请稍后重试', icon: 'none', duration: 3000 })
-      } else {
-        uni.showToast({ title: errMsg || 'AI 解读失败', icon: 'none' })
-      }
+      _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+      uni.showToast({ title: err?.message || 'AI 解读失败', icon: 'none', duration: 2500 })
       return false
     }
   }
@@ -796,7 +790,7 @@ function _markUnverifiedOnRead(list) {
     }
 
     // 集中边界门（R2）：旧二进制上传与 request() 同属旧 Cloudflare 正式路径，
-    // 未开启旧 HTTP 时 fail closed——不得绕过 utils/api 的集中关闭直连 workers.dev
+    // 未开启旧 HTTP 时 fail closed——不得绕过 utils/api 的集中关闭直连旧外部域名
     if (!legacyHttpEnabled()) {
       uni.showToast({ title: legacyDisabledMessage(), icon: 'none', duration: 2500 })
       return null

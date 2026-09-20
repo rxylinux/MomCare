@@ -15,7 +15,9 @@ esbuild.buildSync({
       export * from './stores/health.js'; export * from './stores/report.js';
       export * from './stores/staticData.js';
       export * from './utils/api.js'; export * from './utils/storage.js';
-      export * from './utils/backendGate.js';`,
+      export * from './utils/backendGate.js';
+      export * from './services/sessionService.js'; export * from './services/cloudAdapter.js';
+      export * from './utils/cloudConfig.js';`,
     resolveDir: root,
   },
   bundle: true, platform: 'node', format: 'cjs', alias: { '@': root },
@@ -37,6 +39,67 @@ async function scenario(name, fn) {
 }
 
 // ── 隔离环境构造 ──
+
+// ── Phase F 管线接线辅助：report.triggerAiPipeline → toolsStore → mc-tools（真 handler）──
+// aiAnswer 给定=注入 mock 成功；cloudFails=true=云调用失败（断网）；缺省=未配置 Key（enabled:false）
+const toolsHandler = require(path.join(root, 'dist/cloud-functions/mc-tools/index.js'))
+function wireCloudBaseAi(world, { aiAnswer, cloudFails } = {}) {
+  const savedWx = global.wx
+  // 真 handler 的 mock 云（docs + 可信身份）——ai.analyzeReport 的报告门走真校验
+  const docs = new Map()
+  docs.set('mc_reports/rpt_ai_probe', { familyId: 'fam-pa', deleted: false, dateKey: '2026-09-12', reportType: 'blood_routine', note: '', attachments: [], revision: 1, updatedBy: 'mama', updatedAt: 1, __v: 1 })
+  const ctx = { caller: 'oPFAMAMA', initialized: false }
+  const clone = x => JSON.parse(JSON.stringify(x))
+  const db = {
+    startTransaction: async () => {
+      const tx = { reads: new Map(), writes: new Map(), removes: new Set() }
+      return {
+        collection: c => ({ doc: id => ({
+          get: async () => { const e = docs.get(`${c}/${id}`); tx.reads.set(`${c}/${id}`, e ? e.__v : 0); return { data: e ? { ...clone(e), _id: id } : null } },
+          set: async ({ data }) => { tx.writes.set(`${c}/${id}`, clone(data)); return { _id: id } },
+          remove: async () => { tx.removes.add(`${c}/${id}`); return {} }
+        }) }),
+        commit: async () => { for (const [k, rv] of tx.reads) { const cur = docs.get(k); if ((cur ? cur.__v : 0) !== rv) { const err = new Error('conflict ' + k); err.errCode = 'CONFLICT'; throw err } } for (const k of tx.removes) docs.delete(k); for (const [k, d2] of tx.writes) { const prev = docs.get(k); docs.set(k, { ...d2, __v: (prev ? prev.__v : 0) + 1 }) } },
+        rollback: async () => { tx.writes.clear(); tx.removes.clear() }
+      }
+    },
+    collection: c => ({ doc: id => ({ get: async () => { const e = docs.get(`${c}/${id}`); return { data: e ? { ...clone(e), _id: id } : null } } }) })
+  }
+  const sdkCloud = {
+    DYNAMIC_CURRENT_ENV: Symbol('env'), init() { ctx.initialized = true },
+    getWXContext: () => ({ APPID: 'wxtestappid0001', OPENID: ctx.caller }),
+    database() { if (!ctx.initialized) throw new Error('init first'); return db }
+  }
+  toolsHandler.__setCloud(sdkCloud)
+  process.env.MC_APPID = 'wxtestappid0001'
+  process.env.MC_FAMILY_ID = 'fam-pa'
+  process.env.MC_MEMBER_MAMA_OPENID = 'oPFAMAMA'
+  process.env.MC_MEMBER_PAPA_OPENID = 'oPFAPAPA'
+  delete process.env.DEEPSEEK_API_KEY
+  world.__aiDocs = docs // 白盒：断言 ai_result 服务端回写
+
+  const cloud = {
+    init() {},
+    callFunction(o) {
+      if (cloudFails) { o.fail({ errMsg: 'cloud.callFunction:fail synthetic offline' }); return }
+      Promise.resolve().then(() => toolsHandler.main(o.data))
+        .then(r => o.success({ result: r }))
+        .catch(e => o.fail({ errMsg: e.message }))
+    }
+  }
+  global.wx = { cloud }
+  api.__setWxCloud(cloud)
+  api.__setCloudConfigForTests('env-pa', 'wxapp-pa')
+  if (aiAnswer !== undefined) {
+    toolsHandler.__setAiMock(async () => aiAnswer)
+  } else if (!cloudFails) {
+    toolsHandler.__setAiMock(null)
+  }
+  // 已确认成员会话（家庭内真身——绕开 confirmIdentity 网络路径）
+  api.__adoptSessionForTests({ memberId: 'mama', displayName: '妈妈', familyId: 'fam-pa' })
+  world.__restoreWx = () => { global.wx = savedWx; toolsHandler.__setAiMock(null) }
+}
+
 function makeWorld({ requestMode = 'offline', aiPayload = null, serverList = null, failWrites = [] } = {}) {
   const storage = new Map()
   const requests = []
@@ -353,14 +416,16 @@ async function main() {
   })
 
   // ── Codex P1-4：AI 校验 ──
-  await scenario('断网 AI 解读：不成功、状态 failed、不扣次数', async () => {
+  await scenario('断网 AI 解读：不成功、状态不标完成、不扣次数（Phase F 管线）', async () => {
     const w = makeWorld({ requestMode: 'offline' })
     api.setToken('synthetic-real-token')
     seedFormal(w)
     const created = await w.report.createReport({ report_type: 'blood_routine', report_date: todayKey })
-    const ok = await w.report.triggerAiPipeline(created.id)
+    wireCloudBaseAi(w, { cloudFails: true })
+    w.report.reports[0] = { ...w.report.reports[0], _id: 'rpt_ai_probe' }
+    const ok = await w.report.triggerAiPipeline('rpt_ai_probe')
     assert.equal(ok, false)
-    assert.equal(w.report.reports[0].ai_status, 'failed')
+    assert.notEqual(w.report.reports[0].ai_status, 'done')
     assert.equal(w.health.aiInterpretQuota.used, 0)
     assert.ok(!w.toasts.includes('解读完成'))
   })
@@ -399,7 +464,7 @@ async function main() {
     assert.equal(api.isValidAiResult(null), false)
   })
 
-  await scenario('结构有效的 AI 结果标记完成并扣一次', async () => {
+  await scenario('结构有效的 AI 结果标记完成并扣一次（Phase F 管线 mock）', async () => {
     const payload = {
       overall_summary: '各项指标大体平稳',
       abnormal_indicators: [{ name: '血红蛋白', value: '105', severity: 'warning', reference_range: '115-150', explanation: '轻度偏低' }],
@@ -407,13 +472,18 @@ async function main() {
       ocr_text: '血常规报告原文……',
       image_url: 'https://x/y.png',
     }
+    void payload
     const w = makeWorld({ requestMode: 'aiPayload', aiPayload: payload })
     api.setToken('synthetic-real-token')
     seedFormal(w)
     const created = await w.report.createReport({ report_type: 'blood_routine', report_date: todayKey })
-    const ok = await w.report.triggerAiPipeline(created.id)
+    wireCloudBaseAi(w, { aiAnswer: '各项指标大体平稳' })
+    // 本地报告改用服务端在场的 rpt_ai_probe（analyzeReport 权威门校验家庭归属）
+    w.report.reports[0] = { ...w.report.reports[0], _id: 'rpt_ai_probe' }
+    const ok = await w.report.triggerAiPipeline('rpt_ai_probe')
     assert.equal(ok, true)
     assert.equal(w.report.reports[0].ai_status, 'done')
+    assert.equal(w.report.reports[0].ocr_status, 'done')
     assert.equal(w.health.aiInterpretQuota.used, 1)
   })
 
@@ -664,7 +734,9 @@ async function main() {
     seedFormal(w)
     const created = await w.report.createReport({ report_type: 'blood_routine', report_date: todayKey })
     w.failWrites(['YUNTU_REPORTS_DATA'])
-    const ok = await w.report.triggerAiPipeline(created.id)
+    wireCloudBaseAi(w, { aiAnswer: '综合解读：整体正常，个别指标建议复诊。' })
+    w.report.reports[0] = { ...w.report.reports[0], _id: 'rpt_ai_probe' }
+    const ok = await w.report.triggerAiPipeline('rpt_ai_probe')
     assert.equal(ok, true)
     assert.equal(w.report.reports[0].ai_status, 'done')
     assert.ok(w.toasts.some(t => /本机保存失败/.test(t)))

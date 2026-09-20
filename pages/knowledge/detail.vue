@@ -88,8 +88,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { request } from '@/utils/api.js'
+import { useStaticDataStore } from '@/stores/staticData.js'
 import NavBar from '@/components/NavBar.vue'
+
+const staticDataStore = useStaticDataStore()
 
 const article = ref(null)
 const loading = ref(true)
@@ -205,28 +207,21 @@ function goBack() {
 }
 
 // ── Fetch article by ID ──
-// B1/R2：旧文章接口已集中停用（request 层 fail closed）；本地缓存可用则展示，
-// 否则如实说明内容服务未接入，不发起旧 HTTP 请求
+// Phase F：知识库离线静态化——详情直读 staticDataStore（零网络零延时，签名不变）
 async function loadArticleById(options) {
 	if (!options || !options.id) {
 		error.value = '缺少文章ID'
 		loading.value = false
 		return
 	}
-	const cached = uni.getStorageSync('cached_articles')
-	if (cached) {
-		try {
-			const found = JSON.parse(cached).find(a => a.id === options.id || a._id === options.id)
-			if (found) {
-				article.value = found
-				loading.value = false
-				return
-			}
-		} catch (e) {
-			console.warn('cached_articles parse failed:', e)
-		}
+	await staticDataStore.loadData()
+	const found = staticDataStore.getArticleById(options.id)
+	if (found) {
+		article.value = found
+		loading.value = false
+		return
 	}
-	error.value = '内容服务尚未接入新云环境（阶段 B 配置后启用），且本机无该文章缓存'
+	error.value = '文章不存在或已下架'
 	loading.value = false
 }
 
