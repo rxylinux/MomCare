@@ -477,7 +477,22 @@ exports.main = async function main(event) {
       const existing = await getDocMaybe(t, TASKS, taskId)
       if (existing) {
         if (existing.familyId !== fid) { await t.rollback(); return fail('not-found', '任务不存在') }
-        // 确定性 ID + 已在场 → 幂等返回同一任务（不重复创建、不改既有承接人）
+        if (!existing.acceptedBy) {
+          // 首次接下已有任务（未指派自定义/未承接的 checkup/bag 任务）：记录真实承接人+时间（同事务）
+          const updated = {
+            ...stripId(existing),
+            acceptedBy: caller.memberId, acceptedAt: now,
+            status: existing.status === 'pending' ? 'doing' : existing.status,
+            revision: existing.revision + 1, updatedAt: now, updatedBy: caller.memberId
+          }
+          await t.collection(TASKS).doc(taskId).set({ data: updated })
+          await t.collection(OPS).doc(opKey).set({
+            data: { ...opDoc, entity: { collection: TASKS, docId: taskId }, createdAt: now }
+          })
+          await t.commit()
+          return ok({ task: taskView({ ...updated, _id: taskId }, needProjection ? { need: needProjection } : {}) })
+        }
+        // 已被承接：确定性 ID + 已在场 → 幂等返回同一任务（不重复创建、不改既有承接人）
         await t.rollback()
         const projections = existing.sourceType === 'need'
           ? { need: needProjection || needStateForProjection(await getDocMaybe(db, NEEDS, existing.sourceId), fid) } : {}

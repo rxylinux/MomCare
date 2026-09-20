@@ -18,36 +18,106 @@
 				:pregInfoSet="heroPregInfoSet"
 			/>
 
-			<template v-if="heroPregInfoSet">
-				<!-- 每日变化卡片 -->
-				<DailyChanges
-					:weekInfo="heroWeekInfo"
-					:selectedDate="selectedDate"
-					:slidesData="dailySlides"
-				/>
+			<!-- 视角切换器（family 模式）：仅切换渲染偏好——不改身份/权限/私人数据边界 -->
+			<view v-if="dataMode === 'family'" class="view-switcher">
+				<view class="view-seg" :class="{ active: collabHomeView === 'mom' }" @tap="onSwitchView('mom')">
+					<text class="view-seg-text" :class="{ active: collabHomeView === 'mom' }">妈妈视角</text>
+				</view>
+				<view class="view-seg" :class="{ active: collabHomeView === 'dad' }" @tap="onSwitchView('dad')">
+					<text class="view-seg-text" :class="{ active: collabHomeView === 'dad' }">爸爸视角</text>
+				</view>
+			</view>
 
-				<!-- 本周指南卡片 -->
-				<WeeklyGuideCard
-					:weekInfo="heroWeekInfo"
-					:daysUntilDue="heroDaysUntilDue"
-				/>
+			<!-- family 模式：双首页按视角分区渲染（顺序=homeSections 数据驱动） -->
+			<template v-if="dataMode === 'family'">
+				<template v-for="sec in homeSections" :key="sec">
+					<DayRecordPanel
+						v-if="sec === 'dayRecord'"
+						:selectedDate="selectedDate"
+						:record="currentRecord"
+						:lmpDate="editLmpDate"
+						@edit="openEdit"
+					/>
+					<view v-else-if="sec === 'share'" class="share-section">
+						<SharedStatusCard />
+						<view class="share-entry" @tap="composerVisible = true">
+							<text class="share-entry-text">＋ 分享我的需要（对方可见）</text>
+						</view>
+					</view>
+					<view v-else-if="sec === 'checkup'" class="section-card-style checkup-card">
+						<text class="section-title">下一次产检</text>
+						<template v-if="nextCheckup">
+							<text class="checkup-line">{{ nextCheckup.dateKey }}{{ nextCheckup.time ? ' ' + nextCheckup.time : '' }}{{ nextCheckup.hospital ? ' · ' + nextCheckup.hospital : '' }}</text>
+							<text class="checkup-hint">{{ collabHomeView === 'mom' ? '检查事项与想问医生的问题' : '陪同安排、材料与行程准备' }}</text>
+						</template>
+						<text v-else class="checkup-empty">暂无产检安排</text>
+					</view>
+					<view v-else-if="sec === 'tasks' || sec === 'myTasks'" class="task-section">
+						<view v-if="bagSummary" class="bag-summary">
+							<text class="bag-summary-text">待产包已备好 {{ bagSummary.prepared }}/{{ bagSummary.total }} 项</text>
+						</view>
+						<TaskListCard
+							:tasks="sec === 'myTasks' ? dadTopTasks : tasksForPrepCard"
+							:title="sec === 'myTasks' ? '我负责的事' : '共同准备'"
+						/>
+					</view>
+					<template v-else-if="sec === 'knowledge'">
+						<DailyChanges
+							v-if="collabHomeView === 'mom' && heroPregInfoSet"
+							:weekInfo="heroWeekInfo"
+							:selectedDate="selectedDate"
+							:slidesData="dailySlides"
+						/>
+						<WeeklyGuideCard
+							v-if="heroPregInfoSet"
+							:weekInfo="heroWeekInfo"
+							:daysUntilDue="heroDaysUntilDue"
+						/>
+					</template>
+					<PregnancyCalendar
+						v-else-if="sec === 'calendar' && heroPregInfoSet"
+						:lmpDate="editLmpDate"
+						:dueDate="heroDueDate"
+						:hasRecord="pageHasRecord"
+						:selectedDate="selectedDate"
+						@selectDate="onSelectDate"
+					/>
+				</template>
+			</template>
 
-				<!-- 孕期日历 -->
-				<PregnancyCalendar
-					:lmpDate="editLmpDate"
-					:dueDate="heroDueDate"
-					:hasRecord="pageHasRecord"
-					:selectedDate="selectedDate"
-					@selectDate="onSelectDate"
-				/>
+			<!-- 演示/未确认模式：沿用原有布局 -->
+			<template v-else>
+				<template v-if="heroPregInfoSet">
+					<!-- 每日变化卡片 -->
+					<DailyChanges
+						:weekInfo="heroWeekInfo"
+						:selectedDate="selectedDate"
+						:slidesData="dailySlides"
+					/>
 
-				<!-- 每日记录面板 -->
-				<DayRecordPanel
-					:selectedDate="selectedDate"
-					:record="currentRecord"
-					:lmpDate="editLmpDate"
-					@edit="openEdit"
-				/>
+					<!-- 本周指南卡片 -->
+					<WeeklyGuideCard
+						:weekInfo="heroWeekInfo"
+						:daysUntilDue="heroDaysUntilDue"
+					/>
+
+					<!-- 孕期日历 -->
+					<PregnancyCalendar
+						:lmpDate="editLmpDate"
+						:dueDate="heroDueDate"
+						:hasRecord="pageHasRecord"
+						:selectedDate="selectedDate"
+						@selectDate="onSelectDate"
+					/>
+
+					<!-- 每日记录面板 -->
+					<DayRecordPanel
+						:selectedDate="selectedDate"
+						:record="currentRecord"
+						:lmpDate="editLmpDate"
+						@edit="openEdit"
+					/>
+				</template>
 			</template>
 
 			<!-- 待同步/冲突持久提示（family 模式）：真实冲突解决与重试入口 -->
@@ -96,6 +166,13 @@
 			@update:visible="editVisible = $event"
 			@save="handleSave"
 		/>
+
+		<!-- 分享需要弹层（family 模式） -->
+		<NeedComposer
+			v-if="dataMode === 'family'"
+			:visible="composerVisible"
+			@update:visible="composerVisible = $event"
+		/>
 		</template>
 		<CustomTabBar :active="0" />
 	</view>
@@ -115,11 +192,16 @@ import WeeklyGuideCard from '@/components/home/WeeklyGuideCard.vue'
 import PregnancyCalendar from '@/components/common/PregnancyCalendar.vue'
 import DayRecordPanel from '@/components/home/DayRecordPanel.vue'
 import RecordEditSheet from '@/components/home/RecordEditSheet.vue'
+import SharedStatusCard from '@/components/home/SharedStatusCard.vue'
+import NeedComposer from '@/components/home/NeedComposer.vue'
+import TaskListCard from '@/components/home/TaskListCard.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
+import { useCollabStore } from '@/services/collabStore.js'
 
 const healthStore = useHealthStore()
 const staticDataStore = useStaticDataStore()
 const familyStore = useFamilyStore()
+const collabStore = useCollabStore()
 
 // B2a：正式模式数据源 = familyStore（身份确认后）；演示模式沿用演示 store
 const dataMode = ref('unknown') // 'family' | 'demo' | 'unconfirmed'
@@ -253,6 +335,9 @@ onMounted(async () => {
 			dataMode.value = 'family'
 			familyStore.restoreFromCache()
 			familyStore.pullAll().catch(() => {})
+			collabStore.initHomeView()
+			collabStore.restoreFromCache()
+			collabStore.pullCollab().catch(() => {})
 		} else if (session.status === 'rejected' || session.status === 'not-configured' || session.status === 'unavailable') {
 			dataMode.value = 'unconfirmed'
 		} else {
@@ -382,24 +467,75 @@ onShow(() => {
 			if (!res || !res.ok) return // 拒绝已锁定/离线按暖离线保留
 			familyStore.pullAll().catch(() => {})
 			familyStore.flushAll().catch(() => {})
+			collabStore.pullCollab().catch(() => {})
+			collabStore.flushAll().catch(() => {})
 		}).catch(() => {})
 	} else if (session.status === 'unconfirmed' && dataMode.value !== 'demo') {
 		// 冷启动协调（复现20）：与 App.onShow 共享同一去重确认 Promise（只发一次
 		// 网络请求）；持久标记触发联网确认，确认成功前不展示成员缓存
-		coldStartConfirm().then(res => {
-			if (res && res.ok) {
-				dataMode.value = 'family'
-				familyStore.restoreFromCache()
-				familyStore.pullAll().catch(() => {})
-				loadDailySlides()
-			}
-		}).catch(() => {})
+			coldStartConfirm().then(res => {
+				if (res && res.ok) {
+					dataMode.value = 'family'
+					familyStore.restoreFromCache()
+					familyStore.pullAll().catch(() => {})
+					collabStore.initHomeView()
+					collabStore.restoreFromCache()
+					collabStore.pullCollab().catch(() => {})
+					loadDailySlides()
+				}
+			}).catch(() => {})
 	}
 })
 
 // 冲突解决与待办重试（真实处理器，走 familyStore→outbox→云函数）
 const familyPending = computed(() => familyStore.pendingCount)
 const familyConflicts = computed(() => familyStore.conflictEntries)
+
+// ══ Phase C：双首页（family 模式）══
+// 视角=本人渲染偏好（mom/dad）：切换不改 session.member、不扩权限、不触碰 mood 私人隔离；
+// 代记健康（RecordEditSheet/handleSave）始终以真实登录成员落 updatedBy
+const collabHomeView = computed(() => collabStore.homeView)
+const composerVisible = ref(false)
+
+function onSwitchView(view) {
+	collabStore.switchHomeView(view)
+}
+
+// 双首页分区顺序（数据驱动——测试断言位；DESIGN §3）
+const homeSections = computed(() => {
+	if (dataMode.value !== 'family') return []
+	return collabStore.homeView === 'dad'
+		? ['share', 'myTasks', 'checkup', 'tasks', 'knowledge']           // 爸爸：对方分享→我负责的事→产检（陪同/材料）→共同准备→陪伴知识
+		: ['dayRecord', 'share', 'checkup', 'tasks', 'knowledge', 'calendar'] // 妈妈：今日记录→分享→产检（问医生）→共同准备→知识→日历
+})
+
+// 下一次产检（familyStore.checkups 权威投影：pending 未删、dateKey 升序取首——
+// 过期未完成显示真实日期，不混为今天）
+const nextCheckup = computed(() => {
+	const list = Object.values(familyStore.checkups || {})
+		.filter(c => c && !c.deleted && c.status === 'pending' && c.dateKey)
+		.sort((a, b) => (a.dateKey < b.dateKey ? -1 : 1))
+	return list[0] || null
+})
+
+// 任务卡数据：爸爸"我负责的事"=dadTopTasks（今天到期优先前 3）；"共同准备"卡=
+// 妈妈视角全部进行中任务 / 爸爸视角未分配事项
+const activeFamilyTasks = computed(() => {
+	const list = Object.values(collabStore.tasks || {}).filter(t => t && (t.status === 'pending' || t.status === 'doing'))
+	list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+	return list
+})
+const dadTopTasks = computed(() => collabStore.dadTopTasks)
+const tasksForPrepCard = computed(() => collabStore.homeView === 'dad'
+	? activeFamilyTasks.value.filter(t => !t.assigneeId)
+	: activeFamilyTasks.value)
+
+// 待产包进度（权威=mc_bag_items 投影；只展示不重复记账）
+const bagSummary = computed(() => {
+	const list = Object.values(familyStore.bagItems || {}).filter(b => b && !b.deleted)
+	if (list.length === 0) return null
+	return { total: list.length, prepared: list.filter(b => b.prepared).length }
+})
 
 // 冲突比较值：本地提交 payload vs 云端 currentRecord（仅渲染当前成员可见字段；
 // 墓碑显示"已删除"，显式清除显示"(已清除)"）
@@ -601,5 +737,88 @@ function goPregnancyForm() {
 .loading-text {
 	font-size: 28rpx;
 	color: #9C9890;
+}
+
+/* ══ Phase C：视角切换器与双首页分区 ══ */
+.view-switcher {
+	display: flex;
+	flex-direction: row;
+	margin: 0 24rpx 24rpx;
+	padding: 8rpx;
+	border-radius: 999rpx;
+	background: #ffffff;
+	box-shadow: 0 4rpx 20rpx rgba(17, 22, 34, 0.06);
+}
+.view-seg {
+	flex: 1;
+	padding: 16rpx 0;
+	border-radius: 999rpx;
+	display: flex;
+	justify-content: center;
+}
+.view-seg.active {
+	background: linear-gradient(90deg, #4a7cf7, #6a5cf7);
+}
+.view-seg-text {
+	font-size: 28rpx;
+	color: #46536a;
+}
+.view-seg-text.active {
+	color: #ffffff;
+	font-weight: 600;
+}
+.share-section {
+	display: flex;
+	flex-direction: column;
+}
+.share-entry {
+	margin: 0 24rpx 24rpx;
+	padding: 22rpx 28rpx;
+	border-radius: 20rpx;
+	background: #ffffff;
+	border: 2rpx dashed #d4dcec;
+	display: flex;
+	justify-content: center;
+}
+.share-entry-text {
+	font-size: 26rpx;
+	color: #4a7cf7;
+}
+.checkup-card {
+	padding: 28rpx;
+}
+.section-title {
+	font-size: 30rpx;
+	font-weight: 600;
+	color: #11222e;
+}
+.checkup-line {
+	margin-top: 12rpx;
+	font-size: 26rpx;
+	color: #2a3444;
+}
+.checkup-hint {
+	margin-top: 8rpx;
+	font-size: 24rpx;
+	color: #8a94a6;
+}
+.checkup-empty {
+	margin-top: 12rpx;
+	font-size: 24rpx;
+	color: #9aa4b5;
+}
+.task-section {
+	display: flex;
+	flex-direction: column;
+}
+.bag-summary {
+	margin: 0 24rpx 16rpx;
+	padding: 16rpx 24rpx;
+	border-radius: 16rpx;
+	background: #eef7ee;
+}
+.bag-summary-text {
+	font-size: 24rpx;
+	color: #3f7d4e;
 }
 </style>

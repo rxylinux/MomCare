@@ -18,8 +18,8 @@
 | B2a 同步与健康档案接入 | R5 本地 review 通过；42 项 B2a、42 项 B1（历史编辑器跳过）、72 项 A、19 份独立探针、双端构建 | `fa83f76` | 延后 |
 | B2b1 产检、待产包 | 本地 review 通过；53项B2b1、156项历史回归、12组独立检查、双端构建与冻结哈希 | `9a473a5` | 延后 |
 | B2b2 报告原件与附件 | 本地review通过；33组B2b2、209组历史回归、58独立入口、双端构建与冻结哈希；运行时异常与重跑记录见review | `e0cf22f` | 延后 |
-| B3 迁移、完整导出与隔离恢复 | B3a 已验收；B3b 阶段一 review 通过；阶段二（V20 块消费、declared 态幂等、refs 反向链接、commit/verify/abandon）本地 review 通过（85 项 Stage 2 主套件全绿、11 项 CVA 专项全绿、V20 全套用例全绿、双端构建与组装） | B3a `c4e5995`；阶段一 `0994cf3`；阶段二已验收待提交 | 延后 |
-| C 双首页、分享需要与共同任务 | 待实施 | — | 延后 |
+| B3 迁移、完整导出与隔离恢复 | 本地 review 通过（Stage 1/Stage 2 85 项主套件全绿、11 项 CVA 专项全绿、V20 全套用例全绿、双端构建与组装） | B3a `c4e5995`；阶段一 `0994cf3`；阶段二 `e01172e` | 延后 |
+| C 双首页、分享需要与共同任务 | 本地 review 通过（Stage 1 服务端 20/0、Stage 2 客户端 7/7、页面/组件 7/7 全绿，双首页布局与权限不变性验证） | 阶段一 `6ca1d68`；阶段二待提交 | 延后 |
 | D 本地发布准备 | 待实施；资源、包体、平台路径核对 | — | 双手机验收延后 |
 
 2026-09-20 续审状态：V20 内部派生/装块/读块的前述缺陷已修并有十一套独立局部回归全绿；D25 首映射语义又经真实 handler 的 `begin→declareChunk→indexDeclarePage→uploadRecord` 三种 Stage1 合法完整包验证为 12/0。离线 QR19-v7 为 25/0，但仅证明本地字节代理，不等于 CloudBase 实际存储。现有 Stage2 主套件仍为 **82 过、commit/verify/abandon 三红**。V20 服务端有界切片现已接入公开 handler，但仅在环境变量精确为 `MC_RESTORE_V20_ENABLED=true` 时开启：末片与 `preparing` 冻结同事务，`finalizeDeclare` 验证并持久块，末块推进 `indexing`；在块消费实现前，V20 批次的旧 `indexDeclarePage` 明确拒绝。独立冻结套件 `tests/phase-b3b-stage2-v20finalize.regress.cjs`（`e580ff3b`）实跑 **16/0**，真 handler wire 对抗套件 **16/0**，组装产物真入口 **9/0**；第三轮并发/损坏持久态套件 `v20conc-adv`（`5b2e61ee`）先在生产 `e4bee9a1` 上 **6 过、5 红**，ZCode 修复生产后在 `b441b8f4` 上由 Codex 独立复跑 **11/0**。这些仅是有界服务端切片的本地证据：V20 块消费、客户端续作及 commit/verify/abandon 未完成，真 CloudBase 事务行为尚待统一部署期复核，故阶段二整体 **未验收、未提交、未部署**。单 P13 内存探针只给出本机参考，CloudBase 配置与真机验证仍留最终部署清单。详见[阶段二代码审查](PHASE_B3B_STAGE2_CODE_REVIEW_2026-09-20.md)。

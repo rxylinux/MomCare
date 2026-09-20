@@ -690,6 +690,31 @@ async function main() {
     assert.equal(needDoc(st, need.needId).status, 'active', '拒绝路径零状态变更')
   })
 
+  await scenario('T9 task.accept 首次接下已有未承接任务：记录真实承接人（Stage2 页面回归发现缺口）', async () => {
+    const st = makeStack('mama')
+    const cr = await st.call('mc-collab', { action: 'task.createCustom', title: 'T9-未指派任务', operationId: mkop('t9c') })
+    assert.ok(cr.ok, 'createCustom（无 assignee）')
+    const taskId = cr.data.task.taskId
+    assert.equal(cr.data.task.status, 'pending')
+    assert.equal(cr.data.task.acceptedBy, null)
+    // papa 首次接下已有任务：acceptedBy/acceptedAt 落盘 + pending→doing + revision+1
+    st.as('papa')
+    const ac = await st.call('mc-collab', { action: 'task.accept', sourceType: 'custom', sourceId: cr.data.task.sourceId, operationId: mkop('t9a') })
+    assert.ok(ac.ok, `首次接下: ${JSON.stringify(ac).slice(0, 150)}`)
+    assert.equal(ac.data.task.taskId, taskId, '同一确定性任务')
+    assert.equal(ac.data.task.acceptedBy, 'papa', '承接人=真实操作者')
+    assert.ok(Number.isInteger(ac.data.task.acceptedAt), 'acceptedAt 落盘')
+    assert.equal(ac.data.task.status, 'doing', 'pending→doing')
+    assert.equal(ac.data.task.revision, 2, 'revision+1')
+    const doc = taskDocOf(st, taskId)
+    assert.equal(doc.acceptedBy, 'papa') && assert.equal(doc.status, 'doing')
+    // 再接（他人/重复）：幂等返回不改既有承接人
+    st.as('mama')
+    const ac2 = await st.call('mc-collab', { action: 'task.accept', sourceType: 'custom', sourceId: cr.data.task.sourceId, operationId: mkop('t9b') })
+    assert.ok(ac2.ok && ac2.data.existed === true && ac2.data.task.acceptedBy === 'papa', `重复接下不改承接人（实得 ${JSON.stringify(ac2.data).slice(0, 120)}）`)
+    assert.equal(taskDocOf(st, taskId).revision, 2, '重复接下零版本推进')
+  })
+
   await scenario('Z9 冻结源哈希：套件运行期间 mc-collab 源未被并发编辑', async () => {
     for (const [rel, h] of Object.entries(frozenHashes)) {
       const now = sha256(fs.readFileSync(path.join(root, rel)))
