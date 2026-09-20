@@ -587,6 +587,84 @@
         "proof": "sibling 单串规范 base64（D20——按父层升序拼接 ⌈log2(totalBlocks)⌉×32B；T=1 空串）"
       },
       "indexes": []
+    },
+    {
+      "name": "mc_shared_needs",
+      "purpose": "Phase C 家庭分享需要（作者主动短句+可选约定日期）；撤回=单调墓碑——同事务物理抹除正文",
+      "fields": {
+        "_id": "need_<16 位随机 hex>（服务端 CSPRNG 生成）",
+        "familyId": "数据分区（非授权依据）",
+        "ownerId": "作者 memberId（服务端 resolveCaller 派生；创建/编辑/撤回/关闭仅作者）",
+        "content": "分享正文 1~200 字（码点计）；**撤回后置 null——物理抹除，投影层强制 withdrawn⇒null**",
+        "targetDate": "可选约定日期 YYYY-MM-DD 或 null",
+        "status": "active | closed | withdrawn",
+        "withdrawnAt": "撤回毫秒时间戳或 null（墓碑保留供同步清理——不保留正文）",
+        "closedAt": "关闭毫秒时间戳或 null",
+        "revision": "乐观并发版本号（从 1 起）",
+        "createdAt": "毫秒时间戳",
+        "updatedAt": "毫秒时间戳",
+        "updatedBy": "服务端生成的成员 ID",
+        "sortKey": "分页稳定游标复合键 <createdAt 补零>:<_id>（唯一——同毫秒创建不重不漏；mc_reports.sortKey 同先例）"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "sortKey",
+              "direction": -1
+            }
+          ],
+          "unique": false,
+          "purpose": "need.list 稳定分页（含墓碑——撤回项供客户端同步清理）"
+        }
+      ]
+    },
+    {
+      "name": "mc_family_tasks",
+      "purpose": "Phase C 家庭共同任务（need/checkup/bag/custom 四来源；确定性任务 ID 杜绝同源重复创建竞态）",
+      "fields": {
+        "_id": "tsk_<familyId>_<sourceType>_<sourceId>（确定性——同源至多一个任务）",
+        "familyId": "数据分区（非授权依据）",
+        "sourceType": "need | checkup | bag | custom",
+        "sourceId": "来源实体 ID（need_<hex> / chk_* / bag_* / cst_<hex>）",
+        "title": "自定义任务标题 ≤100 字（custom 必填）；need/checkup/bag 来源恒 null——**不持久复制分享正文**，显示文案按需从当前 active 分享动态投影（撤回→脱敏占位）",
+        "targetDate": "可选 YYYY-MM-DD 或 null",
+        "status": "pending | doing | done | cancelled（存储态；checkup/bag 显示态以权威表投影为准）",
+        "assigneeId": "指派负责人 memberId 或 null（与 acceptedBy 分离）",
+        "acceptedBy": "主动接单成员 memberId 或 null",
+        "acceptedAt": "接单毫秒时间戳或 null",
+        "completedBy": "完成操作成员 memberId 或 null",
+        "completedAt": "完成毫秒时间戳或 null",
+        "revision": "乐观并发版本号（从 1 起）",
+        "createdAt": "毫秒时间戳",
+        "updatedAt": "毫秒时间戳",
+        "updatedBy": "服务端生成的成员 ID",
+        "sortKey": "分页稳定游标复合键 <createdAt 补零>:<_id>（唯一）"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "status",
+              "direction": 1
+            },
+            {
+              "name": "targetDate",
+              "direction": 1
+            }
+          ],
+          "unique": false,
+          "purpose": "task.list 状态/指派过滤 + sortKey 稳定分页"
+        }
+      ]
     }
   ]
 }
