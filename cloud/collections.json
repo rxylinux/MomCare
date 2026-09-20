@@ -738,6 +738,44 @@
           "purpose": "contraction.list 时间倒序 + 前驱定位扫描"
         }
       ]
+    },
+    {
+      "name": "mc_efw_records",
+      "purpose": "Phase E2 B 超三参数估重记录（Hadlock 1985 HC+AC+FL——服务端权威计算；不做诊断推断）",
+      "fields": {
+        "_id": "efw_<16 位随机 hex>（服务端 CSPRNG 生成）",
+        "familyId": "数据分区（非授权依据）",
+        "memberId": "记录成员（服务端 resolveCaller 派生）",
+        "dateKey": "YYYY-MM-DD（家庭时区 Asia/Shanghai）",
+        "gestationalWeek": "整数 12~42",
+        "measurements": "{hcCm, acCm, flCm, inputUnit: 'cm'|'mm', bpdMm: number|null}——cm 换算后存储；BPD 仅伴随存储不参与公式（禁忌：不可替代缺失 HC）",
+        "formula": "恒 'hadlock_hc_ac_fl_1985_v1'（LOINC 11746-5——结果带公式版本，更新公式不覆盖旧结果）",
+        "efwGrams": "整数克（四舍五入显示值）",
+        "exactEfwGrams": "浮点克（两位小数——未舍入值双存）",
+        "reportId": "关联报告 ID 或 null",
+        "notes": "文本备注 ≤200 字或 null",
+        "status": "active | discarded（软删除——默认列表排除）",
+        "revision": "乐观并发版本号（从 1 起）",
+        "createdAt": "毫秒时间戳",
+        "updatedAt": "毫秒时间戳",
+        "sortKey": "分页稳定游标复合键 <dateKey>:<_id>（唯一）"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "gestationalWeek",
+              "direction": -1
+            }
+          ],
+          "unique": false,
+          "purpose": "efw.list 孕周维度查询 + sortKey 稳定分页"
+        }
+      ]
     }
   ]
 }

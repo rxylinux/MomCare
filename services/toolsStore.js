@@ -82,6 +82,38 @@ export function fetalElapsedMs(session, now = Date.now()) {
   return Math.max(0, base - session.startTime)
 }
 
+// ── E2 Hadlock 1985 三参数估重（纯函数——与服务端同式同系数；页面实时计算用）──
+// log10(EFW_g)=1.326−0.00326×AC×FL+0.0107×HC+0.0438×AC+0.158×FL（cm）
+// 输入支持 cm/mm（换算 /10 或 ×1）；范围校验同服务端（超界返回 {err}）
+export const EFW_FORMULA = 'hadlock_hc_ac_fl_1985_v1'
+const EFW_RANGES_CM = { hc: [10.0, 42.0], ac: [10.0, 45.0], fl: [1.0, 10.0] }
+export function computeHadlockEfw({ hc, ac, fl, unit = 'cm' }) {
+  if (unit !== 'cm' && unit !== 'mm') return { err: 'unit 须 cm 或 mm' }
+  const factor = unit === 'mm' ? 0.1 : 1
+  const cm = {}
+  for (const key of ['hc', 'ac', 'fl']) {
+    const v = { hc, ac, fl }[key]
+    if (typeof v !== 'number' || !Number.isFinite(v)) return { err: `${key} 须有限数字` }
+    const c = v * factor
+    if (c <= 0) return { err: `${key} 须为正数` }
+    const [lo, hi] = EFW_RANGES_CM[key]
+    if (c < lo || c > hi) return { err: `${key} 超出范围 [${lo}, ${hi}]cm` }
+    cm[key] = c
+  }
+  const log10 = 1.326 - 0.00326 * cm.ac * cm.fl + 0.0107 * cm.hc + 0.0438 * cm.ac + 0.158 * cm.fl
+  const exact = Math.pow(10, log10)
+  const exactEfwGrams = Math.round(exact * 100) / 100
+  return {
+    inputsCm: { hcCm: cm.hc, acCm: cm.ac, flCm: cm.fl },
+    formula: EFW_FORMULA,
+    log10: Math.round(log10 * 100000) / 100000,
+    exactEfwGrams,
+    efwGrams: Math.round(exact),
+    efwKg: Math.round(exactEfwGrams) / 1000,
+    rangeGrams: { low: Math.round(exactEfwGrams * 0.9), high: Math.round(exactEfwGrams * 1.1) }
+  }
+}
+
 export const useToolsStore = defineStore('tools', () => {
   const familyStore = useFamilyStore()
 
@@ -549,14 +581,82 @@ export const useToolsStore = defineStore('tools', () => {
     return true
   }
 
+  // ══ E2 B 超三参数估重（Hadlock 1985——计算纯本地镜像+保存服务端权威）══
+  const efwRecords = ref([]) // 历史估重记录（服务端视图，倒序）
+
+  async function calculateEfw({ hc, ac, fl, unit = 'cm' }) {
+    if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
+    let r
+    try {
+      r = await familyCall(TOOLS_FN, { action: 'efw.calculate', hc, ac, fl, unit })
+    } catch (e) {
+      r = { ok: false, code: 'cloud-call-failed' }
+    }
+    if (!r.ok) return { ok: false, code: r.code, message: r.message }
+    return { ok: true, data: r.data }
+  }
+
+  async function saveEfwRecord({ dateKey, gestationalWeek, hc, ac, fl, unit = 'cm', bpd, reportId, notes }) {
+    if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
+    let r
+    try {
+      r = await familyCall(TOOLS_FN, {
+        action: 'efw.save', gestationalWeek, hc, ac, fl, unit,
+        ...(bpd !== undefined && bpd !== null ? { bpd } : {}),
+        ...(dateKey ? { dateKey } : {}),
+        ...(reportId ? { reportId } : {}),
+        ...(notes ? { notes } : {}),
+        operationId: newOpId('efw')
+      })
+    } catch (e) {
+      r = { ok: false, code: 'cloud-call-failed' }
+    }
+    if (!r.ok) return { ok: false, code: r.code, message: r.message }
+    efwRecords.value = [r.data.record, ...efwRecords.value.filter(x => x.recordId !== r.data.record.recordId)]
+    return { ok: true, record: r.data.record, replayed: Boolean(r.data.replayed) }
+  }
+
+  async function deleteEfwRecord(recordId) {
+    if (!recordId) return { ok: false, code: 'invalid-params' }
+    const rec = efwRecords.value.find(x => x && x.recordId === recordId)
+    const expected = rec && Number.isInteger(rec.revision) ? rec.revision : 1
+    let r
+    try {
+      r = await familyCall(TOOLS_FN, { action: 'efw.delete', recordId, expectedRevision: expected, operationId: newOpId('efwd') })
+    } catch (e) {
+      r = { ok: false, code: 'cloud-call-failed' }
+    }
+    if (!r.ok) return { ok: false, code: r.code, message: r.message }
+    return pullEfwRecords()
+  }
+
+  async function pullEfwRecords() {
+    if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
+    const list = []
+    let cursor = null
+    let pages = 0
+    do {
+      const res = await familyCall(TOOLS_FN, { action: 'efw.list', cursor, limit: 50 })
+      if (!res.ok) return { ok: false, code: res.code, message: res.message }
+      list.push(...(res.data.records || []))
+      cursor = res.data.nextCursor
+      pages++
+      if (pages > 20) return { ok: false, code: 'pagination-error' }
+    } while (cursor)
+    efwRecords.value = list
+    return { ok: true }
+  }
+
   return {
     currentFetalSession, fetalSessions, activeContraction, contractionRecords,
     fetalFinishQueue, contraStopQueue,
     recentContractions, avgDurationSec, avgIntervalSec, is511Pattern, disclaimer,
     hospitalName, doctorName, hospitalPhone,
+    efwRecords,
     startFetalSession, recordFetalClick, undoFetalClick, finishFetalSession, discardFetalSession,
     pauseFetalSession, resumeFetalSession, retryPending, restoreFromCache,
     pullFetalSessions, startContraction, stopContraction, deleteContraction, pullContractions,
+    calculateEfw, saveEfwRecord, deleteEfwRecord, pullEfwRecords,
     callHospital
   }
 })

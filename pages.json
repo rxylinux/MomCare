@@ -224,6 +224,12 @@
       }
     },
     {
+      "path": "pages/tools/ultrasound-weight",
+      "style": {
+        "navigationBarTitleText": "B 超估重"
+      }
+    },
+    {
       "path": "pages/profile/data-source-scan",
       "style": {
         "navigationBarTitleText": "旧数据来源预览"

@@ -37,8 +37,17 @@ exports.__setCloud = function __setCloud(mockCloud) { cloud = mockCloud }
 
 const FETAL = 'mc_fetal_sessions'
 const CONTRA = 'mc_contraction_records'
+const EFW = 'mc_efw_records'
 const OPS = COLLECTIONS.operations
 const HEALTH_DAILY = 'mc_health_daily'
+
+// ── E2 Hadlock 1985 三参数估重（LOINC 11746-5）──
+// log10(EFW_g)=1.326−0.00326×AC×FL+0.0107×HC+0.0438×AC+0.158×FL（单位 cm）
+// 锚点：HC=32.0/AC=30.0/FL=6.5 → log10=3.37370 → 2364.29g（测试必钉）
+// BPD 不参与本公式（不可替代缺失 HC——只作伴随测量存储）
+const HADLOCK_FORMULA = 'hadlock_hc_ac_fl_1985_v1'
+const EFW_RANGES = { hc: [10.0, 42.0], ac: [10.0, 45.0], fl: [1.0, 10.0] } // cm
+const EFW_WEEK_RANGE = [12, 42]
 
 const SESSION_STATUS = ['running', 'completed', 'discarded']
 const CONTRA_STATUS = ['ongoing', 'finished', 'discarded']
@@ -195,7 +204,7 @@ exports.main = async function main(event) {
   const action = event && event.action
   const db = cloud.database()
   const fid = config.familyId
-  const READ_ACTIONS = ['fetal.list', 'contraction.list']
+  const READ_ACTIONS = ['fetal.list', 'contraction.list', 'efw.calculate', 'efw.list']
   if (!READ_ACTIONS.includes(action)) {
     if (!event.operationId || typeof event.operationId !== 'string' || event.operationId.length > 64) {
       return fail('invalid-params', '缺少有效 operationId')
@@ -532,6 +541,197 @@ exports.main = async function main(event) {
     const nextCursor = rows.length > limit && last ? last.sortKey : null
     return ok({ records: page.map(viewRecord), nextCursor, hasMore: Boolean(nextCursor) })
   }
+
+// ── EFW 测量解析与 Hadlock 纯计算 ──
+// 返回 {err} 或 {hcCm, acCm, flCm}：单位换算（mm/10）→ 有限正数 → 范围门（逐项精确拒因）
+function parseEfwMeasurements(input) {
+  const u = input.unit === undefined || input.unit === null ? 'cm' : input.unit
+  if (u !== 'cm' && u !== 'mm') return { err: 'unit 须 cm 或 mm' }
+  const factor = u === 'mm' ? 0.1 : 1
+  const out = {}
+  for (const key of ['hc', 'ac', 'fl']) {
+    const v = input[key]
+    if (typeof v !== 'number' || !Number.isFinite(v)) return { err: `${key} 须有限数字` }
+    const cm = v * factor
+    if (cm <= 0) return { err: `${key} 须为正数` }
+    const [lo, hi] = EFW_RANGES[key]
+    if (cm < lo || cm > hi) return { err: `${key}=${cm.toFixed(2)}cm 超出合理范围 [${lo}, ${hi}]cm` }
+    out[`${key}Cm`] = cm
+  }
+  return out
+}
+
+// Hadlock 1985 三参数（纯函数——输入 cm）：返回 {log10, exactEfwGrams(两位小数), efwGrams(整数克)}
+function computeHadlock(hcCm, acCm, flCm) {
+  const log10 = 1.326 - 0.00326 * acCm * flCm + 0.0107 * hcCm + 0.0438 * acCm + 0.158 * flCm
+  const exact = Math.pow(10, log10)
+  return { log10, exactEfwGrams: Math.round(exact * 100) / 100, efwGrams: Math.round(exact) }
+}
+
+function viewEfw(doc) {
+  if (!doc) return null
+  return {
+    recordId: doc._id || doc.recordId,
+    memberId: doc.memberId,
+    dateKey: doc.dateKey,
+    gestationalWeek: doc.gestationalWeek,
+    measurements: doc.measurements || null,
+    formula: doc.formula,
+    efwGrams: doc.efwGrams,
+    exactEfwGrams: doc.exactEfwGrams,
+    reportId: doc.reportId ?? null,
+    notes: doc.notes ?? null,
+    status: doc.status,
+    revision: doc.revision,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt
+  }
+}
+
+// ══ E2 估重（efw.calculate / save / delete / list）══
+
+if (action === 'efw.calculate') {
+  const parsed = parseEfwMeasurements(event)
+  if (parsed.err) return fail('invalid-params', `测量参数非法：${parsed.err}`)
+  const { hcCm, acCm, flCm } = parsed
+  const r = computeHadlock(hcCm, acCm, flCm)
+  return ok({
+    inputsCm: { hcCm, acCm, flCm },
+    formula: HADLOCK_FORMULA,
+    log10: Math.round(r.log10 * 100000) / 100000,
+    exactEfwGrams: r.exactEfwGrams,
+    efwGrams: r.efwGrams,
+    efwKg: Math.round(r.exactEfwGrams) / 1000,
+    rangeGrams: { low: Math.round(r.exactEfwGrams * 0.9), high: Math.round(r.exactEfwGrams * 1.1) } // ±10% 参考区间（展示层）
+  })
+}
+
+if (action === 'efw.save') {
+  const gestationalWeek = event.gestationalWeek
+  if (!Number.isInteger(gestationalWeek) || gestationalWeek < EFW_WEEK_RANGE[0] || gestationalWeek > EFW_WEEK_RANGE[1]) {
+    return fail('invalid-params', `gestationalWeek 须 ${EFW_WEEK_RANGE[0]}~${EFW_WEEK_RANGE[1]} 整数`)
+  }
+  const parsed = parseEfwMeasurements(event)
+  if (parsed.err) return fail('invalid-params', `测量参数非法：${parsed.err}`)
+  const { hcCm, acCm, flCm } = parsed
+  const unit = event.unit === undefined || event.unit === null ? 'cm' : event.unit
+  // BPD：伴随测量存储（mm）——不参与本公式（禁忌：不可替代缺失 HC）
+  let bpdMm = null
+  if (event.bpd !== undefined && event.bpd !== null) {
+    if (typeof event.bpd !== 'number' || !Number.isFinite(event.bpd) || event.bpd <= 0) {
+      return fail('invalid-params', 'bpd 须有限正数（或省略）')
+    }
+    bpdMm = unit === 'mm' ? event.bpd : event.bpd * 10
+  }
+  let dateKey = event.dateKey
+  if (dateKey === undefined || dateKey === null) dateKey = shanghaiDateKey(Date.now())
+  if (!DATE_RE.test(String(dateKey))) return fail('invalid-params', 'dateKey 须 YYYY-MM-DD')
+  let notes = event.notes === undefined || event.notes === null ? null : event.notes
+  if (notes !== null && (typeof notes !== 'string' || notes.length > NOTES_MAX)) {
+    return fail('invalid-params', `notes 须 ≤${NOTES_MAX} 字文本`)
+  }
+  let reportId = event.reportId === undefined || event.reportId === null ? null : event.reportId
+  if (reportId !== null && (typeof reportId !== 'string' || reportId.length > ID_MAX)) {
+    return fail('invalid-params', 'reportId 须字符串')
+  }
+  // 服务端权威计算（不信任客户端 EFW——save 恒以服务端公式结果落盘）
+  const calc = computeHadlock(hcCm, acCm, flCm)
+  const now = Date.now()
+  const recordId = 'efw_' + randomBytes(8).toString('hex')
+  const opKey = `${caller.memberId}:${event.operationId}`
+  const opDoc = {
+    memberId: caller.memberId, operationId: event.operationId, kind: 'tools-efw-save',
+    requestHash: digestOf({ gestationalWeek, hcCm, acCm, flCm, unit, bpdMm, dateKey, reportId: reportId ?? null, notes: notes ?? null })
+  }
+  const t = await db.startTransaction()
+  try {
+    const guard = await opGuard(t, opKey, opDoc)
+    if (guard.replayed === 'ok') {
+      const cur = guard.entity && guard.entity.collection === EFW ? await getDocMaybe(t, EFW, guard.entity.docId) : null
+      await t.rollback()
+      return ok({ replayed: true, record: viewEfw(cur) })
+    }
+    if (guard.replayed) return guard.replayed
+    const doc = {
+      familyId: fid, memberId: caller.memberId, dateKey,
+      gestationalWeek,
+      measurements: { hcCm, acCm, flCm, inputUnit: unit, bpdMm },
+      formula: HADLOCK_FORMULA,
+      efwGrams: calc.efwGrams, exactEfwGrams: calc.exactEfwGrams,
+      reportId, notes,
+      status: 'active',
+      revision: 1, createdAt: now, updatedAt: now,
+      sortKey: `${dateKey}:${recordId}`
+    }
+    await t.collection(EFW).doc(recordId).set({ data: { ...doc } })
+    await t.collection(OPS).doc(opKey).set({
+      data: { ...opDoc, entity: { collection: EFW, docId: recordId }, createdAt: now }
+    })
+    await t.commit()
+    return ok({ record: viewEfw({ ...doc, _id: recordId }) })
+  } catch (err) {
+    try { await t.rollback() } catch (e) { /* 已回滚 */ }
+    return txFailed(err)
+  }
+}
+
+if (action === 'efw.delete') {
+  const recordId = event.recordId
+  if (!recordId || typeof recordId !== 'string' || recordId.length > ID_MAX) return fail('invalid-params', '缺少有效 recordId')
+  const expected = parseExpectedRevision(event.expectedRevision)
+  if (expected === null) return fail('invalid-params', 'expectedRevision 必须是显式非负整数')
+  const opKey = `${caller.memberId}:${event.operationId}`
+  const opDoc = {
+    memberId: caller.memberId, operationId: event.operationId, kind: 'tools-efw-delete',
+    requestHash: digestOf({ recordId, expectedRevision: expected })
+  }
+  const now = Date.now()
+  const t = await db.startTransaction()
+  try {
+    const guard = await opGuard(t, opKey, opDoc)
+    if (guard.replayed === 'ok') {
+      const cur = guard.entity && guard.entity.collection === EFW ? await getDocMaybe(t, EFW, guard.entity.docId) : null
+      await t.rollback()
+      return ok({ replayed: true, record: viewEfw(cur) })
+    }
+    if (guard.replayed) return guard.replayed
+    const record = await getDocMaybe(t, EFW, recordId)
+    if (!record || record.familyId !== fid) { await t.rollback(); return fail('not-found', '记录不存在') }
+    if (expected !== record.revision) {
+      await t.rollback()
+      return fail('revision-conflict', '记录已被更新，请刷新后重试', { currentRevision: record.revision })
+    }
+    if (record.status === 'discarded') { await t.rollback(); return fail('invalid-state', '记录已删除') }
+    const merged = { ...stripId(record), status: 'discarded', revision: record.revision + 1, updatedAt: now }
+    await t.collection(EFW).doc(recordId).set({ data: merged })
+    await t.collection(OPS).doc(opKey).set({
+      data: { ...opDoc, entity: { collection: EFW, docId: recordId }, createdAt: now }
+    })
+    await t.commit()
+    return ok({ record: viewEfw({ ...merged, _id: recordId }) })
+  } catch (err) {
+    try { await t.rollback() } catch (e) { /* 已回滚 */ }
+    return txFailed(err)
+  }
+}
+
+if (action === 'efw.list') {
+  const limitRaw = Number(event.limit || PAGE_DEFAULT)
+  const limit = Math.min(Math.max(Number.isInteger(limitRaw) ? limitRaw : PAGE_DEFAULT, 1), PAGE_MAX)
+  const cursor = (typeof event.cursor === 'string' && event.cursor) || null
+  const cmd = db.command
+  const where = { familyId: fid }
+  if (cursor) where.sortKey = cmd.lt(cursor)
+  // 软废弃默认排除（超取+过滤+截断——与 contraction.list 同款策略）
+  const fetchLimit = event.includeDiscarded === true ? limit + 1 : Math.min(limit * 3, 300)
+  const res = await db.collection(EFW).where(where).orderBy('sortKey', 'desc').limit(fetchLimit).get()
+  let rows = (res && res.data) || []
+  if (event.includeDiscarded !== true) rows = rows.filter(r => r.status !== 'discarded')
+  const page = rows.slice(0, limit)
+  const last = page[page.length - 1]
+  const nextCursor = rows.length > limit && last ? last.sortKey : null
+  return ok({ records: page.map(viewEfw), nextCursor, hasMore: Boolean(nextCursor) })
+}
 
   return fail('invalid-action', `未知 action: ${String(action)}`)
 }
