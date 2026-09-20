@@ -34,6 +34,14 @@ for (const dir of dirs) {
   const outDir = join(outRoot, dir.name)
   mkdirSync(outDir, { recursive: true })
   cpSync(join(fnDir, 'index.js'), join(outDir, 'index.js'))
+  // 伴生本地模块逐文件打包（mc-restore 的 v20.js——V20 协议纯函数模块；index.js 以 require('./v20')
+  // 弹性加载，缺文件+flag=true 时 handler fail-closed 拒——组装物必须包含以支持启用模式）
+  const companions = readdirSync(fnDir, { withFileTypes: true })
+    .filter(e => e.isFile() && e.name.endsWith('.js') && e.name !== 'index.js')
+  for (const c of companions) {
+    cpSync(join(fnDir, c.name), join(outDir, c.name))
+    console.log(`  + ${dir.name}/${c.name}`)
+  }
   cpSync(sharedDir, join(outDir, 'shared'), { recursive: true })
   writeFileSync(join(outDir, 'package.json'), JSON.stringify({
     name: dir.name,

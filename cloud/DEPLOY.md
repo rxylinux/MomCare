@@ -98,3 +98,48 @@ mc-health { action:'mood.get', schemaVersion:1, dateKey:'2026-09-20' }
 - 事务并发隔离、`doc.get()` 对不存在文档的确切错误结构、存储规则的暂存目录写法，须以真实环境行为复核（隔离测试只实现了官方文档明示的契约）。
 - 客户端直传暂存目录的存储规则模板（`storage.rules.staging.example.json`）保持与默认相同的全拒绝，待控制台验证本人目录限定写法后再启用。
 - 双端真机同步、临时 URL 有效期、清理暂存文件任务属 B2/B3。
+
+## 7. mc-restore 部署（B3b 阶段二——尚未实施部署）
+
+### 云函数
+
+`cloud/functions/mc-restore/`——与现有函数同模式（`require('wx-server-sdk')` + `shared/` 符号链接）。环境变量与其他函数完全相同（`MC_APPID` / `MC_FAMILY_ID` / `MC_MEMBER_MAMA_OPENID` / `MC_MEMBER_PAPA_OPENID`）。
+
+`cloud/assemble.mjs` 已包含 mc-restore 的打包（shared 符号链接 → 实际文件复制到 `dist/cloud-functions/mc-restore/shared/`）。
+
+### 数据库集合（9 个——见 `cloud/collections.json`）
+
+| 集合 | 用途 |
+| --- | --- |
+| `mc_restore_batches` | 批次主文档（状态机/contentGeneration/provenGeneration/preflight） |
+| `mc_restore_declare_chunks` | manifest 原始字节分片 |
+| `mc_restore_declarations` | 声明索引（逐记录/逐附件） |
+| `mc_restore_anchors` | per-record chunkTotal 锚定+cumuBytes |
+| `mc_restore_records` | 隔离区记录（内联或元数据+chunk 引用） |
+| `mc_restore_record_chunks` | 分片记录原始字节（restored 后无限期保留） |
+| `mc_restore_files` | 隔离区附件引用（指向 mc_files 正式登记） |
+| `mc_restore_slot_locks` | begin 并发互斥槽位锁（计数+创建同一事务；滞后条目按批次实际状态修剪） |
+| `mc_restore_blocks` | V20 索引块文档（finalizeDeclare 逐块持久——Merkle 叶载荷 entries+位置绑定叶 sha256+proof；`MC_RESTORE_V20_ENABLED` 启用模式专用，默认关不产生文档） |
+
+### 安全规则
+
+- **全部 9 个 `mc_restore_*` 集合（含 `mc_restore_blocks`）**：客户端直接读写**全拒绝**（与 `mc_shared_records` 等现有结构化集合同模式）——只能通过 `mc-restore` 云函数（服务端 `resolveCaller` + owner 校验）。
+- `mc_files` 既有规则不变——restore 的 `restore:<batchId>:<fileIndex>` 引用追加走服务端事务。
+
+### 索引
+
+部署时在控制台按 `cloud/collections.json` 中各集合的 `indexes` 字段创建。关键索引：
+
+- `mc_restore_batches`: `{ownerMemberId, familyId, status}` — 批次按所有者/状态检索（活跃上限互斥已由 `mc_restore_slot_locks` 槽位锁事务承担——非 begin 查询路径；此索引供运维/后续 list 类检索）
+- `mc_restore_record_chunks`: `{batchId, domain, recordIndex, chunkIndex}` — finalize keyed get
+- `mc_restore_declarations`: `{batchId, _id}` — 全量分页遍历
+- `mc_restore_blocks`: 无二级索引——块文档按协议 D21 精确形状不存 batchId/blockIndex 字段（仅在 _id 键 `<batchId>:blk:<i>` 内），访问/清理走 _id 前缀键控
+
+### 部署顺序
+
+1. 创建 9 个集合（控制台或 CLI——含 `mc_restore_blocks`；V20 默认关亦建议先建好，避免启用时缺集合）
+2. 部署 `mc-restore` 云函数（与其他函数相同的环境变量）
+3. 创建索引
+4. 客户端测试（仅合成数据）
+
+**当前状态：Phase 1 核心动作已实现但未部署。Phase 2 目前仅 progress/list 有本地入口；attachFile/preview/readUrl/commit/verify/abandon 尚无公共 action 实现。V20 的 `declaring→preparing→finalizeDeclare→indexing` 有界服务端路径已实现，默认关闭；`indexDeclarePage` 的 V20 块消费、客户端续作与真实云端验证仍待完成。阶段二整体未验收，也未提交或部署。**

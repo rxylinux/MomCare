@@ -321,6 +321,272 @@
           "purpose": "report.list 稳定分页（含墓碑）"
         }
       ]
+    },
+    {
+      "name": "mc_restore_batches",
+      "purpose": "B3b 隔离恢复批次主文档（状态机元数据）",
+      "fields": {
+        "_id": "rst_<CSPRNG hex>（客户端生成的128位随机数）",
+        "ownerMemberId": "批次所有者（服务端 resolveCaller 生成；全部动作仅 owner）",
+        "familyId": "数据分区",
+        "status": "declaring|indexing|declared|uploading|verifying|restored|abandoning|abandoned|verify-corruption",
+        "packageDigest": "客户端本地验证的整包 SHA-256（不可变摘要承诺）",
+        "manifestDigest": "manifest 原始字节 SHA-256",
+        "claimedKind": "full|diagnostic|unknown（服务端合格判定在 declare 重组后）",
+        "beginTotals": "begin 时承诺的 totals（重放须全量匹配）",
+        "manifestChunkTotal": "manifest 分片数（首片 CAS 锚定后不可变）",
+        "manifestParsed": "declare 重组+判定完成标记",
+        "totals": "服务端判定的 {records, files, domains}（files 含 domain-json）",
+        "declaredRecords": "声明记录总数",
+        "declaredFiles": "声明文件总数（=服务端判定 totals.files——**含 domain-json 文件**，非仅附件）",
+        "declaredRootSha": "逐声明 key 链式 SHA 根（indexDeclarePage 末页核对）",
+        "indexCursor": "声明索引分页游标",
+        "indexedCount": "已索引声明数",
+        "indexRollingSha": "逐 key 链式滚动 SHA",
+        "contentGeneration": "实际内容变更计数（upload/attach/chunk/finalize 成功 +1；幂等重放不 +1）",
+        "provenGeneration": "预检完成时写入的 contentGeneration 快照",
+        "proofComplete": "预检全页完成+计数/摘要全等标记",
+        "contentGeneration_note": "与 provenGeneration 分离：前者仅实际变更递增，后者预检完成写入",
+        "createdAt": "毫秒时间戳",
+        "updatedAt": "毫秒时间戳"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "ownerMemberId",
+              "order": "asc"
+            },
+            {
+              "field": "familyId",
+              "order": "asc"
+            },
+            {
+              "field": "status",
+              "order": "asc"
+            }
+          ],
+          "purpose": "活跃批次上限查询（含 abandoning）"
+        }
+      ]
+    },
+    {
+      "name": "mc_restore_declare_chunks",
+      "purpose": "manifest 原始字节分片（一片一文档）",
+      "fields": {
+        "_id": "<batchId>:<chunkIndex>",
+        "batchId": "所属批次",
+        "chunkIndex": "0-based 分片序号",
+        "chunkSha256": "该片原始字节 SHA-256",
+        "rawB64": "分片原始字节 base64",
+        "byteLength": "分片字节数"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "batchId",
+              "order": "asc"
+            },
+            {
+              "field": "chunkIndex",
+              "order": "asc"
+            }
+          ],
+          "purpose": "按序重组读取"
+        }
+      ]
+    },
+    {
+      "name": "mc_restore_declarations",
+      "purpose": "声明索引（从冻结 manifest 派生的逐条/逐附件声明）",
+      "fields": {
+        "_id": "<batchId>:decl:<domain>:<index> 或 <batchId>:decl:file:<fileIndex>",
+        "batchId": "所属批次",
+        "type": "record|file",
+        "domain": "记录域（record 类）",
+        "index": "记录索引（record 类）",
+        "fileIndex": "附件文件数组下标（file 类）",
+        "id": "记录稳定 ID（record 类）",
+        "revision": "记录版本（record 类）",
+        "deleted": "墓碑标记（record 类）",
+        "hash": "canonical SHA-256（record 类）",
+        "sha256": "文件字节 SHA-256（file 类）",
+        "length": "文件字节数（file 类）",
+        "contentType": "文件 MIME（file 类）",
+        "originalFileId": "包内原文件标识（file 类）",
+        "indexedAt": "索引时间戳",
+        "frozenReportAttachments": "reports 域声明的冻结附件映射 [{fileIndex, order, originalFileId}]（从 manifest.reports 冻结——uploadRecord/finalizeRecord 正文附件逐位核对凭据）"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "batchId",
+              "order": "asc"
+            },
+            {
+              "field": "_id",
+              "order": "asc"
+            }
+          ],
+          "purpose": "批次全量分页遍历"
+        }
+      ]
+    },
+    {
+      "name": "mc_restore_anchors",
+      "purpose": "per-record chunkTotal 锚定 + 累计字节追踪（CAS）",
+      "fields": {
+        "_id": "<batchId>:anchor:<domain>:<index>",
+        "batchId": "所属批次",
+        "domain": "记录域",
+        "recordIndex": "记录索引",
+        "chunkTotal": "该记录的分片总数（首片 CAS 锚定后不可变）",
+        "firstChunkSha256": "首片 SHA-256",
+        "cumuBytes": "累计已上传字节数（每新 chunk 在同一事务内递增持久；重放不加）",
+        "createdAt": "创建时间戳",
+        "updatedAt": "最后更新时间戳"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "batchId",
+              "order": "asc"
+            }
+          ],
+          "purpose": "abandon 组1 清理（<batchId>:anchor:*）"
+        }
+      ]
+    },
+    {
+      "name": "mc_restore_records",
+      "purpose": "隔离区记录（内联完整记录 或 分片元数据+chunk 引用）",
+      "fields": {
+        "_id": "<batchId>:<domain>:<index>",
+        "batchId": "所属批次",
+        "domain": "记录域",
+        "index": "记录索引",
+        "recordId": "记录稳定 ID",
+        "revision": "记录版本",
+        "deleted": "墓碑标记",
+        "canonicalHash": "canonical SHA-256（与声明全等）",
+        "byteLength": "原始字节长度",
+        "chunkTotal": "分片数（分片记录）",
+        "frozenChunkSha256": "有序逐片 SHA-256 数组 ≤103 项（verify 逐 chunk 比对用）",
+        "chunkIdPrefix": "chunk 文档 ID 前缀",
+        "record": "完整记录对象（仅内联 ≤48KiB 记录；分片记录不存——chunk 是唯一字节源）",
+        "isChunked": "是否分片记录",
+        "consumedAt": "finalize 时间戳（设置后新 chunk 被拒 record-consumed）",
+        "finalizedAt": "finalize 时间戳",
+        "uploadedAt": "内联上传时间戳"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "batchId",
+              "order": "asc"
+            },
+            {
+              "field": "domain",
+              "order": "asc"
+            },
+            {
+              "field": "index",
+              "order": "asc"
+            }
+          ],
+          "purpose": "preview/verify 分页"
+        }
+      ]
+    },
+    {
+      "name": "mc_restore_record_chunks",
+      "purpose": "分片记录的原始字节（无限期保留——restored 批次唯一字节源）",
+      "fields": {
+        "_id": "<batchId>:rec:<domain>:<index>:<chunkIndex>",
+        "batchId": "所属批次",
+        "domain": "记录域",
+        "recordIndex": "记录索引",
+        "chunkIndex": "分片序号",
+        "chunkSha256": "该片原始字节 SHA-256",
+        "rawB64": "分片原始字节 base64",
+        "byteLength": "分片字节数"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "batchId",
+              "order": "asc"
+            },
+            {
+              "field": "domain",
+              "order": "asc"
+            },
+            {
+              "field": "recordIndex",
+              "order": "asc"
+            },
+            {
+              "field": "chunkIndex",
+              "order": "asc"
+            }
+          ],
+          "purpose": "finalize keyed get / abandon 组3 清理"
+        }
+      ]
+    },
+    {
+      "name": "mc_restore_files",
+      "purpose": "隔离区附件引用（引用 mc_files 正式登记）",
+      "fields": {
+        "_id": "<batchId>:<fileIndex>",
+        "batchId": "所属批次",
+        "fileIndex": "文件数组下标",
+        "fileId": "mc_files 登记记录 ID（memberId:uploadId）",
+        "sha256": "文件字节 SHA-256",
+        "length": "文件字节数",
+        "references": "从冻结声明派生的 [{reportId, order}] 引用列表"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "field": "batchId",
+              "order": "asc"
+            }
+          ],
+          "purpose": "abandon 组5 清理"
+        }
+      ]
+    },
+    {
+      "name": "mc_restore_slot_locks",
+      "purpose": "begin 并发互斥：同成员活跃批次计数的槽位锁（计数+创建同一事务原子完成）",
+      "fields": {
+        "_id": "slotlock:<memberId>",
+        "ownerMemberId": "成员（锁属主）",
+        "familyId": "数据分区",
+        "activeBatchIds": "最近 begin 记录的批次 ID 数组（滞后条目由下次 begin 按批次实际状态修剪，不作为状态机真源）",
+        "updatedAt": "最后更新时间戳"
+      },
+      "indexes": []
+    },
+    {
+      "name": "mc_restore_blocks",
+      "purpose": "V20 索引块文档（finalizeDeclare 逐块持久——Merkle 叶载荷+证明；客户端直接读写全拒绝）",
+      "fields": {
+        "_id": "<batchId>:blk:<blockIndex>（协议 D21 精确形状——blockIndex/batchId 仅存在于 _id 键，不存独立字段；访问/清理走 _id 前缀）",
+        "sha256": "位置绑定 Merkle 叶 SHA256(\"mcpkg-blk:\"‖u32be(totalBlocks)‖u32be(blockIndex)‖canonicalBytes) hex",
+        "byteLength": "块 canonical 字节长（≤10,240B）",
+        "entryCount": "条目数（≤48）",
+        "entries": "解析后条目数组（D21 native JSON——canonical 解析形，非字符串）",
+        "proof": "sibling 单串规范 base64（D20——按父层升序拼接 ⌈log2(totalBlocks)⌉×32B；T=1 空串）"
+      },
+      "indexes": []
     }
   ]
 }
