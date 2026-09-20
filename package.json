@@ -4,8 +4,11 @@
     "build:h5": "UNI_INPUT_DIR=$PWD uni build -p h5",
     "dev:mp-weixin": "UNI_INPUT_DIR=$PWD uni -p mp-weixin",
     "build:mp-weixin": "UNI_INPUT_DIR=$PWD uni build -p mp-weixin",
-    "deploy": "npm run build:h5 && wrangler deploy --name momcare --assets dist/build/h5 --compatibility-date 2026-05-16 --keep-vars",
-    "preview": "wrangler dev --name momcare --assets dist/build/h5 --compatibility-date 2026-05-16"
+    "deploy:legacy-preview": "npm run build:h5 && wrangler deploy --name momcare --assets dist/build/h5 --compatibility-date 2026-05-16 --keep-vars",
+    "preview:legacy": "wrangler dev --name momcare --assets dist/build/h5 --compatibility-date 2026-05-16",
+    "assemble:cloud": "node cloud/assemble.mjs",
+    "test": "node tests/phase-d-release-prep.regress.cjs",
+    "test:all": "for f in tests/*.regress.cjs; do echo \"=== $f ===\"; node \"$f\" || exit 1; done"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-alpha-5010320260611001",

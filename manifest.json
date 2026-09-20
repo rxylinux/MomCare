@@ -25,6 +25,18 @@
       "postcss": true,
       "minified": true
     },
-    "usingComponents": true
+    "usingComponents": true,
+    "packOptions": {
+      "ignore": [
+        {
+          "type": "file",
+          "value": "static/momcare.mobileconfig"
+        },
+        {
+          "type": "file",
+          "value": "static/logo.png"
+        }
+      ]
+    }
   }
 }
