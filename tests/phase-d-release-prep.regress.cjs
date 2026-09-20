@@ -125,8 +125,14 @@ async function main() {
       for (const c of companions) {
         assert.equal(sha256(fs.readFileSync(path.join(DIST_FNS, fn, c))), sha256(fs.readFileSync(path.join(SRC_FNS, fn, c))), `${fn}/${c} 与源逐字节一致`)
       }
-      // 产物目录恰为 index.js + package.json + shared + 伴生集（无多余夹带）
-      const expect = ['index.js', 'package.json', 'shared', ...companions].sort()
+      // Phase G：伴生 config.json（mc-tools 云调用权限 ocr.printedText）存在即随包且同字节
+      const cfgSrc = path.join(SRC_FNS, fn, 'config.json')
+      const hasCfg = fs.existsSync(cfgSrc)
+      if (hasCfg) {
+        assert.equal(sha256(fs.readFileSync(path.join(DIST_FNS, fn, 'config.json'))), sha256(fs.readFileSync(cfgSrc)), `${fn}/config.json 与源逐字节一致`)
+      }
+      // 产物目录恰为 index.js + package.json + shared + 伴生集（+config.json 如有；无多余夹带）
+      const expect = ['index.js', 'package.json', 'shared', ...companions, ...(hasCfg ? ['config.json'] : [])].sort()
       const actual = fs.readdirSync(path.join(DIST_FNS, fn)).sort()
       assert.deepEqual(actual, expect, `${fn} 产物恰为期望文件集（实得 ${JSON.stringify(actual)}）`)
       // shared 与源全量同构

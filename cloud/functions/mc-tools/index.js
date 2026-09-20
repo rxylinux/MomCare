@@ -43,6 +43,10 @@ exports.__setCloud = function __setCloud(mockCloud) { cloud = mockCloud }
 // E3 AI 代理测试注入：fn(prompt, context) → 文本；null 恢复真实 env 判定（未启用分支可测）
 exports.__setAiMock = function __setAiMock(fn) { aiMock = fn === null ? null : fn }
 
+// Phase G OCR 提取测试注入口：fn(fileID) → 文本；null 恢复真实 env 判定
+let ocrMock = null
+exports.__setOcrMock = function __setOcrMock(fn) { ocrMock = fn === null ? null : fn }
+
 const FETAL = 'mc_fetal_sessions'
 const CONTRA = 'mc_contraction_records'
 const EFW = 'mc_efw_records'
@@ -70,6 +74,13 @@ const PAGE_MAX = 100
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const ID_MAX = 128
 const REPORTS = 'mc_reports'
+const FILES = COLLECTIONS.files
+
+// ── Phase G OCR 提取边界（规格 docs/PHASE_G_REPORT_OCR_SPEC.md）──
+const OCR_MAX_PAGES = 3          // 单次解读最多识别附件页数（时延/配额上限）
+const OCR_PAGE_TIMEOUT_MS = 15000 // 单页提取外层超时（race——防单页挂死拖垮整函数）
+const OCR_TEXT_MAX = 2000        // OCR 文本字符上限（Array.from 计数；超出截断并标注）
+const OCR_TRUNCATED_SUFFIX = '…（OCR 文本超长已截断）'
 
 // ── E3 AI 代理网关 ──
 // 强制免责（一切 AI 生成内容必带——"AI 生成（未人工逐字审校）"+ 医疗免责）
@@ -130,6 +141,156 @@ function callDeepSeek(apiKey, prompt) {
     req.write(body)
     req.end()
   })
+}
+
+// ── Phase G OCR 提供方抽象（规格 docs/PHASE_G_REPORT_OCR_SPEC.md）──
+// 判定顺序：测试 mock → MC_OCR_PROVIDER（wechat 云调用 / tencent API）→ null（未启用）。
+// DeepSeek 与 OCR 是两个独立开关：OCR 未启用时 ai.analyzeReport 照常走元数据模式。
+function ocrProvider() {
+  if (ocrMock) return { kind: 'mock', extract: fileID => Promise.resolve(ocrMock(fileID)) }
+  const kind = process.env.MC_OCR_PROVIDER
+  if (kind === 'wechat') return { kind: 'wechat', extract: extractViaWechatOcr }
+  if (kind === 'tencent') {
+    const sid = process.env.MC_OCR_TENCENT_SECRET_ID
+    const skey = process.env.MC_OCR_TENCENT_SECRET_KEY
+    if (!sid || !skey) return null // tencent 缺密钥 → fail-closed 未启用，不静默降级 wechat
+    return { kind: 'tencent', extract: fileID => extractViaTencentOcr(sid, skey, fileID) }
+  }
+  return null
+}
+
+// 微信云调用 OCR：附件临时 URL → openapi ocr.printedText（config.json 须声明云调用权限）
+async function extractViaWechatOcr(fileID) {
+  let tempUrl = ''
+  try {
+    const r = await cloud.getTempFileURL({ fileList: [fileID] })
+    const item = r && r.fileList && r.fileList[0]
+    tempUrl = (item && item.tempFileURL) || ''
+  } catch (e) {
+    throw new Error('ocr-url-failed')
+  }
+  if (!tempUrl) throw new Error('ocr-url-failed')
+  let res
+  try {
+    res = await cloud.openapi.ocr.printedText({ img_url: tempUrl })
+  } catch (e) {
+    throw new Error('ocr-call-error:' + String((e && (e.errMsg || e.message)) || e).slice(0, 80))
+  }
+  if (!res || (typeof res.errCode === 'number' && res.errCode !== 0)) throw new Error('ocr-bad-response')
+  const words = Array.isArray(res.words_result) ? res.words_result : []
+  const text = words.map(w => (w && typeof w.words === 'string') ? w.words : '').filter(Boolean).join('\n')
+  if (!text) throw new Error('ocr-empty-text')
+  return text
+}
+
+// 腾讯云通用文字识别（GeneralBasicOCR 2018-11-19）备选：TC3-HMAC-SHA256 签名直调
+async function extractViaTencentOcr(secretId, secretKey, fileID) {
+  let buffer
+  try {
+    const dl = await cloud.downloadFile({ fileID })
+    buffer = dl && dl.fileContent
+  } catch (e) {
+    throw new Error('ocr-download-failed')
+  }
+  if (!buffer || !buffer.length) throw new Error('ocr-download-failed')
+  const cryptoModule = require('node:crypto')
+  const https = require('node:https')
+  const sha256hex = s => cryptoModule.createHash('sha256').update(s, 'utf8').digest('hex')
+  const hmacBy = (key, msg) => cryptoModule.createHmac('sha256', key).update(msg, 'utf8').digest()
+  const service = 'ocr'
+  const host = 'ocr.tencentcloudapi.com'
+  const payload = JSON.stringify({ ImageBase64: buffer.toString('base64') })
+  const timestamp = Math.floor(Date.now() / 1000)
+  const date = new Date(timestamp * 1000).toISOString().slice(0, 10)
+  const canonicalRequest = 'POST\n/\n\ncontent-type:application/json; charset=utf-8\nhost:' + host + '\n\ncontent-type;host\n' + sha256hex(payload)
+  const stringToSign = 'TC3-HMAC-SHA256\n' + timestamp + '\n' + date + '/' + service + '/tc3_request\n' + sha256hex(canonicalRequest)
+  const derivedKey = hmacBy(hmacBy(hmacBy('TC3' + secretKey, date), service), 'tc3_request')
+  const signature = cryptoModule.createHmac('sha256', derivedKey).update(stringToSign, 'utf8').digest('hex')
+  const authorization = 'TC3-HMAC-SHA256 Credential=' + secretId + '/' + date + '/' + service + '/tc3_request, SignedHeaders=content-type;host, Signature=' + signature
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: host, path: '/', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Host': host,
+        'Authorization': authorization,
+        'X-TC-Action': 'GeneralBasicOCR',
+        'X-TC-Timestamp': String(timestamp),
+        'X-TC-Version': '2018-11-19',
+        'X-TC-Region': 'ap-guangzhou',
+        'Content-Length': Buffer.byteLength(payload)
+      },
+      timeout: OCR_PAGE_TIMEOUT_MS
+    }, res => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data)
+          const resp = parsed && parsed.Response
+          if (!resp || resp.Error) throw new Error('ocr-tencent-error:' + String((resp && resp.Error && resp.Error.Code) || 'unknown').slice(0, 60))
+          const lines = Array.isArray(resp.TextDetections) ? resp.TextDetections : []
+          const text = lines.map(l => (l && typeof l.DetectedText === 'string') ? l.DetectedText : '').filter(Boolean).join('\n')
+          if (!text) throw new Error('ocr-empty-text')
+          resolve(text)
+        } catch (e) { reject(e instanceof Error ? e : new Error('ocr-malformed-response')) }
+      })
+    })
+    req.on('error', reject)
+    req.on('timeout', () => { req.destroy(new Error('ocr-page-timeout')) })
+    req.write(payload)
+    req.end()
+  })
+}
+
+// OCR 文本有界截断（Array.from 计数——代理对安全）
+function boundOcrText(raw) {
+  const chars = Array.from(String(raw || ''))
+  if (chars.length <= OCR_TEXT_MAX) return chars.join('')
+  return chars.slice(0, OCR_TEXT_MAX).join('') + OCR_TRUNCATED_SUFFIX
+}
+
+// 附件登记核对 + 逐页 OCR（登记校验与 mc-reports report.getReadUrls 同规则）。
+// 任一页失败 → 抛错（整次解读失败——多页报告缺页解读会误导，宁失败不部分成功）。
+async function extractOcrForReport(db, fid, attachments, provider) {
+  const pageFileIds = attachments.slice(0, OCR_MAX_PAGES).map(a => a.fileId)
+  const formalFileIDs = []
+  for (const fileId of pageFileIds) {
+    const fdoc = await getDocMaybe(db, FILES, fileId)
+    if (!fdoc || fdoc.familyId !== fid || fdoc.status !== 'registered' || !fdoc.formalFileID) {
+      const err = new Error('附件 ' + fileId + ' 不可用（未登记或已清理）')
+      err.code = 'invalid-attachment'
+      throw err
+    }
+    formalFileIDs.push(fdoc.formalFileID)
+  }
+  const pageTexts = []
+  for (let i = 0; i < formalFileIDs.length; i++) {
+    let text
+    try {
+      text = await Promise.race([
+        provider.extract(formalFileIDs[i]),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('ocr-page-timeout')), OCR_PAGE_TIMEOUT_MS))
+      ])
+    } catch (e) {
+      const err = new Error('第 ' + (i + 1) + ' 张附件识别失败：' + String((e && e.message) || e).slice(0, 80))
+      err.code = 'ocr-call-failed'
+      throw err
+    }
+    pageTexts.push(String(text))
+  }
+  return { text: boundOcrText(pageTexts.join('\n')), pageFileIds, pageCount: formalFileIDs.length }
+}
+
+// 缓存复用：报告已存 ocr_result 且附件集合（页序）与提供方一致时复用——不重复识别/计费
+function reusableOcr(report, provider, attachments) {
+  const prev = report && report.ocr_result
+  if (!prev || prev.included !== true || typeof prev.text !== 'string' || !prev.text) return null
+  if (prev.provider !== provider.kind) return null
+  const prevIds = Array.isArray(prev.pageFileIds) ? prev.pageFileIds : []
+  const curIds = attachments.slice(0, OCR_MAX_PAGES).map(a => a.fileId)
+  if (prevIds.length !== curIds.length || prevIds.some((v, i) => v !== curIds[i])) return null
+  return prev
 }
 
 async function getDocMaybe(db, col, id) {
@@ -863,17 +1024,55 @@ if (action === 'efw.list') {
     if (!provider) {
       return ok({ enabled: false, message: '报告自动 OCR / DeepSeek 解读服务未配置；请以原始检验单与主治医生诊断为准' })
     }
-    // 安全边界：仅送报告公开元数据（日期/类型/备注/附件计数）——严禁透传私人心情/日记/无关身体数据
-    const atts = Array.isArray(report.attachments) ? report.attachments.length : 0
-    const prompt = [
-      '你是产科超声/检验报告解读助手。请基于以下报告元数据给出一般性说明与就诊建议，',
+    // Phase G OCR 阶段（独立开关）：附件存在且 OCR 提供方配置时提取文本，否则元数据模式
+    const attachments = Array.isArray(report.attachments) ? report.attachments : []
+    const ocrOp = attachments.length > 0 ? ocrProvider() : null
+    let ocrIncluded = false
+    let ocrText = ''
+    let ocrPageFileIds = []
+    let ocrProviderKind = ''
+    let ocrGeneratedAt = 0
+    if (ocrOp) {
+      const cached = reusableOcr(report, ocrOp, attachments)
+      if (cached) {
+        ocrIncluded = true
+        ocrText = cached.text
+        ocrPageFileIds = Array.isArray(cached.pageFileIds) ? cached.pageFileIds : []
+        ocrProviderKind = cached.provider
+        ocrGeneratedAt = cached.generatedAt || 0
+      } else {
+        let extracted
+        try {
+          extracted = await extractOcrForReport(db, fid, attachments, ocrOp)
+        } catch (e) {
+          if (e && e.code === 'invalid-attachment') return fail('invalid-attachment', e.message)
+          return fail('ocr-call-failed', 'OCR 识别失败，请重试或以原始检验单为准', { errMsg: String((e && e.message) || e).slice(0, 120) })
+        }
+        ocrIncluded = true
+        ocrText = extracted.text
+        ocrPageFileIds = extracted.pageFileIds
+        ocrProviderKind = ocrOp.kind
+      }
+    }
+    // 安全边界：仅送报告公开元数据 + 本报告附件自身 OCR 文本——严禁透传私人心情/日记/无关身体数据
+    const atts = attachments.length
+    const promptParts = [
+      '你是产科超声/检验报告解读助手。请基于以下报告信息给出一般性说明与就诊建议，',
       '不得给出具体用药剂量，不得替代医生诊断。',
       `报告日期：${report.dateKey || '未知'}；类型：${report.reportType || '未知'}；附件数：${atts}；`,
       `备注：${typeof report.note === 'string' && report.note ? report.note.slice(0, 100) : '无'}`
-    ].join('')
+    ]
+    if (ocrIncluded) {
+      promptParts.push(
+        '\n报告图像 OCR 提取文本（识别可能有误差）：',
+        ocrText,
+        '\n请优先依据 OCR 文本逐项分析实际出现的指标与参考值；OCR 文本中未出现的指标不得编造。'
+      )
+    }
+    const prompt = promptParts.join('')
     let answer
     try {
-      answer = await provider.call(prompt, { kind: 'analyzeReport', reportId, dateKey: report.dateKey, reportType: report.reportType, attachments: atts })
+      answer = await provider.call(prompt, { kind: 'analyzeReport', reportId, dateKey: report.dateKey, reportType: report.reportType, attachments: atts, ocrIncluded })
     } catch (e) {
       return fail('ai-call-failed', 'AI 服务调用失败，请稍后重试或以原始检验单为准', { errMsg: String((e && e.message) || e).slice(0, 120) })
     }
@@ -886,6 +1085,10 @@ if (action === 'efw.list') {
       if (!fresh || fresh.familyId !== fid || fresh.deleted === true) { await t.rollback(); return fail('report-not-found', '报告不存在或已删除') }
       const merged = { ...stripId(fresh) }
       merged.ai_result = { text, model: provider.kind, generatedAt: now }
+      if (ocrIncluded) {
+        // ocr_result 仅在实际提取（或复用）时写入；元数据模式不动旧值
+        merged.ocr_result = { text: ocrText, included: true, provider: ocrProviderKind, generatedAt: ocrGeneratedAt || now, pageFileIds: ocrPageFileIds }
+      }
       merged.revision = (fresh.revision || 0) + 1
       merged.updatedAt = now
       merged.updatedBy = caller.memberId
@@ -895,7 +1098,7 @@ if (action === 'efw.list') {
       try { await t.rollback() } catch (e) { /* 已回滚 */ }
       return txFailed(err)
     }
-    return ok({ enabled: true, answer: text, disclaimer: AI_DISCLAIMER, model: provider.kind, reportRevision: (report.revision || 0) + 1 })
+    return ok({ enabled: true, answer: text, disclaimer: AI_DISCLAIMER, model: provider.kind, ocrIncluded, ocrText: ocrIncluded ? ocrText : '', reportRevision: (report.revision || 0) + 1 })
   }
 
   return fail('invalid-action', `未知 action: ${String(action)}`)

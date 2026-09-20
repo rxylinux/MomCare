@@ -76,6 +76,10 @@ function wireCloudBaseAi(world, { aiAnswer, cloudFails } = {}) {
   process.env.MC_MEMBER_MAMA_OPENID = 'oPFAMAMA'
   process.env.MC_MEMBER_PAPA_OPENID = 'oPFAPAPA'
   delete process.env.DEEPSEEK_API_KEY
+  // Phase G：OCR 提供方变量隔离——本套件 probe 报告无附件，但杜绝本机配置泄漏
+  delete process.env.MC_OCR_PROVIDER
+  delete process.env.MC_OCR_TENCENT_SECRET_ID
+  delete process.env.MC_OCR_TENCENT_SECRET_KEY
   world.__aiDocs = docs // 白盒：断言 ai_result 服务端回写
 
   const cloud = {

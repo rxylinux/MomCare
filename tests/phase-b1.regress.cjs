@@ -1095,12 +1095,15 @@ import { __resetForTests } from '@/services/sessionService.js'
     global.__legacy_token = ''
     const uploadRes = await handleUploadResult(storeStub, global.uni, () => false, 'https://legacy', () => 'a-real-token', () => {})()
     assert.equal(uploadRes, undefined)
-    // detail onAiCardTap
-    const onAi = extractFn('pages/archives/detail.vue', 'onAiCardTap', ['aiStatus', 'reportId', 'healthStore', 'reportStore', 'uni'])
-    await onAi({ value: 'pending' }, { value: 'r1' }, { canUseAiInterpret: () => true }, {}, global.uni)()
+    // detail onAiCardTap（Phase G：正式态走云端 triggerAiPipeline（mc-tools）；此处注入
+    // isFamilyMode=false 走演示分支——保留 B1 意图：零旧 Cloudflare 调用/上传 + 明确不可用提示）
+    const onAi = extractFn('pages/archives/detail.vue', 'onAiCardTap',
+      ['aiStatus', 'reportId', 'healthStore', 'reportStore', 'uni', 'isFamilyMode', 'navigateToPage', 'loadReport'])
+    await onAi({ value: 'pending' }, { value: 'r1' }, { canUseAiInterpret: () => true },
+      { triggerAiPipeline: async () => {} }, global.uni, () => false, () => {}, async () => {})()
     assert.equal(uniCalls.requests, 0, '零旧 Cloudflare 调用')
     assert.equal(uniCalls.uploadFile, 0, '零旧二进制上传')
-    assert.ok(uniCalls.toasts.some(t => /未接入|未启用|已停用/.test(t)))
+    assert.ok(uniCalls.toasts.some(t => /未接入|未启用|已停用|演示模式暂不支持/.test(t)))
   })
 
   await scenario('B1-门：legacyHttpEnabled 恒为 false（运行时入口全部短路）', async () => {

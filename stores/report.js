@@ -758,7 +758,8 @@ function _markUnverifiedOnRead(list) {
         ai_status: 'done',
         ocr_status: 'done',
         ai_result: aiData,
-        ocr_text: String(data.answer || '')
+        // Phase G：存服务端 OCR 提取原文（未含 OCR 时为空串）——修复旧占位把 AI 回答误存为 ocr_text
+        ocr_text: typeof data.ocrText === 'string' ? data.ocrText : ''
       })
       await health.consumeAiInterpretQuota()
 

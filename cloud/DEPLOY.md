@@ -21,6 +21,23 @@ MC_MEMBER_PAPA_OPENID=oooooooooooo...  # 爸爸 OpenID
 
 缺任何一项：所有业务函数返回 `not-configured`，客户端显示"尚未配置"，不会猜测或降级。
 
+### 可选功能环境变量（只配 mc-tools；不配 = 明确未启用，fail-closed）
+
+```
+DEEPSEEK_API_KEY=sk-xxxxxxxx              # AI 解读/咨询（DeepSeek 文本模型）。缺省=全部"未配置，请遵医嘱"
+MC_OCR_PROVIDER=wechat                    # 报告图片 OCR 提取（Phase G）。缺省=元数据模式（无 OCR）
+# 备选提供方（腾讯云 OCR；配 tencent 时必需，缺一整体未启用、不降级 wechat）：
+MC_OCR_TENCENT_SECRET_ID=AKIDxxxxxxxx
+MC_OCR_TENCENT_SECRET_KEY=xxxxxxxx
+```
+
+mc-tools 注意事项（启用 AI/OCR 时）：
+
+1. `cloud/functions/mc-tools/config.json` 声明云调用权限 `ocr.printedText`，随 `assemble:cloud` 打包上传；部署后在控制台函数配置处应可见该权限。
+2. **函数超时调到 ≥90 秒**（OCR 最多 3 页×15s + DeepSeek 20s + 余量；以控制台支持的上限为准）。OCR 页数/文本上限为代码常量（规格 `docs/PHASE_G_REPORT_OCR_SPEC.md`）。
+3. OCR 与 DeepSeek 相互独立：只配 Key 不配 OCR = 解读基于元数据；只配 OCR 不配 Key = 解读整体未启用。
+4. 密钥只进控制台环境变量，不写入仓库/前端/交接文档。
+
 ### 自取 OpenID（设置期受控通道）
 
 部署函数后，**先只配置 `MC_APPID`**（其余三项留空）。两位成员分别在自己的手机上：

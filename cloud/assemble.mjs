@@ -34,6 +34,12 @@ for (const dir of dirs) {
   const outDir = join(outRoot, dir.name)
   mkdirSync(outDir, { recursive: true })
   cpSync(join(fnDir, 'index.js'), join(outDir, 'index.js'))
+  // 云函数配置（如 mc-tools 的云调用权限 config.json）——存在即随包打包
+  const configPath = join(fnDir, 'config.json')
+  if (existsSync(configPath)) {
+    cpSync(configPath, join(outDir, 'config.json'))
+    console.log(`  + ${dir.name}/config.json`)
+  }
   // 伴生本地模块逐文件打包（mc-restore 的 v20.js——V20 协议纯函数模块；index.js 以 require('./v20')
   // 弹性加载，缺文件+flag=true 时 handler fail-closed 拒——组装物必须包含以支持启用模式）
   const companions = readdirSync(fnDir, { withFileTypes: true })

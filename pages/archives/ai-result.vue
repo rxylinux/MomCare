@@ -23,10 +23,10 @@
     <!-- Scrollable Content（AI 未启用时不渲染任何解读结果） -->
     <scroll-view v-if="!aiDisabled" scroll-y class="scroll">
       <!-- Indicators Section -->
-      <view class="ai-section-title-wrap">
+      <view v-if="indicators.length > 0" class="ai-section-title-wrap">
         <text class="ai-section-title">逐项解读</text>
       </view>
-      <view class="indicator-list">
+      <view v-if="indicators.length > 0" class="indicator-list">
         <view
           v-for="(ind, idx) in indicators"
           :key="idx"
@@ -60,6 +60,15 @@
         </view>
       </view>
 
+      <!-- Phase G：OCR 提取原文（供核对识别质量；机器识别可能有误） -->
+      <view v-if="ocrText" class="ai-section-title-wrap">
+        <text class="ai-section-title">报告原文提取（OCR）</text>
+      </view>
+      <view v-if="ocrText" class="ocr-text-card">
+        <text class="ocr-text-body" user-select>{{ ocrText }}</text>
+        <text class="ocr-text-note">✦ 机器识别可能有误，请以报告原件为准</text>
+      </view>
+
       <!-- Disclaimer -->
       <view class="disclaimer">
         <text class="disclaimer-text">✦ 以上解读由 AI 生成，仅供参考，不构成医疗诊断建议。如有疑问，请及时就诊咨询您的产科医生。</text>
@@ -83,21 +92,32 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, getTypeInfo } from '@/stores/report'
-import { getSessionState, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { getSessionState, isExplicitDemo } from '@/services/sessionService.js'
 
 const reportStore = useReportStore()
-// B2b2：AI 在配置/真实验证前明确未启用——正式态不显示任何"解读完成/全部正常"式内容
-const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
-const aiDisabled = ref(false)
+// B2b2 原则保持：无真实结果不呈现任何"解读完成"式内容；
+// Phase G 起正式态（家庭模式）有云端真实 ai_result（triggerAiPipeline 成功后写入）即展示。
 import { watch } from 'vue'
 import { subscribeSession } from '@/services/sessionService.js'
-watch(subscribeSession(), () => {
-  // 演示/未确认与正式之间切换：立即按当前身份重估（正式恒为未启用态）
-  aiDisabled.value = !isExplicitDemo() || !(getSessionState().status === 'confirmed')
-})
+const sessionTick = ref(0)
+watch(subscribeSession(), () => { sessionTick.value++ })
 
 const report = ref({})
 const feedbackGiven = ref('')
+
+const aiDisabled = computed(() => {
+  void sessionTick.value
+  if (isExplicitDemo()) return false
+  if (getSessionState().status !== 'confirmed') return true
+  // 正式态：仅当存在云端真实结果（状态 done 且 ai_result 在场）才展示
+  return !(report.value.ai_status === 'done' && report.value.ai_result)
+})
+
+// Phase G：服务端 OCR 提取原文（triggerAiPipeline 存入 report.ocr_text）
+const ocrText = computed(() => {
+  const t = report.value.ocr_text
+  return typeof t === 'string' ? t.trim() : ''
+})
 
 const typeLabel = computed(() => {
   const info = getTypeInfo(report.value.report_type)
@@ -191,18 +211,15 @@ function mapSeverity(severity) {
 }
 
 onLoad(async (options) => {
-  aiDisabled.value = !isExplicitDemo()
-  if (aiDisabled.value) return // 正式态：不读取旧档案、不呈现解读结果/伪成功
-  if (isExplicitDemo()) {
-    uni.showToast && uni.showToast({ title: '演示模式：以下为示例内容，非真实解读', icon: 'none', duration: 2500 })
-  }
-  aiDisabled.value = !isExplicitDemo()
   if (options.id) {
     const found = reportStore.reports.find(r => r._id === options.id) ||
                   reportStore.unarchivedReports.find(r => r._id === options.id)
     if (found) {
       report.value = found
     }
+  }
+  if (isExplicitDemo() && !aiDisabled.value) {
+    uni.showToast && uni.showToast({ title: '演示模式：以下为示例内容，非真实解读', icon: 'none', duration: 2500 })
   }
 })
 
@@ -317,6 +334,11 @@ page {
 .suggestion-text { font-size: 26rpx; color: #2A6040; line-height: 1.6; }
 
 /* ── Disclaimer ── */
+/* Phase G：OCR 提取原文展示（等宽感弱化、可长按选择核对） */
+.ocr-text-card { margin: 16rpx 32rpx 0; background: #FFFFFF; border-radius: 20rpx; padding: 24rpx 28rpx; box-shadow: 0 2px 16px rgba(0, 0, 0, 0.05); }
+.ocr-text-body { font-size: 24rpx; color: #3A3834; line-height: 1.7; word-break: break-all; white-space: pre-wrap; }
+.ocr-text-note { display: block; margin-top: 16rpx; font-size: 22rpx; color: #9C9890; }
+
 .disclaimer { margin: 24rpx 32rpx; background: #F2F0EE; border-radius: 20rpx; padding: 20rpx 28rpx; }
 .disclaimer-text { font-size: 22rpx; color: #9C9890; line-height: 1.6; }
 

@@ -95,6 +95,10 @@ function makeStack(member = 'mama') {
   for (const [k, v] of Object.entries(TEST_ENV)) process.env[k] = v
   process.env.MC_FAMILY_ID = TEST_ENV.MC_FAMILY_ID
   delete process.env.DEEPSEEK_API_KEY
+  // Phase G OCR 提供方变量同样隔离：E3 只测 AI 网关（元数据模式），不受本机 OCR 配置影响
+  delete process.env.MC_OCR_PROVIDER
+  delete process.env.MC_OCR_TENCENT_SECRET_ID
+  delete process.env.MC_OCR_TENCENT_SECRET_KEY
   cloud.__setCtx(member === 'mama' ? TEST_ENV.MC_MEMBER_MAMA_OPENID : member === 'papa' ? TEST_ENV.MC_MEMBER_PAPA_OPENID : member)
   const tools = requireHandler()
   tools.__setCloud(cloud)

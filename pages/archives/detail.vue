@@ -250,7 +250,7 @@ const currentImageUrl = computed(() => {
 const aiStatus = computed(() => report.value.ai_status || 'pending')
 
 const aiCardClass = computed(() => {
-  if (isFamilyMode()) return 'ai-card-disabled' // 非 demo：AI 未启用优先于一切配额/状态判断
+  // Phase G：正式态不再硬封锁——云端 mc-tools 网关负责未配置时如实降级（enabled:false）
   if ((aiStatus.value === 'pending' || aiStatus.value === 'failed') && healthStore.aiInterpretRemaining <= 0) {
     return 'ai-card-limited'
   }
@@ -263,7 +263,6 @@ const aiCardClass = computed(() => {
 })
 
 const aiCardIcon = computed(() => {
-  if (isFamilyMode()) return '🚫'
   if ((aiStatus.value === 'pending' || aiStatus.value === 'failed') && healthStore.aiInterpretRemaining <= 0) {
     return '⏰'
   }
@@ -276,7 +275,6 @@ const aiCardIcon = computed(() => {
 })
 
 const aiCardTitle = computed(() => {
-  if (isFamilyMode()) return 'AI 解读未启用'
   if ((aiStatus.value === 'pending' || aiStatus.value === 'failed') && healthStore.aiInterpretRemaining <= 0) {
     return '今日解读次数已用完'
   }
@@ -289,16 +287,17 @@ const aiCardTitle = computed(() => {
 })
 
 const aiCardSub = computed(() => {
-  // 非 demo：未启用优先——不显示配额/"已解读/整体正常"等误导性正式文案
-  if (isFamilyMode()) return '未配置 OCR/DeepSeek；不会生成自动解读，请阅读原件并遵医嘱'
   const result = report.value.ai_result
   if (aiStatus.value === 'done' && result) {
+    // 正式态结果为云端自由文本：不做"整体正常"式断言，恒带"以原件为准"
+    if (isFamilyMode()) return '已解读 · AI 生成仅供参考，以原件与医生诊断为准'
     const abnormal = result.abnormal_indicators || []
     if (abnormal.length > 0) return `已解读 · 发现 ${abnormal.length} 项指标异常`
     return '已解读 · 整体正常'
   }
   if (aiStatus.value === 'processing') return '正在分析报告内容…'
   if (aiStatus.value === 'failed') return `点击重新触发 AI 解读 · 今日剩余 ${healthStore.aiInterpretRemaining} 次`
+  if (isFamilyMode()) return '云端 AI 解读（未配置时如实提示）· 以原始检验单为准'
   return `点击开始智能解读 · 今日剩余 ${healthStore.aiInterpretRemaining} 次`
 })
 
@@ -499,17 +498,13 @@ async function saveEdit() {
 }
 
 async function onAiCardTap() {
-  // B1：AI 解读未接入新云服务（真实联调前保持未启用），不发起旧请求
-  uni.showToast({ title: 'AI 解读未启用（阶段 B 真实联调后开放）', icon: 'none', duration: 2500 })
-  return
+  // Phase G：正式态接入云端网关（triggerAiPipeline → mc-tools）；
+  // 未配置 Key/OCR 时云端返回 enabled:false 并如实提示，不伪造、不假死。
   if (aiStatus.value === 'done') {
     navigateToPage(`/pages/archives/ai-result?id=${reportId.value}`)
-  } else if (aiStatus.value === 'failed' || aiStatus.value === 'pending') {
-    if (isFamilyMode()) {
-      // AI 在配置/真实验证前明确未启用：不发请求、不显示分析完成
-      uni.showToast({ title: 'AI 解读未启用（未配置 OCR/DeepSeek），可手动阅读原件', icon: 'none', duration: 3000 })
-      return
-    }
+    return
+  }
+  if (isFamilyMode()) {
     if (!healthStore.canUseAiInterpret()) {
       uni.showToast({ title: '今日 5 次 AI 解读已用完，明天再来吧', icon: 'none', duration: 3000 })
       return
@@ -521,7 +516,10 @@ async function onAiCardTap() {
     if (report.value.ai_status === 'done') {
       navigateToPage(`/pages/archives/ai-result?id=${reportId.value}`)
     }
+    return
   }
+  // 演示模式：无真实 AI 后端，明确不可用（不发起请求、不扣次数）
+  uni.showToast({ title: '演示模式暂不支持 AI 解读', icon: 'none', duration: 2500 })
 }
 
 function onShare() {
