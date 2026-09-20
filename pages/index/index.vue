@@ -152,6 +152,17 @@
 				<text class="setup-desc">补充末次月经/预产期，开启孕周、日历与记录</text>
 			</view>
 
+			<!-- 常用工具（两种视角/模式均可达） -->
+			<view class="tools-card">
+				<text class="tools-title">常用工具</text>
+				<view class="tools-grid">
+					<view class="tool-item" v-for="t in TOOL_ENTRIES" :key="t.url" @tap="goToolPage(t.url)">
+						<text class="tool-icon">{{ t.icon }}</text>
+						<text class="tool-name">{{ t.name }}</text>
+					</view>
+				</view>
+			</view>
+
 			<view class="bottom-spacer"></view>
 		</scroll-view>
 
@@ -443,6 +454,17 @@ function goProfile() {
 	uni.switchTab({
 		url: '/pages/profile/index'
 	})
+}
+
+// 常用工具入口（E1 胎动/宫缩计时、E2 B 超估重、E3 饮食速查——两视角可达）
+const TOOL_ENTRIES = [
+	{ name: '胎动计时', icon: '👣', url: '/pages/tools/fetal-timer' },
+	{ name: '宫缩计时', icon: '⏱️', url: '/pages/tools/contraction-timer' },
+	{ name: 'B 超估重', icon: '📏', url: '/pages/tools/ultrasound-weight' },
+	{ name: '饮食速查', icon: '🥗', url: '/pages/tools/food-safety' }
+]
+function goToolPage(url) {
+	uni.navigateTo({ url })
 }
 
 function onScrollBottom() {
@@ -820,5 +842,39 @@ function goPregnancyForm() {
 .bag-summary-text {
 	font-size: 24rpx;
 	color: #3f7d4e;
+}
+/* ══ 常用工具卡 ══ */
+.tools-card {
+	margin: 24rpx 24rpx 0;
+	padding: 28rpx;
+	border-radius: 24rpx;
+	background: #ffffff;
+	box-shadow: 0 4rpx 20rpx rgba(17, 22, 34, 0.06);
+}
+.tools-title {
+	font-size: 30rpx;
+	font-weight: 600;
+	color: #11222e;
+}
+.tools-grid {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 20rpx;
+}
+.tool-item {
+	width: 25%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 16rpx 0;
+}
+.tool-icon {
+	font-size: 44rpx;
+}
+.tool-name {
+	margin-top: 10rpx;
+	font-size: 24rpx;
+	color: #46536a;
 }
 </style>

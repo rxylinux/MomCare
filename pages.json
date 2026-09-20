@@ -230,6 +230,12 @@
       }
     },
     {
+      "path": "pages/tools/food-safety",
+      "style": {
+        "navigationBarTitleText": "饮食行为速查"
+      }
+    },
+    {
       "path": "pages/profile/data-source-scan",
       "style": {
         "navigationBarTitleText": "旧数据来源预览"

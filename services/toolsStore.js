@@ -17,6 +17,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { familyCall, currentEpoch, getSessionState } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
+import foodSafetyJson from '@/static/data/food-safety.json'
+
+export const FOOD_SAFETY_ENTRIES = Array.isArray(foodSafetyJson) ? foodSafetyJson : []
 
 const FETAL_KEY = 'momcare_fetal_active_session'
 const CONTRA_KEY = 'momcare_active_contraction'
@@ -647,6 +650,45 @@ export const useToolsStore = defineStore('tools', () => {
     return { ok: true }
   }
 
+  // ══ E3 饮食/行为安全速查（本地字典同步快查——离线即开）+ AI 代理 ══
+  // 本地检索：name/synonyms 子串匹配（大小写不敏感）+ category/level 过滤；
+  // 未命中返回 []——绝不默认标安全（零假安全铁律）
+  function searchSafetyDictionary({ keyword = '', category = 'all', level = '' } = {}) {
+    const kw = String(keyword || '').trim().toLowerCase()
+    return FOOD_SAFETY_ENTRIES.filter(e => {
+      if (category && category !== 'all' && e.category !== category) return false
+      if (level && e.level !== level) return false
+      if (!kw) return true
+      if (String(e.name).toLowerCase().includes(kw)) return true
+      return (e.synonyms || []).some(s => String(s).toLowerCase().includes(kw))
+    })
+  }
+
+  async function explainFoodWithAi({ query, stage } = {}) {
+    if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
+    let r
+    try {
+      r = await familyCall(TOOLS_FN, { action: 'ai.explainFood', query, ...(stage ? { stage } : {}) })
+    } catch (e) {
+      r = { ok: false, code: 'cloud-call-failed' }
+    }
+    if (!r.ok) return { ok: false, code: r.code, message: r.message }
+    return { ok: true, data: r.data }
+  }
+
+  async function analyzeReportWithAi({ reportId } = {}) {
+    if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
+    if (!reportId) return { ok: false, code: 'invalid-params' }
+    let r
+    try {
+      r = await familyCall(TOOLS_FN, { action: 'ai.analyzeReport', reportId })
+    } catch (e) {
+      r = { ok: false, code: 'cloud-call-failed' }
+    }
+    if (!r.ok) return { ok: false, code: r.code, message: r.message }
+    return { ok: true, data: r.data }
+  }
+
   return {
     currentFetalSession, fetalSessions, activeContraction, contractionRecords,
     fetalFinishQueue, contraStopQueue,
@@ -657,6 +699,7 @@ export const useToolsStore = defineStore('tools', () => {
     pauseFetalSession, resumeFetalSession, retryPending, restoreFromCache,
     pullFetalSessions, startContraction, stopContraction, deleteContraction, pullContractions,
     calculateEfw, saveEfwRecord, deleteEfwRecord, pullEfwRecords,
+    searchSafetyDictionary, explainFoodWithAi, analyzeReportWithAi,
     callHospital
   }
 })

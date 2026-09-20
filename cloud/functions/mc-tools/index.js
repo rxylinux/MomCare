@@ -26,6 +26,12 @@ const { loadServerConfig } = require('./shared/config')
 const { resolveCaller } = require('./shared/auth')
 const { ok, fail, stableRequestHash } = require('./shared/respond')
 const { COLLECTIONS } = require('./shared/constants')
+// E3 饮食/行为安全词条库（伴生模块——assemble 自动打包；与 static/data/food-safety.json 同源）
+let FOOD_SAFETY_ENTRIES = []
+try { FOOD_SAFETY_ENTRIES = require('./food-safety-data') } catch (e) { FOOD_SAFETY_ENTRIES = [] }
+
+// E3 AI 代理网关测试注入口：__setAiMock(fn) 注入 mock 提供方；置 null 恢复真实环境判定
+let aiMock = null
 
 let cloud = null
 try {
@@ -34,6 +40,8 @@ try {
   cloud = null
 }
 exports.__setCloud = function __setCloud(mockCloud) { cloud = mockCloud }
+// E3 AI 代理测试注入：fn(prompt, context) → 文本；null 恢复真实 env 判定（未启用分支可测）
+exports.__setAiMock = function __setAiMock(fn) { aiMock = fn === null ? null : fn }
 
 const FETAL = 'mc_fetal_sessions'
 const CONTRA = 'mc_contraction_records'
@@ -61,6 +69,68 @@ const PAGE_DEFAULT = 20
 const PAGE_MAX = 100
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const ID_MAX = 128
+const REPORTS = 'mc_reports'
+
+// ── E3 AI 代理网关 ──
+// 强制免责（一切 AI 生成内容必带——"AI 生成（未人工逐字审校）"+ 医疗免责）
+const AI_DISCLAIMER = 'AI 生成（未人工逐字审校）· 仅供一般参考，不构成医疗诊断、处方或用药建议；如有疑问请咨询产科医生并以产检结果为准。'
+
+// 通用安全系统提示：禁处方剂量、强调产检与医生诊断（服务端统一注入——客户端不可绕过）
+function safetySystemPrompt() {
+  return '你是孕期健康信息助手。回答须：①基于权威公共卫生指南的一般性信息；②绝不提供处方药剂量或个体化诊疗方案；'
+    + '③明确建议遵产检与咨询产科医生；④对不确定事项如实说明证据不足，不得虚构安全性。使用简体中文，简洁分点。'
+}
+
+function buildFoodPrompt(query, stage) {
+  return `${safetySystemPrompt()}\n用户提问（孕期饮食/行为安全）：${query}${stage ? `（孕期阶段：${stage}）` : ''}\n`
+    + '请给出：1) 一般安全评估（安全/注意/避免/证据不足）2) 前提条件与限量 3) 主要风险 4) 何时需就医。'
+}
+
+// 提供方判定：测试 mock 注入优先；其后真实环境 DEEPSEEK_API_KEY（生产路径——未配置=未启用）
+function aiProvider() {
+  if (aiMock) return { kind: 'mock', call: aiMock }
+  const key = process.env.DEEPSEEK_API_KEY
+  if (key) return { kind: 'deepseek', call: prompt => callDeepSeek(key, prompt) }
+  return null
+}
+
+// DeepSeek 生产调用路径（node:https——仅在配置真实 Key 的部署环境可达；测试一律走 mock/未启用分支）
+function callDeepSeek(apiKey, prompt) {
+  const https = require('node:https')
+  const body = JSON.stringify({
+    model: 'deepseek-chat',
+    messages: [
+      { role: 'system', content: safetySystemPrompt() },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.3,
+    max_tokens: 800
+  })
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.deepseek.com',
+      path: '/chat/completions',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'Content-Length': Buffer.byteLength(body) },
+      timeout: 20000
+    }, res => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data)
+          const text = parsed && parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content
+          if (typeof text !== 'string' || !text) return reject(new Error('ai-empty-response'))
+          resolve(text)
+        } catch (e) { reject(new Error('ai-malformed-response')) }
+      })
+    })
+    req.on('error', reject)
+    req.on('timeout', () => { req.destroy(new Error('ai-timeout')) })
+    req.write(body)
+    req.end()
+  })
+}
 
 async function getDocMaybe(db, col, id) {
   try {
@@ -204,7 +274,7 @@ exports.main = async function main(event) {
   const action = event && event.action
   const db = cloud.database()
   const fid = config.familyId
-  const READ_ACTIONS = ['fetal.list', 'contraction.list', 'efw.calculate', 'efw.list']
+  const READ_ACTIONS = ['fetal.list', 'contraction.list', 'efw.calculate', 'efw.list', 'food.search', 'ai.explainFood', 'ai.analyzeReport']
   if (!READ_ACTIONS.includes(action)) {
     if (!event.operationId || typeof event.operationId !== 'string' || event.operationId.length > 64) {
       return fail('invalid-params', '缺少有效 operationId')
@@ -732,6 +802,101 @@ if (action === 'efw.list') {
   const nextCursor = rows.length > limit && last ? last.sortKey : null
   return ok({ records: page.map(viewEfw), nextCursor, hasMore: Boolean(nextCursor) })
 }
+
+  // ══ E3 饮食/行为安全速查 + AI 代理网关 ══
+
+  if (action === 'food.search') {
+    const SAFETY_LEVELS = ['safe', 'caution', 'avoid', 'insufficient']
+    const keyword = event.keyword === undefined || event.keyword === null ? '' : String(event.keyword)
+    if (keyword.length > 64) return fail('invalid-params', 'keyword 须 ≤64 字')
+    if (event.category !== undefined && event.category !== null && event.category !== 'all' && !['food', 'behavior'].includes(event.category)) {
+      return fail('invalid-params', 'category 须 food|behavior|all')
+    }
+    if (event.level !== undefined && event.level !== null && !SAFETY_LEVELS.includes(event.level)) {
+      return fail('invalid-params', `level 须 ${SAFETY_LEVELS.join('/')}`)
+    }
+    const limitRaw = Number(event.limit || 20)
+    const limit = Math.min(Math.max(Number.isInteger(limitRaw) ? limitRaw : 20, 1), 100)
+    const kw = keyword.trim().toLowerCase()
+    const matched = FOOD_SAFETY_ENTRIES.filter(e => {
+      if (event.category && event.category !== 'all' && e.category !== event.category) return false
+      if (event.level && e.level !== event.level) return false
+      if (!kw) return true
+      if (String(e.name).toLowerCase().includes(kw)) return true
+      return (e.synonyms || []).some(s => String(s).toLowerCase().includes(kw))
+    })
+    // 未命中即 items:[]——绝不假造、绝不默认标安全（零假安全铁律）
+    return ok({ items: matched.slice(0, limit), total: matched.length })
+  }
+
+  if (action === 'ai.explainFood') {
+    const query = event.query
+    if (typeof query !== 'string' || query.trim() === '') return fail('invalid-params', 'query 须非空字符串')
+    const qLen = Array.from(query).length
+    if (qLen < 1 || qLen > 50) return fail('invalid-params', `query 须 1~50 字（实得 ${qLen} 字）`)
+    const stage = event.stage === undefined || event.stage === null ? '' : String(event.stage)
+    if (stage.length > 20) return fail('invalid-params', 'stage 须 ≤20 字')
+    const provider = aiProvider()
+    if (!provider) {
+      // 零幻觉状态：未配置即如实未启用（规格原文）
+      return ok({ enabled: false, message: 'AI 服务未配置或未启用，请查阅本地已审定词条或咨询医生' })
+    }
+    const prompt = buildFoodPrompt(query, stage)
+    let answer
+    try {
+      answer = await provider.call(prompt, { kind: 'explainFood', query, stage })
+    } catch (e) {
+      return fail('ai-call-failed', 'AI 服务调用失败，请稍后重试或咨询医生', { errMsg: String((e && e.message) || e).slice(0, 120) })
+    }
+    return ok({ enabled: true, answer: String(answer), disclaimer: AI_DISCLAIMER, model: provider.kind })
+  }
+
+  if (action === 'ai.analyzeReport') {
+    const reportId = event.reportId
+    if (!reportId || typeof reportId !== 'string' || reportId.length > ID_MAX) return fail('invalid-params', '缺少有效 reportId')
+    // 报告须存在+本家庭+未软删（不存在/跨家庭/已删统一 not-found——不泄露存在性）
+    const report = await getDocMaybe(db, REPORTS, reportId)
+    if (!report || report.familyId !== fid || report.deleted === true) {
+      return fail('report-not-found', '报告不存在或已删除')
+    }
+    const provider = aiProvider()
+    if (!provider) {
+      return ok({ enabled: false, message: '报告自动 OCR / DeepSeek 解读服务未配置；请以原始检验单与主治医生诊断为准' })
+    }
+    // 安全边界：仅送报告公开元数据（日期/类型/备注/附件计数）——严禁透传私人心情/日记/无关身体数据
+    const atts = Array.isArray(report.attachments) ? report.attachments.length : 0
+    const prompt = [
+      '你是产科超声/检验报告解读助手。请基于以下报告元数据给出一般性说明与就诊建议，',
+      '不得给出具体用药剂量，不得替代医生诊断。',
+      `报告日期：${report.dateKey || '未知'}；类型：${report.reportType || '未知'}；附件数：${atts}；`,
+      `备注：${typeof report.note === 'string' && report.note ? report.note.slice(0, 100) : '无'}`
+    ].join('')
+    let answer
+    try {
+      answer = await provider.call(prompt, { kind: 'analyzeReport', reportId, dateKey: report.dateKey, reportType: report.reportType, attachments: atts })
+    } catch (e) {
+      return fail('ai-call-failed', 'AI 服务调用失败，请稍后重试或以原始检验单为准', { errMsg: String((e && e.message) || e).slice(0, 120) })
+    }
+    const text = String(answer)
+    // 回写 mc_reports.ai_result（事务 CAS——revision 推进，迟到旧写冲突拒）
+    const now = Date.now()
+    const t = await db.startTransaction()
+    try {
+      const fresh = await getDocMaybe(t, REPORTS, reportId)
+      if (!fresh || fresh.familyId !== fid || fresh.deleted === true) { await t.rollback(); return fail('report-not-found', '报告不存在或已删除') }
+      const merged = { ...stripId(fresh) }
+      merged.ai_result = { text, model: provider.kind, generatedAt: now }
+      merged.revision = (fresh.revision || 0) + 1
+      merged.updatedAt = now
+      merged.updatedBy = caller.memberId
+      await t.collection(REPORTS).doc(reportId).set({ data: merged })
+      await t.commit()
+    } catch (err) {
+      try { await t.rollback() } catch (e) { /* 已回滚 */ }
+      return txFailed(err)
+    }
+    return ok({ enabled: true, answer: text, disclaimer: AI_DISCLAIMER, model: provider.kind, reportRevision: (report.revision || 0) + 1 })
+  }
 
   return fail('invalid-action', `未知 action: ${String(action)}`)
 }
