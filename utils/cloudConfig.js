@@ -4,7 +4,7 @@
 // 也绝不回退到旧 HTTP 后端或游客认证。
 
 export const CLOUD_CONFIG = {
-  envId: '',   // CloudBase 环境 ID（微信云开发控制台获取）
+  envId: 'rxylinux-momcare-d2eoh6t493c2168',   // CloudBase 环境 ID（微信云开发控制台获取）
   appId: 'wxf3b1d079e04cb490'  // 小程序 AppID（与 manifest.json 一致；服务端另有 MC_APPID 校验）
 }
 

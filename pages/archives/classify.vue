@@ -648,10 +648,26 @@ page {
   overflow-x: hidden;
 }
 
-.page,
-.page *,
-.page *::before,
-.page *::after {
+.page {
+  box-sizing: border-box;
+}
+
+/* WXSS 不支持 * 通配选择器（上传编译报错），改用标签选择器组等价覆盖 */
+.page view,
+.page text,
+.page image,
+.page input,
+.page textarea,
+.page button,
+.page label,
+.page form,
+.page scroll-view,
+.page swiper,
+.page swiper-item,
+.page picker,
+.page canvas,
+.page progress,
+.page navigator {
   box-sizing: border-box;
 }
 
