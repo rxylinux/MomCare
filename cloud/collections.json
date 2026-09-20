@@ -665,6 +665,79 @@
           "purpose": "task.list 状态/指派过滤 + sortKey 稳定分页"
         }
       ]
+    },
+    {
+      "name": "mc_fetal_sessions",
+      "purpose": "Phase E1 胎动连续计时会话（原始点击流水+5 分钟连击去重有效计数；不产生任何诊断推断）",
+      "fields": {
+        "_id": "fst_<16 位随机 hex>（服务端 CSPRNG 生成）",
+        "familyId": "数据分区（非授权依据）",
+        "memberId": "记录成员（服务端 resolveCaller 派生）",
+        "dateKey": "YYYY-MM-DD（家庭时区 Asia/Shanghai——按 startTime 换算；会话归属开始日）",
+        "status": "running | completed | discarded",
+        "startTime": "会话开始毫秒时间戳（绝对时间——后台/冷启动由绝对时间差校准，客户端职责）",
+        "endTime": "完成/废弃毫秒时间戳或 null（未结束为 null）",
+        "targetDurationMs": "目标监测时长毫秒（默认 3,600,000=1 小时；1..86,400,000）",
+        "clicks": "原始点击流水数组 [{timestamp, valid}]——不删不改（undo=移除最后插入项并重算）；valid=是否簇首（计入有效）",
+        "validCount": "有效胎动次数（连击去重：相邻点击间隔 ≤300,000ms 计同一次；簇首计 1——严格视角；原始视角=clicks.length）",
+        "revision": "乐观并发版本号（从 1 起；每次 click/undo/finish/discard +1）",
+        "createdAt": "毫秒时间戳",
+        "updatedAt": "毫秒时间戳",
+        "sortKey": "分页稳定游标复合键 <startTime 补零>:<_id>（唯一——startTime 创建后不可变）"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "dateKey",
+              "direction": -1
+            }
+          ],
+          "unique": false,
+          "purpose": "fetal.list 按 dateKey 过滤 + sortKey 稳定分页"
+        }
+      ]
+    },
+    {
+      "name": "mc_contraction_records",
+      "purpose": "Phase E1 临产宫缩记录（持续=同次 end-start；间隔=相邻两次 start 差；511 分析由客户端按原始 startTime 重算）",
+      "fields": {
+        "_id": "cnt_<16 位随机 hex>（服务端 CSPRNG 生成）",
+        "familyId": "数据分区（非授权依据）",
+        "memberId": "操作成员（服务端 resolveCaller 派生）",
+        "dateKey": "YYYY-MM-DD（家庭时区 Asia/Shanghai——按 startTime 换算）",
+        "startTime": "宫缩开始毫秒时间戳",
+        "endTime": "宫缩结束毫秒时间戳或 null（未结束为 null——不计完整时长）",
+        "durationSec": "持续秒数=Math.round((endTime-startTime)/1000)（未结束为 null）",
+        "intervalSec": "与上一条宫缩的间隔秒数=本次 startTime − 前驱（startTime 严格早于本次的最近未废弃记录）startTime；首条/无前驱为 null",
+        "intensity": "强度 mild | moderate | strong 或 null",
+        "notes": "文本备注 ≤200 字或 null",
+        "status": "ongoing | finished | discarded（discarded=误录软废弃——默认列表排除且不作为后续 interval 前驱）",
+        "revision": "乐观并发版本号（从 1 起）",
+        "createdAt": "毫秒时间戳",
+        "updatedAt": "毫秒时间戳",
+        "sortKey": "分页稳定游标复合键 <startTime 补零>:<_id>（唯一）"
+      },
+      "indexes": [
+        {
+          "keys": [
+            {
+              "name": "familyId",
+              "direction": 1
+            },
+            {
+              "name": "startTime",
+              "direction": -1
+            }
+          ],
+          "unique": false,
+          "purpose": "contraction.list 时间倒序 + 前驱定位扫描"
+        }
+      ]
     }
   ]
 }

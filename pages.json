@@ -212,6 +212,18 @@
       }
     },
     {
+      "path": "pages/tools/fetal-timer",
+      "style": {
+        "navigationBarTitleText": "胎动计时"
+      }
+    },
+    {
+      "path": "pages/tools/contraction-timer",
+      "style": {
+        "navigationBarTitleText": "宫缩计时"
+      }
+    },
+    {
       "path": "pages/profile/data-source-scan",
       "style": {
         "navigationBarTitleText": "旧数据来源预览"
