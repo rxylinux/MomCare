@@ -22,7 +22,7 @@
 // 不访问任何第三方网络：CLI 只与本地 DevTools IDE 服务（127.0.0.1）通信。
 
 import { execSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, cpSync, readFileSync, writeFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, cpSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -124,10 +124,23 @@ for (const [k, v] of Object.entries(projCfg)) { out[k] = v; if (k === 'descripti
 writeFileSync(projCfgPath, JSON.stringify(out, null, 2) + '\n')
 console.log(`  已恢复 ${readdirSync(cfDir).length} 个云函数目录 + cloudfunctionRoot`)
 
+// ── 6b. 生成上传暂存目录（物理排除——CLI 上传不遵守 packOptions 的 folder/prefix 规则，实测仍按全目录计 2066KB）──
+step('生成上传暂存目录（物理排除 static/data 与 cloudfunctions）')
+const UPLOAD_DIR = join(root, 'dist/trial-upload')
+rmSync(UPLOAD_DIR, { recursive: true, force: true })
+cpSync(MP_DIR, UPLOAD_DIR, { recursive: true })
+rmSync(join(UPLOAD_DIR, 'static/data'), { recursive: true, force: true })    // 数据已构建期内联进 JS，运行时零路径引用
+rmSync(join(UPLOAD_DIR, 'cloudfunctions'), { recursive: true, force: true }) // 云函数独立部署，且会计入源码包 2MB
+const upCfgPath = join(UPLOAD_DIR, 'project.config.json')
+const upCfg = JSON.parse(readFileSync(upCfgPath, 'utf8'))
+delete upCfg.cloudfunctionRoot // 暂存目录已无云函数目录，声明一并摘除
+writeFileSync(upCfgPath, JSON.stringify(upCfg, null, 2) + '\n')
+console.log('  上传源 = dist/trial-upload（static/data 与 cloudfunctions 已物理排除）')
+
 // ── 7. 上传新版本 ──
 step(`上传 ${NEW_VERSION}（体验版即时生效）`)
 // DevTools CLI 上传失败时退出码仍为 0（如 80051 包体超限），必须同时检查输出错误标记
-const up = spawnSync(CLI, ['upload', '--project', MP_DIR, '-v', NEW_VERSION, '-d', DESC.replace(/"/g, "'")], { encoding: 'utf8' })
+const up = spawnSync(CLI, ['upload', '--project', UPLOAD_DIR, '-v', NEW_VERSION, '-d', DESC.replace(/"/g, "'")], { encoding: 'utf8' })
 if (up.stdout) process.stdout.write(up.stdout)
 if (up.stderr) process.stderr.write(up.stderr)
 if (up.status !== 0 || /\[error\]/.test(up.stdout || '') || /\[error\]/.test(up.stderr || '')) {
