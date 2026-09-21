@@ -22,11 +22,17 @@
             <text class="chip-text">{{ stats.gain && parseFloat(stats.gain) >= 0 ? '增重正常' : '需关注' }}</text>
           </view>
         </view>
+        <view v-if="dataSource === 'family'" class="hero-add-btn" @tap="openAdd">
+          <text class="hero-add-btn-text">＋ 记一笔（可选日期）</text>
+        </view>
       </view>
       <!-- 无数据 Hero -->
       <view class="hero-content" v-else>
         <text class="hero-label">暂无体重记录</text>
         <text class="hero-sub">去首页开始记录体重吧</text>
+        <view v-if="dataSource === 'family'" class="hero-add-btn" @tap="openAdd">
+          <text class="hero-add-btn-text">＋ 记一笔（可选日期）</text>
+        </view>
       </view>
     </view>
 
@@ -85,6 +91,8 @@
             v-for="(item, idx) in historyList"
             :key="idx"
             class="history-item"
+            :class="{ 'history-item-editable': dataSource === 'family' }"
+            @tap="dataSource === 'family' && openEdit(item)"
           >
             <view class="history-left">
               <view class="history-dot" :style="{ backgroundColor: item.dotColor }"></view>
@@ -116,15 +124,27 @@
 
       <view class="bottom-spacer"></view>
     </scroll-view>
+
+    <!-- 按日编辑/补录/删除（family 权威通道；demo 只读） -->
+    <DayRecordEditSheet
+      v-model:visible="editSheet.visible"
+      :mode="editSheet.mode"
+      :date-key="editSheet.dateKey"
+      :initial="editSheet.initial"
+      :exists="editSheet.exists"
+      @save="handleSheetSave"
+      @remove="handleSheetRemove"
+    />
   </view>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
 import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
 import NavBar from '@/components/NavBar.vue'
+import DayRecordEditSheet from '@/components/DayRecordEditSheet.vue'
 
 console.log('[weight-records] setup start')
 const healthStore = useHealthStore()
@@ -170,11 +190,11 @@ const stats = computed(() => {
   return { latest: null, gain: null, count: 0, preWeight: null }
 })
 
-// 历史（权威源转换）
+// 历史（权威源转换）——revision 随行：编辑/删除的版本基线（点击时快照，提交带基线防覆盖对端并发修改）
 const famHistory = computed(() => {
   if (dataSource.value !== 'family') return []
   const hist = familyStore.dailyHistoryAsc().map(r => ({
-    date: r.dateKey, weight: r.fields && r.fields.weightKg != null ? String(r.fields.weightKg) : ''
+    date: r.dateKey, weight: r.fields && r.fields.weightKg != null ? String(r.fields.weightKg) : '', revision: r.revision || 0
   })).filter(r => r.weight !== '')
   return hist.slice().reverse().map((h, i, arr) => {
     const prev = arr[i + 1]
@@ -235,6 +255,75 @@ const yLabels = computed(() => {
 
 function goHome() {
   uni.switchTab({ url: '/pages/index/index' })
+}
+
+// ── 按日编辑/补录/删除（family 权威通道；demo 只读不挂编辑交互）──
+const editSheet = reactive({
+  visible: false, mode: 'weight', dateKey: '', initial: {}, exists: false, revision: 0
+})
+function todayKeyLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function openAdd() {
+  if (dataSource.value !== 'family') return
+  editSheet.mode = 'weight'
+  editSheet.dateKey = todayKeyLocal()
+  editSheet.initial = {}
+  editSheet.exists = false
+  editSheet.revision = 0
+  editSheet.visible = true
+}
+function openEdit(item) {
+  editSheet.mode = 'weight'
+  editSheet.dateKey = item.date
+  editSheet.initial = { value: item.weight }
+  editSheet.exists = true
+  editSheet.revision = item.revision || 0
+  editSheet.visible = true
+}
+function conflictToast() {
+  uni.showToast({ title: '已被对方更新，请刷新后重试', icon: 'none', duration: 2500 })
+}
+async function handleSheetSave({ dateKey, originalDateKey, payload }) {
+  if (originalDateKey && originalDateKey !== dateKey) {
+    // 挪日：目标日先写入（基线=目标日当前版本），成功后清除原日该字段
+    // （两步独立提交；第二步失败如实提示，待同步队列重试或手动处理）
+    const target = familyStore.dailyRecord(dateKey)
+    const r1 = await familyStore.saveDaily(dateKey, payload, target ? (target.revision || 0) : 0)
+    if (!r1.ok) {
+      if (r1.code === 'revision-conflict') conflictToast()
+      else uni.showToast({ title: '保存失败，请稍后重试', icon: 'none' })
+      return
+    }
+    editSheet.visible = false
+    const r2 = await familyStore.saveDaily(originalDateKey, { weightKg: null }, editSheet.revision)
+    if (!r2.ok && r2.code !== 'outbox-persist-failed') {
+      uni.showToast({ title: '已记录到新日期；原日期清除未完成，请稍后重试', icon: 'none', duration: 2500 })
+    }
+    return
+  }
+  const r = await familyStore.saveDaily(dateKey, payload, editSheet.revision)
+  if (r.ok) {
+    editSheet.visible = false
+    uni.showToast({ title: r.replayed ? '已保存（幂等重放）' : '已保存并同步', icon: 'none' })
+  } else if (r.code === 'revision-conflict') {
+    conflictToast()
+  } else {
+    uni.showToast({ title: '保存失败，请稍后重试', icon: 'none' })
+  }
+}
+async function handleSheetRemove({ dateKey }) {
+  // 字段级清除：同日的血压/胎动/备注不受影响
+  const r = await familyStore.saveDaily(dateKey, { weightKg: null }, editSheet.revision)
+  if (r.ok) {
+    editSheet.visible = false
+    uni.showToast({ title: '已删除并同步', icon: 'none' })
+  } else if (r.code === 'revision-conflict') {
+    conflictToast()
+  } else {
+    uni.showToast({ title: '删除失败，请稍后重试', icon: 'none' })
+  }
 }
 </script>
 
@@ -616,5 +705,25 @@ page {
 /* ── Bottom Spacer ── */
 .bottom-spacer {
   height: 120rpx;
+}
+
+/* ── 按日编辑/补录入口 ── */
+.hero-add-btn {
+  margin-top: 24rpx;
+  padding: 16rpx 40rpx;
+  border-radius: 999rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.16);
+  align-self: flex-start;
+}
+.hero-add-btn:active { opacity: 0.8; }
+.hero-add-btn-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+.history-item-editable:active {
+  background: #FAF9F8;
+  border-radius: 16rpx;
 }
 </style>

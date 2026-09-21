@@ -1269,6 +1269,253 @@ async function main() {
     assert.equal(a, b, '同一上海日内日号相同（不误触发）')
   })
 
+  // ── 按日编辑/删除（详情页 DayRecordEditSheet 通道）──
+  const YDAY = (() => {
+    const d = new Date(Date.now() - 86400000)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+
+  await scenario('B2a-数值字段 null 清除：单删体重/血压双字段/胎动互不影响', async () => {
+    const { cloud } = fullStack()
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'nc1', expectedRevision: 0, payload: { weightKg: 62.3, systolic: 118, diastolic: 72, fetalCount: 5 } })
+    const r1 = await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'nc2', expectedRevision: 1, payload: { weightKg: null } })
+    assert.equal(r1.ok, true)
+    const f1 = r1.data.record.fields
+    assert.ok(!('weightKg' in f1), '体重字段清除')
+    assert.deepEqual([f1.systolic, f1.diastolic, f1.fetalCount], [118, 72, 5], '血压/胎动保留（字段级清除不整日删）')
+    const r2 = await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'nc3', expectedRevision: 2, payload: { systolic: null, diastolic: null } })
+    const f2 = r2.data.record.fields
+    assert.ok(!('systolic' in f2) && !('diastolic' in f2), '血压双字段清除')
+    assert.equal(f2.fetalCount, 5, '胎动保留')
+    const r3 = await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'nc4', expectedRevision: 3, payload: { fetalCount: null } })
+    assert.deepEqual(r3.data.record.fields, {}, '全部清除后 fields 空')
+    assert.equal(r3.data.record.deleted, false, '文档非墓碑（revision 链保留，非 daily.delete）')
+    assert.equal(cloud.__snapshot('mc_health_daily', `${TEST_ENV.MC_FAMILY_ID}:${TODAY}`).revision, 4)
+  })
+
+  await scenario('R5-25：体重页按日编辑/删除/挪日接线（页面→saveDaily→视图刷新）', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    healthHandler.__setCloud(cloud)
+    const page = bundlePage('pages/profile/weight-records.vue',
+      src => src.replace('const healthStore = useHealthStore()', 'setActivePinia(createPinia());\nconst healthStore = useHealthStore()'),
+      `export {stats,dataSource,familyStore,healthStore,historyList,editSheet,openEdit,openAdd,handleSheetSave,handleSheetRemove};export {createPinia,setActivePinia} from 'pinia';`)
+    await confirmPageBundle(page, cloud)
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: YDAY, operationId: 'we1', expectedRevision: 0, payload: { weightKg: 62.3 } })
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'we2', expectedRevision: 0, payload: { weightKg: 62.0 } })
+    await page.familyStore.pullAll()
+    await new Promise(r => setTimeout(r, 0))
+    assert.equal(page.dataSource.value, 'family')
+    assert.equal(page.stats.value.count, 2, '两天记录就位')
+    // 修改最新一条（今天 62.0 → 63.0）
+    const first = page.historyList.value[0]
+    assert.equal(first.date, TODAY)
+    page.openEdit(first)
+    assert.equal(page.editSheet.dateKey, TODAY)
+    assert.equal(page.editSheet.initial.value, '62')
+    assert.equal(page.editSheet.exists, true)
+    await page.handleSheetSave({ dateKey: TODAY, originalDateKey: null, payload: { weightKg: 63.0 } })
+    assert.equal(page.familyStore.dailyRecord(TODAY).fields.weightKg, 63.0, '修改落盘并回写视图')
+    assert.equal(page.historyList.value[0].weight, '63', '列表即时刷新（computed 链）')
+    // 删除（字段级）
+    page.openEdit(page.historyList.value[0])
+    await page.handleSheetRemove({ dateKey: TODAY })
+    assert.ok(!('weightKg' in page.familyStore.dailyRecord(TODAY).fields), '体重字段已清除（文档留存）')
+    assert.equal(page.historyList.value.length, 1, '列表少一条')
+    // 挪日：把昨天 62.3 挪到今天
+    page.openEdit(page.historyList.value[0])
+    assert.equal(page.editSheet.dateKey, YDAY)
+    await page.handleSheetSave({ dateKey: TODAY, originalDateKey: YDAY, payload: { weightKg: 65 } })
+    assert.equal(page.familyStore.dailyRecord(TODAY).fields.weightKg, 65, '挪日写入目标日')
+    assert.ok(!('weightKg' in page.familyStore.dailyRecord(YDAY).fields), '原日字段清除')
+    assert.equal(page.historyList.value.length, 1, '仍一条（移动非复制）')
+    assert.equal(page.historyList.value[0].date, TODAY, '唯一一条在新日期')
+  })
+
+  // DayRecordEditSheet 组件 bundle：编译宏替换为注入 props/emit 收集器（零 vue 编译器依赖）。
+  // props 对象含嵌套 default——正则须整体跨到 defineEmits 一并替换（避免非贪婪 } 截断）
+  function bundleSheet() {
+    return bundlePage('components/DayRecordEditSheet.vue',
+      src => 'const __sheetProps = { visible: false, mode: \'weight\', dateKey: \'\', initial: {}, exists: false }\n'
+        + 'const __emits = []\n'
+        + 'const __sheetEmit = (name, payload) => __emits.push({ name, payload })\n'
+        + src.replace(
+          /const props = defineProps\([\s\S]*?\)\nconst emit = defineEmits\(\[[^\]]*\]\)/,
+          'const props = reactive(__sheetProps)\nconst emit = __sheetEmit'),
+      `export {props as __sheetProps,__emits,buildPayload,handleSave,handleRemove,onDateChange,adjustWeight,adjustFetal,dateVal,form,dateChanged};export {createPinia,setActivePinia} from 'pinia';`)
+  }
+
+  await scenario('R5-26：DayRecordEditSheet 组件契约（三模式校验/emit 形状/删除恒原日期/装载）', async () => {
+    // 组件删除确认依赖 uni.showModal（公共 mock 无）——场景内临时注入
+    const origModal = global.uni.showModal
+    let modalArg = null
+    global.uni.showModal = o => { modalArg = o }
+    const tick = () => new Promise(r => setTimeout(r, 0))
+    try {
+      const s = bundleSheet()
+      // 装载：打开时装入 dateKey/initial
+      s.__sheetProps.mode = 'weight'
+      s.__sheetProps.dateKey = YDAY
+      s.__sheetProps.initial = { value: '62.3' }
+      s.__sheetProps.exists = true
+      s.__sheetProps.visible = true
+      await tick()
+      assert.equal(s.dateVal.value, YDAY, '日期装载')
+      assert.equal(s.form.value, '62.3', '体重预填')
+      assert.equal(s.dateChanged.value, false, '未改日期')
+      s.onDateChange({ detail: { value: TODAY } })
+      assert.equal(s.dateChanged.value, true, '改日期检测翻转')
+      // weight 校验（值域=服务端 DAILY_FIELDS 口径）
+      s.form.value = '70.05'
+      assert.deepEqual(s.buildPayload(), { payload: { weightKg: 70.1 } }, '一位小数进位')
+      s.form.value = '24'; assert.ok(s.buildPayload().err, '<25 拒')
+      s.form.value = '301'; assert.ok(s.buildPayload().err, '>300 拒')
+      s.form.value = 'abc'; assert.ok(s.buildPayload().err, '非数字拒')
+      // bp 校验
+      s.__sheetProps.mode = 'bp'
+      s.form.value = '140'; s.form.value2 = '90'
+      assert.deepEqual(s.buildPayload(), { payload: { systolic: 140, diastolic: 90 } })
+      s.form.value = '59'; assert.ok(s.buildPayload().err, '收缩压 <60 拒')
+      s.form.value = '261'; assert.ok(s.buildPayload().err, '收缩压 >260 拒')
+      s.form.value = '120'; s.form.value2 = '29'; assert.ok(s.buildPayload().err, '舒张压 <30 拒')
+      s.form.value = '120.5'; s.form.value2 = '70'; assert.ok(s.buildPayload().err, '非整数拒')
+      // fetal 校验
+      s.__sheetProps.mode = 'fetal'
+      s.form.value = '0'
+      assert.deepEqual(s.buildPayload(), { payload: { fetalCount: 0 } }, '0 合法（显式零）')
+      s.form.value = '201'; assert.ok(s.buildPayload().err, '>200 拒')
+      s.form.value = '3.5'; assert.ok(s.buildPayload().err, '非整数拒')
+      // handleSave emit 形状：挪日 → originalDateKey 非空
+      s.form.value = '5'
+      s.__emits.length = 0
+      s.handleSave() // dateVal=TODAY、props.dateKey=YDAY
+      assert.equal(s.__emits.length, 1)
+      assert.equal(s.__emits[0].name, 'save')
+      assert.equal(s.__emits[0].payload.dateKey, TODAY)
+      assert.equal(s.__emits[0].payload.originalDateKey, YDAY, '改日期 → originalDateKey 非空')
+      // 未改日期 → null
+      s.__sheetProps.dateKey = TODAY
+      await tick()
+      s.__emits.length = 0
+      s.handleSave()
+      assert.equal(s.__emits[0].payload.originalDateKey, null, '未改日期 → null')
+      // 非法值 → 只 toast 不 emit
+      s.form.value = '999'
+      const toastBefore = uniCalls.toasts.length
+      s.__emits.length = 0
+      s.handleSave()
+      assert.equal(s.__emits.length, 0, '非法值不 emit')
+      assert.equal(uniCalls.toasts.length, toastBefore + 1, '非法值 toast 提示')
+      // 删除恒原日期（dateVal 改过仍删 props.dateKey）
+      s.onDateChange({ detail: { value: TODAY } }) // dateVal 已是 TODAY；先挪走再验证
+      s.onDateChange({ detail: { value: '2026-01-01' } })
+      s.__sheetProps.dateKey = YDAY
+      await tick()
+      s.__emits.length = 0
+      modalArg = null
+      s.handleRemove()
+      assert.ok(modalArg && typeof modalArg.success === 'function', '删除确认弹窗已弹')
+      modalArg.success({ confirm: true })
+      assert.equal(s.__emits.length, 1)
+      assert.equal(s.__emits[0].name, 'remove')
+      assert.equal(s.__emits[0].payload.dateKey, YDAY, 'remove 恒打开时原日期（不受改日期影响）')
+      // adjust 不落负
+      s.__sheetProps.mode = 'weight'; s.form.value = '0.05'
+      s.adjustWeight(-0.1)
+      assert.equal(s.form.value, '0.0', '体重 adjust 下限 0')
+      s.__sheetProps.mode = 'fetal'; s.form.value = '0'
+      s.adjustFetal(-1)
+      assert.equal(s.form.value, '0', '胎动 adjust 下限 0')
+    } finally {
+      global.uni.showModal = origModal
+    }
+  })
+
+  await scenario('R5-27：血压页接线（预填双值/改值/双字段删除保同日他字段/挪日）', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    healthHandler.__setCloud(cloud)
+    const page = bundlePage('pages/profile/bp-records.vue',
+      src => src.replace('const healthStore = useHealthStore()', 'setActivePinia(createPinia());\nconst healthStore = useHealthStore()'),
+      `export {stats,dataSource,familyStore,healthStore,historyList,editSheet,openEdit,handleSheetSave,handleSheetRemove};export {createPinia,setActivePinia} from 'pinia';`)
+    await confirmPageBundle(page, cloud)
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: YDAY, operationId: 'be1', expectedRevision: 0, payload: { systolic: 118, diastolic: 72 } })
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'be2', expectedRevision: 0, payload: { systolic: 120, diastolic: 80 } })
+    await page.familyStore.pullAll()
+    await new Promise(r => setTimeout(r, 0))
+    assert.equal(page.stats.value.count, 2, '两天血压就位')
+    // 预填双值
+    page.openEdit(page.historyList.value[0])
+    assert.equal(page.editSheet.dateKey, TODAY)
+    assert.equal(page.editSheet.initial.value, '120', '收缩压预填')
+    assert.equal(page.editSheet.initial.value2, '80', '舒张压预填')
+    // 改值
+    await page.handleSheetSave({ dateKey: TODAY, originalDateKey: null, payload: { systolic: 125, diastolic: 78 } })
+    const f0 = page.familyStore.dailyRecord(TODAY).fields
+    assert.deepEqual([f0.systolic, f0.diastolic], [125, 78], '改值落盘')
+    // 同日种体重后删除血压——体重必须保留（字段级）
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'be3', expectedRevision: 2, payload: { weightKg: 63 } })
+    await page.familyStore.pullAll()
+    await new Promise(r => setTimeout(r, 0))
+    page.openEdit(page.historyList.value[0])
+    await page.handleSheetRemove({ dateKey: TODAY })
+    const f1 = page.familyStore.dailyRecord(TODAY).fields
+    assert.ok(!('systolic' in f1) && !('diastolic' in f1), '血压双字段清除')
+    assert.equal(f1.weightKg, 63, '同日体重保留（字段级删除不整日删）')
+    assert.equal(page.historyList.value.length, 1, '血压列表少一条')
+    // 挪日：昨天 118/72 挪到今天
+    page.openEdit(page.historyList.value[0])
+    assert.equal(page.editSheet.dateKey, YDAY)
+    await page.handleSheetSave({ dateKey: TODAY, originalDateKey: YDAY, payload: { systolic: 130, diastolic: 85 } })
+    const f2 = page.familyStore.dailyRecord(TODAY).fields
+    assert.deepEqual([f2.systolic, f2.diastolic], [130, 85], '挪日写入目标日')
+    assert.ok(!('systolic' in page.familyStore.dailyRecord(YDAY).fields), '原日血压清除')
+    assert.equal(page.historyList.value.length, 1, '仍一条（移动非复制）')
+  })
+
+  await scenario('R5-28：胎动页接线（格子编辑/补录/删除+热力图格子新字段）', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    healthHandler.__setCloud(cloud)
+    const page = bundlePage('pages/profile/fetal-records.vue',
+      src => src.replace('const healthStore = useHealthStore()', 'setActivePinia(createPinia());\nconst healthStore = useHealthStore()'),
+      `export {stats,dataSource,familyStore,healthStore,fetalData,editSheet,openCell,handleSheetSave,handleSheetRemove};export {createPinia,setActivePinia} from 'pinia';`)
+    await confirmPageBundle(page, cloud)
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: YDAY, operationId: 'fe1', expectedRevision: 0, payload: { fetalCount: 8 } })
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: TODAY, operationId: 'fe2', expectedRevision: 0, payload: { fetalCount: 5 } })
+    await page.familyStore.pullAll()
+    await new Promise(r => setTimeout(r, 0))
+    // 热力图格子新字段（编辑入口数据）
+    const cells = page.fetalData.value.heatmap.data
+    const todayCell = cells.find(c => c.dateKey === TODAY)
+    assert.ok(todayCell, '今日格子在热力图')
+    assert.equal(todayCell.hasRecord, true)
+    assert.equal(todayCell.count, 5)
+    assert.ok(Number.isInteger(todayCell.revision), '格子随行 revision')
+    assert.ok(cells.some(c => c.future === true), '未来日标记存在（不可点）')
+    assert.ok(cells.every(c => typeof c.dateKey === 'string'), '格子带 dateKey')
+    // 格子编辑（修正今日 5 → 12；页面 initial.value 为 Number——String 化由组件装载时做）
+    page.openCell(todayCell)
+    assert.equal(page.editSheet.initial.value, 5, '预填当日次数（Number）')
+    assert.equal(page.editSheet.exists, true)
+    await page.handleSheetSave({ dateKey: TODAY, originalDateKey: null, payload: { fetalCount: 12 } })
+    assert.equal(page.familyStore.dailyRecord(TODAY).fields.fetalCount, 12, '修正落盘')
+    // 补录无记录日（openCell 输入即格子对象——手工构造历史日，不依赖当月日历形状）
+    page.openCell({ dateKey: '2026-01-15', hasRecord: false, count: 0, revision: 0 })
+    assert.equal(page.editSheet.exists, false, '无记录格子按补录打开（无删除钮）')
+    await page.handleSheetSave({ dateKey: '2026-01-15', originalDateKey: null, payload: { fetalCount: 3 } })
+    assert.equal(page.familyStore.dailyRecord('2026-01-15').fields.fetalCount, 3, '补录落盘（任意日期）')
+    // 删除（字段级；重取格子拿新 revision）
+    const freshCell = page.fetalData.value.heatmap.data.find(c => c.dateKey === TODAY)
+    page.openCell(freshCell)
+    await page.handleSheetRemove({ dateKey: TODAY })
+    assert.ok(!('fetalCount' in page.familyStore.dailyRecord(TODAY).fields), '胎动字段清除')
+    assert.equal(page.familyStore.dailyRecord('2026-01-15').fields.fetalCount, 3, '他日记录不受影响')
+  })
+
   console.log(`\n通过 ${passed} 项，失败 ${failed.length} 项`)
   if (failed.length > 0) {
     console.log('失败场景：', failed.join(' | '))

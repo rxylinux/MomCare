@@ -16,10 +16,16 @@
             <text class="chip-text">{{ stats.today >= 10 ? '正常' : '偏少' }}</text>
           </view>
         </view>
+        <view v-if="dataSource === 'family'" class="hero-add-btn" @tap="openAdd">
+          <text class="hero-add-btn-text">＋ 记一笔 / 修正（可选日期）</text>
+        </view>
       </view>
       <view class="hero-content" v-else>
         <text class="hero-label">暂无胎动记录</text>
         <text class="hero-sub">去首页开始记录胎动吧</text>
+        <view v-if="dataSource === 'family'" class="hero-add-btn" @tap="openAdd">
+          <text class="hero-add-btn-text">＋ 记一笔 / 修正（可选日期）</text>
+        </view>
       </view>
     </view>
 
@@ -60,7 +66,8 @@
             v-for="(item, idx) in fetalData.heatmap.data"
             :key="'day-' + idx"
             class="heatmap-cell"
-            :class="[item.heatClass, { 'heatmap-cell-today': item.isToday }]"
+            :class="[item.heatClass, { 'heatmap-cell-today': item.isToday, 'heatmap-cell-editable': dataSource === 'family' && !item.future }]"
+            @tap="dataSource === 'family' && !item.future && openCell(item)"
           >
             <text class="cell-day">{{ item.day }}</text>
           </view>
@@ -79,15 +86,27 @@
 
       <view class="bottom-spacer"></view>
     </scroll-view>
+
+    <!-- 按日编辑/修正/删除（family 权威通道；demo 只读） -->
+    <DayRecordEditSheet
+      v-model:visible="editSheet.visible"
+      :mode="editSheet.mode"
+      :date-key="editSheet.dateKey"
+      :initial="editSheet.initial"
+      :exists="editSheet.exists"
+      @save="handleSheetSave"
+      @remove="handleSheetRemove"
+    />
   </view>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
 import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
 import NavBar from '@/components/NavBar.vue'
+import DayRecordEditSheet from '@/components/DayRecordEditSheet.vue'
 
 const healthStore = useHealthStore()
 const familyStore = useFamilyStore()
@@ -110,11 +129,12 @@ const famFetalEntries = computed(() => {
   // 区分"明确记录 0"与"未记录"：fetalCount 字段存在（含 0）即为已记录
   return familyStore.dailyHistoryAsc()
     .filter(r => r.fields && r.fields.fetalCount !== undefined)
-    .map(r => ({ date: r.dateKey, count: Number(r.fields.fetalCount) }))
+    .map(r => ({ date: r.dateKey, count: Number(r.fields.fetalCount), revision: r.revision || 0 }))
 })
 
 // 正式热力图：从权威源记录生成模板需要的形状（month/firstDayOfWeek/data），
-// 与旧 store 热力图同构；月份基于记录的上海日号
+// 与旧 store 热力图同构；月份基于记录的上海日号。
+// 格子附带 dateKey/hasRecord/revision（点击编辑用）与 future 标记（未来日不可点）
 const famFetalHeatmap = computed(() => {
   const entries = famFetalEntries.value
   if (entries.length === 0) return null
@@ -124,15 +144,20 @@ const famFetalHeatmap = computed(() => {
   const daysInMonth = new Date(y, m, 0).getDate()
   const firstDayOfWeek = new Date(y, m - 1, 1).getDay()
   const byDate = {}
-  for (const e of entries) byDate[e.date] = e.count
+  for (const e of entries) byDate[e.date] = e
   void healthStore.today // 与 stats 同一响应式上海时钟（跨日重算 isToday）
   const todaySh = new Date(healthStore.today.getTime() + (8 * 60 + healthStore.today.getTimezoneOffset()) * 60000)
   const todayKey = `${todaySh.getFullYear()}-${String(todaySh.getMonth() + 1).padStart(2, '0')}-${String(todaySh.getDate()).padStart(2, '0')}`
   const data = []
   for (let d = 1; d <= daysInMonth; d++) {
     const dk = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    const count = byDate[dk] !== undefined ? byDate[dk] : 0
-    data.push({ day: d, count, heatClass: count > 0 ? 'heat-1' : 'heat-0', isToday: dk === todayKey })
+    const rec = byDate[dk]
+    const count = rec ? rec.count : 0
+    data.push({
+      day: d, count, heatClass: count > 0 ? 'heat-1' : 'heat-0', isToday: dk === todayKey,
+      dateKey: dk, hasRecord: Boolean(rec), revision: rec ? rec.revision : 0,
+      future: dk > todayKey
+    })
   }
   return { year: y, month: m - 1, daysInMonth, firstDayOfWeek, data }
 })
@@ -171,6 +196,75 @@ const fetalData = computed(() => {
 
 function goHome() {
   uni.switchTab({ url: '/pages/index/index' })
+}
+
+// ── 按日修正/补录/删除（family 权威通道；demo 只读。改的是当日汇总次数——计时会话流水不动）──
+const editSheet = reactive({
+  visible: false, mode: 'fetal', dateKey: '', initial: {}, exists: false, revision: 0
+})
+function todayKeyLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function openAdd() {
+  if (dataSource.value !== 'family') return
+  editSheet.mode = 'fetal'
+  editSheet.dateKey = todayKeyLocal()
+  editSheet.initial = {}
+  editSheet.exists = false
+  editSheet.revision = 0
+  editSheet.visible = true
+}
+// 热力图格子：已记录=编辑（可删）；未记录=补录该日
+function openCell(item) {
+  editSheet.mode = 'fetal'
+  editSheet.dateKey = item.dateKey
+  editSheet.initial = item.hasRecord ? { value: item.count } : {}
+  editSheet.exists = item.hasRecord
+  editSheet.revision = item.revision || 0
+  editSheet.visible = true
+}
+function conflictToast() {
+  uni.showToast({ title: '已被对方更新，请刷新后重试', icon: 'none', duration: 2500 })
+}
+async function handleSheetSave({ dateKey, originalDateKey, payload }) {
+  if (originalDateKey && originalDateKey !== dateKey) {
+    // 挪日：目标日先写入（基线=目标日当前版本），成功后清除原日次数
+    const target = familyStore.dailyRecord(dateKey)
+    const r1 = await familyStore.saveDaily(dateKey, payload, target ? (target.revision || 0) : 0)
+    if (!r1.ok) {
+      if (r1.code === 'revision-conflict') conflictToast()
+      else uni.showToast({ title: '保存失败，请稍后重试', icon: 'none' })
+      return
+    }
+    editSheet.visible = false
+    const r2 = await familyStore.saveDaily(originalDateKey, { fetalCount: null }, editSheet.revision)
+    if (!r2.ok && r2.code !== 'outbox-persist-failed') {
+      uni.showToast({ title: '已记录到新日期；原日期清除未完成，请稍后重试', icon: 'none', duration: 2500 })
+    }
+    return
+  }
+  const r = await familyStore.saveDaily(dateKey, payload, editSheet.revision)
+  if (r.ok) {
+    editSheet.visible = false
+    uni.showToast({ title: r.replayed ? '已保存（幂等重放）' : '已保存并同步', icon: 'none' })
+  } else if (r.code === 'revision-conflict') {
+    conflictToast()
+  } else {
+    uni.showToast({ title: '保存失败，请稍后重试', icon: 'none' })
+  }
+}
+async function handleSheetRemove({ dateKey }) {
+  // 字段级清除：同日的体重/血压/备注不受影响；计时会话流水保留
+  const r = await familyStore.saveDaily(dateKey, { fetalCount: null }, editSheet.revision)
+  if (r.ok) {
+    editSheet.visible = false
+    uni.showToast({ title: '已删除并同步', icon: 'none' })
+  } else if (r.code === 'revision-conflict') {
+    conflictToast()
+  } else {
+    uni.showToast({ title: '删除失败，请稍后重试', icon: 'none' })
+  }
 }
 </script>
 
@@ -412,5 +506,24 @@ function goHome() {
 
 .bottom-spacer {
   height: 120rpx;
+}
+
+/* ── 按日编辑/补录入口 ── */
+.hero-add-btn {
+  margin-top: 24rpx;
+  padding: 16rpx 40rpx;
+  border-radius: 999rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.16);
+  align-self: flex-start;
+}
+.hero-add-btn:active { opacity: 0.8; }
+.hero-add-btn-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+.heatmap-cell-editable:active {
+  outline: 3rpx solid #4A7A64;
 }
 </style>
