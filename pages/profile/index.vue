@@ -337,21 +337,15 @@ const recordItems = computed(() => {
 ]
 })
 
-const aiServiceItems = computed(() => {
-	const quota = healthStore.aiInterpretQuota
-	const remaining = quota.remaining
-	const used = quota.used
-	return [
+	const aiServiceItems = [
 		{
 			icon: '✦',
 			iconBg: '#FAEAEE',
-			title: 'AI 解读次数',
-			subtitle: remaining > 0 ? `今日剩余 ${remaining} 次 · 已用 ${used} / ${quota.limit}` : '今日次数已用完，明天恢复',
-			badge: `${remaining}/${quota.limit}`,
-			action: 'aiQuota'
+			title: 'AI 解读',
+			subtitle: '前往档案解读检查报告',
+			action: 'aiInterpret'
 		}
 	]
-})
 
 // 待产包进度（三态同源：family 权威统计 / demo 演示键 / prompt 空文案。
 // 旧 hospital_bag_items 无可信归属，B2b1 起正式零读——不在此处恢复读取）
@@ -496,11 +490,8 @@ function handleRecordTap(item) {
 }
 
 function handleAiServiceTap(item) {
-	if (item.action === 'aiQuota') {
-		uni.showToast({
-			title: healthStore.aiInterpretRemaining > 0 ? `今日还可解读 ${healthStore.aiInterpretRemaining} 次` : '明天会恢复 5 次解读机会',
-			icon: 'none'
-		})
+	if (item.action === 'aiInterpret') {
+		uni.switchTab({ url: '/pages/archives/index' })
 	}
 }
 
