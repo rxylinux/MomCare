@@ -217,6 +217,17 @@ export const useFamilyStore = defineStore('familyData', () => {
       persistSnapshot()
     }
   }
+  // 孕期档案单条拉取（我的页摘要同源；全量同步仍走 pullAll）
+  async function pullPregnancy() {
+    if (!sessionReady()) return { ok: false }
+    const res = await familyCall('mc-health', { action: 'pregnancy.get', schemaVersion: SCHEMA_VERSION, operationId: 'ro-get' })
+    if (!res.ok) return res
+    if (res.data && res.data.record) {
+      pregnancy.value = mergeRecord(pregnancy.value, res.data.record)
+      persistSnapshot()
+    }
+    return { ok: true }
+  }
 
   // ── 通用提交：outbox 落盘 → 发送 → 幂等收尾 ──
   async function submit({ kind, entityId, payload, dateKey, localRecordGetter, baselineRevision, extraArgs, stableOpId }) {
@@ -948,6 +959,7 @@ export const useFamilyStore = defineStore('familyData', () => {
     pendingCount, conflictEntries,
     restoreFromCache, pullAll, flushAll, flushEntry, adoptCloud, resubmit,
     saveDaily, deleteDaily, savePregnancy, saveMood,
+    pullPregnancy,
     pullBagItems, saveBagItem, deleteBagItem, toggleBagItem,
     initializeBagTemplates,
     pullCheckups, saveCheckup, deleteCheckup, toggleCheckupItem, markCheckupStatus,

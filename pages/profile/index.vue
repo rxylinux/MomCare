@@ -13,23 +13,23 @@
 				</view>
 			</view>
 
-			<!-- Hero 区域 -->
+			<!-- Hero 区域（三态同源：family=权威源 / demo+prompt 沿用旧 store） -->
 			<ProfileHero
-				:userInfo="healthStore.userInfo"
-				:weekInfo="healthStore.todayWeekInfo || { week: 0, day: 0, total: 0 }"
-				:daysUntilDue="healthStore.daysUntilDue"
-				:totalPregDays="healthStore.totalPregDays"
-				:progressPercent="healthStore.progressPercent"
+				:userInfo="heroUserInfo"
+				:weekInfo="viewWeekInfo || { week: 0, day: 0, total: 0 }"
+				:daysUntilDue="viewDaysUntilDue"
+				:totalPregDays="viewTotalPregDays"
+				:progressPercent="viewProgressPercent"
 				:isLoggedIn="healthStore.isLoggedIn"
-				:pregInfoSet="healthStore.pregInfoSet"
+				:pregInfoSet="viewPregInfoSet"
 			/>
 
 			<!-- 倒计时环 -->
 			<view class="section-card">
 				<DueCountdownRing
-					:daysUntilDue="healthStore.daysUntilDue"
-					:progressPercent="healthStore.progressPercent"
-					:dueDate="healthStore.dueDate"
+					:daysUntilDue="viewDaysUntilDue"
+					:progressPercent="viewProgressPercent"
+					:dueDate="viewDueDate"
 				/>
 			</view>
 
@@ -134,6 +134,7 @@ import { foregroundRecheck, coldStartConfirm } from '@/services/sessionService.j
 function pullDomain() {
 	familyStore.pullCheckups().catch(() => {})
 	familyStore.pullBagItems().catch(() => {})
+	familyStore.pullPregnancy().catch(() => {})
 }
 let __activatedMember = null
 function activateFamilyDomain() {
@@ -244,10 +245,62 @@ function installToHomeScreen() {
 }
 // #endif
 
+	// 孕期信息三态同源（B2b1 补遗，同首页模式）：family=权威源（familyStore.pregnancy），
+	// demo/prompt 沿用旧 store。日期键为上海日历键：显示转本地午夜 Date，
+	// 天数/孕周用 __shDayOrd/__keyOrd 日序差（函数声明提升，定义在本文件下方）
+	function keyToDate(key) {
+		return key ? new Date(key + 'T00:00:00') : null
+	}
+	const isFamily = computed(() => dataSource.value === 'family')
+	const famFields = computed(() => {
+		const preg = familyStore.pregnancy
+		return preg && preg.fields ? preg.fields : {}
+	})
+	const famWeekInfo = computed(() => {
+		void healthStore.today // 响应式依赖生产时钟：跨上海午夜自动重算
+		const lmpKey = famFields.value.lmpDate
+		if (!lmpKey) return null
+		const days = __shDayOrd(healthStore.today) - __keyOrd(lmpKey)
+		if (days < 0) return null
+		return { week: Math.floor(days / 7), day: days % 7, total: days }
+	})
+
+	const viewLmpDate = computed(() => isFamily.value ? keyToDate(famFields.value.lmpDate) : healthStore.lmpDate)
+	const viewDueDate = computed(() => isFamily.value ? keyToDate(famFields.value.dueDate) : healthStore.dueDate)
+	const viewHospital = computed(() => isFamily.value ? (famFields.value.hospital || '') : (healthStore.userInfo.hospital || ''))
+	const viewBabyNickname = computed(() => isFamily.value ? (famFields.value.babyNickname || '') : (healthStore.userInfo.babyNickname || ''))
+	const viewPregInfoSet = computed(() => {
+		if (!isFamily.value) return healthStore.pregInfoSet
+		return Boolean(famFields.value.lmpDate || famFields.value.dueDate)
+	})
+	const viewWeekInfo = computed(() => isFamily.value ? famWeekInfo.value : healthStore.todayWeekInfo)
+	const viewDaysUntilDue = computed(() => {
+		if (!isFamily.value) return healthStore.daysUntilDue
+		void healthStore.today
+		const dueKey = famFields.value.dueDate
+		if (!dueKey) return 0
+		return Math.max(0, __keyOrd(dueKey) - __shDayOrd(healthStore.today))
+	})
+	const viewTotalPregDays = computed(() => viewWeekInfo.value ? viewWeekInfo.value.total : 0)
+	const viewProgressPercent = computed(() => {
+		const w = viewWeekInfo.value
+		if (!w) return 0
+		return Math.min(100, Math.round((w.total / 280) * 1000) / 10)
+	})
+
+	// Hero 用户信息：family 模式显示当前确认身份的显示名（共享档案里的"宝妈昵称"
+	// 是孕期资料字段，不代表登录者本人）；头像无家庭源，沿用旧 store
+	const heroUserInfo = computed(() => ({
+		nickname: isFamily.value
+			? (getSessionState().member?.displayName || healthStore.userInfo.nickname || '')
+			: healthStore.userInfo.nickname,
+		avatar: healthStore.userInfo.avatar
+	}))
+
 // 孕期信息
 const pregInfoItems = computed(() => {
-	const lmp = healthStore.lmpDate
-	const due = healthStore.dueDate
+	const lmp = viewLmpDate.value
+	const due = viewDueDate.value
 	const lmpText = lmp ? `${lmp.getFullYear()}年${lmp.getMonth() + 1}月${lmp.getDate()}日` : '未设置'
 	const dueText = due ? `${due.getFullYear()}年${due.getMonth() + 1}月${due.getDate()}日（可由医生修正）` : '未设置'
 	return [
@@ -269,14 +322,14 @@ const pregInfoItems = computed(() => {
 			icon: '🏥',
 			iconBg: '#DDD0F5',
 			title: '就诊医院',
-			subtitle: healthStore.userInfo.hospital || '未设置',
+			subtitle: viewHospital.value || '未设置',
 			action: 'editHospital'
 		},
 		{
 			icon: '👶',
 			iconBg: '#EAF7EF',
 			title: '宝宝昵称',
-			subtitle: healthStore.userInfo.babyNickname || '未设置',
+			subtitle: viewBabyNickname.value || '未设置',
 			action: 'editNickname'
 		}
 	]
