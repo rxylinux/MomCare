@@ -142,6 +142,10 @@
 				</view>
 			</view>
 
+			<!-- 本地资料迁移引导：云端无档案且本机存有资料时出现（确认身份前
+			     保存的内容只在本机，迁入后家人可见；详见 utils/localProfileMigrate.js） -->
+			<LocalProfileMigrateCard :familyMode="dataMode === 'family'" />
+
 			<!-- 未确认身份/未建档：可操作入口（不依赖演示或旧 token） -->
 			<view v-if="dataMode === 'unconfirmed'" class="section-card-style setup-guide" @tap="goFamilyEntry">
 				<text class="setup-title">进入家庭空间</text>
@@ -204,6 +208,7 @@ import PregnancyCalendar from '@/components/common/PregnancyCalendar.vue'
 import DayRecordPanel from '@/components/home/DayRecordPanel.vue'
 import RecordEditSheet from '@/components/home/RecordEditSheet.vue'
 import SharedStatusCard from '@/components/home/SharedStatusCard.vue'
+import LocalProfileMigrateCard from '@/components/home/LocalProfileMigrateCard.vue'
 import NeedComposer from '@/components/home/NeedComposer.vue'
 import TaskListCard from '@/components/home/TaskListCard.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'

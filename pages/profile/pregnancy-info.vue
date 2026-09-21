@@ -205,6 +205,7 @@ import { isRealAuthed } from '@/utils/api.js'
 import { getSessionState } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
 import { legacyHttpEnabled } from '@/utils/backendGate.js'
+import { buildPayload } from '@/utils/localProfileMigrate.js'
 import NavBar from '@/components/NavBar.vue'
 
 const healthStore = useHealthStore()
@@ -304,6 +305,27 @@ onMounted(() => {
 		form.height = f.heightCm != null ? String(f.heightCm) : ''
 		lmpDateStr.value = f.lmpDate || ''
 		dueDateStr.value = f.dueDate || ''
+		// 云端无档案且本机存有资料：预填本地值（确认身份前保存的内容），
+		// 用户点保存即经基线 0 迁入家庭档案；直接返回不保存无副作用。
+		// 云端其实已有档案时（拉取未完成），提交按基线 0 收到真实冲突提示
+		if (!preg) {
+			const localFields = buildPayload({
+				userInfo: healthStore.userInfo,
+				lmpDate: healthStore.lmpDate,
+				dueDate: healthStore.dueDate
+			})
+			if (Object.keys(localFields).length > 0) {
+				form.nickname = localFields.nickname || form.nickname
+				form.babyNickname = localFields.babyNickname || form.babyNickname
+				form.hospital = localFields.hospital || form.hospital
+				form.doctor = localFields.doctor || form.doctor
+				form.hospitalPhone = localFields.hospitalPhone || form.hospitalPhone
+				form.preWeight = localFields.preWeightKg != null ? String(localFields.preWeightKg) : form.preWeight
+				form.height = localFields.heightCm != null ? String(localFields.heightCm) : form.height
+				lmpDateStr.value = localFields.lmpDate || lmpDateStr.value
+				dueDateStr.value = localFields.dueDate || dueDateStr.value
+			}
+		}
 		captureBaseline(f, preg ? preg.revision : 0)
 		if (form.preWeight && form.height) calcBMI()
 		// 后台拉取：仅在云端 revision 超过基线时提示（不覆盖输入、不改基线）
