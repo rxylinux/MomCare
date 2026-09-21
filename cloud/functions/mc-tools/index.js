@@ -97,26 +97,59 @@ function buildFoodPrompt(query, stage) {
     + '请给出：1) 一般安全评估（安全/注意/避免/证据不足）2) 前提条件与限量 3) 主要风险 4) 何时需就医。'
 }
 
-// 提供方判定：测试 mock 注入优先；其后真实环境 DEEPSEEK_API_KEY（生产路径——未配置=未启用）
-function aiProvider() {
-  if (aiMock) return { kind: 'mock', call: aiMock }
-  const key = process.env.DEEPSEEK_API_KEY
-  if (key) return { kind: 'deepseek', call: prompt => callDeepSeek(key, prompt) }
-  return null
+// ── DeepSeek V4 配置（规格 docs/PHASE_G_DEEPSEEK_FLASH_MIGRATION_SPEC.md）──
+// deepseek-chat 官方 2026-07-24 已停用（现网宽容路由无保证）——显式迁 deepseek-flash。
+// MC_DEEPSEEK_MODEL 白名单：缺省 deepseek-flash；非法值回落缺省+warn（不挡服务；防任意值注入请求体）
+const DEEPSEEK_MODELS = ['deepseek-flash', 'deepseek-v4-pro']
+const DEEPSEEK_MODEL_DEFAULT = 'deepseek-flash'
+function deepseekModel() {
+  const v = process.env.MC_DEEPSEEK_MODEL
+  if (DEEPSEEK_MODELS.includes(v)) return v
+  if (v !== undefined) console.warn('[mc-tools] MC_DEEPSEEK_MODEL 非白名单值，回落', DEEPSEEK_MODEL_DEFAULT, ':', String(v))
+  return DEEPSEEK_MODEL_DEFAULT
 }
 
-// DeepSeek 生产调用路径（node:https——仅在配置真实 Key 的部署环境可达；测试一律走 mock/未启用分支）
-function callDeepSeek(apiKey, prompt) {
-  const https = require('node:https')
-  const body = JSON.stringify({
-    model: 'deepseek-chat',
+// 分场景输出上限：报告解读逐项指标分析输出更长（800 有截断风险）
+const AI_MAX_TOKENS = { explainFood: 800, analyzeReport: 1600 }
+
+// 请求体构造（纯函数）：thinking 显式关——V4.1-Flash 默认开 thinking（effort=high），
+// 思考 token 挤占 max_tokens 且拉高延迟，本场景必须关（关后 temperature 恢复生效）。
+// __deepseekRequestBody 为测试注入口——零外呼锁参数回归。
+function deepseekRequestBody(prompt, opts) {
+  const maxTokens = opts && Number.isInteger(opts.maxTokens) && opts.maxTokens > 0 ? opts.maxTokens : AI_MAX_TOKENS.explainFood
+  return {
+    model: deepseekModel(),
     messages: [
       { role: 'system', content: safetySystemPrompt() },
       { role: 'user', content: prompt }
     ],
+    thinking: { type: 'disabled' },
     temperature: 0.3,
-    max_tokens: 800
-  })
+    max_tokens: maxTokens
+  }
+}
+exports.__deepseekRequestBody = deepseekRequestBody
+
+// 提供方判定：测试 mock 注入优先；其后真实环境 DEEPSEEK_API_KEY（生产路径——未配置=未启用）
+function aiProvider() {
+  if (aiMock) return { kind: 'mock', call: aiMock }
+  const key = process.env.DEEPSEEK_API_KEY
+  if (key) {
+    return {
+      // kind=真实模型名（透传响应 model 与落库 ai_result.model；原笼统 'deepseek'）
+      kind: deepseekModel(),
+      call: (prompt, context) => callDeepSeek(key, prompt, {
+        maxTokens: context && context.kind === 'analyzeReport' ? AI_MAX_TOKENS.analyzeReport : AI_MAX_TOKENS.explainFood
+      })
+    }
+  }
+  return null
+}
+
+// DeepSeek 生产调用路径（node:https——仅在配置真实 Key 的部署环境可达；测试一律走 mock/未启用分支）
+function callDeepSeek(apiKey, prompt, opts) {
+  const https = require('node:https')
+  const body = JSON.stringify(deepseekRequestBody(prompt, opts))
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: 'api.deepseek.com',
