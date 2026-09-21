@@ -6,6 +6,11 @@
 //   也不展示给下一个身份
 // - 会话纪元（epoch）：身份确认/退出/切换时递增；携带旧纪元的异步响应一律
 //   丢弃，不得写入新身份的缓存
+// - 同成员复核例外（R7）：纪元把"真·身份变更"与"同成员回前台自动复核"
+//   混为一谈——选图返回/回前台必触发 confirmIdentity 连递纪元，在途上传/
+//   拉取会被误判"会话已切换"。captureSession/isSameSession 以会话指纹
+//   （familyId/memberId）区分：纪元变了但确认成员未变 → 仍视为同一会话；
+//   成员变了/退出/被拒 → 维持全部拦截
 // - 缓存键按 env/AppID/member/schema 隔离；缓存键不是身份验证
 
 import { ref } from 'vue'
@@ -70,6 +75,30 @@ export function getSessionState() {
 
 export function currentEpoch() {
   return state.epoch
+}
+
+// ── 同成员复核语义（R7）──
+// 会话指纹：确认态成员的身份摘要；未确认/退出/锁定时为 null。
+// env/AppID 为构建期常量，不参与运行时变化，不入指纹。
+export function sessionFingerprint() {
+  return state.status === 'confirmed' && state.member
+    ? `${state.member.familyId}/${state.member.memberId}`
+    : null
+}
+
+// 操作开始时捕获 { epoch, fp }：后续用 isSameSession 判定"仍在同一会话"
+export function captureSession() {
+  return { epoch: state.epoch, fp: sessionFingerprint() }
+}
+
+// 同一会话判定：epoch 未变 → 同；epoch 变了但仍是同一确认成员（同成员回前台
+// 自动复核）→ 也算同。成员真切换/退出/被拒（fp 为 null 或不同）→ 异。
+// 不看 confirming：确认窗口内成员尚未替换，写入仍落在当前成员命名空间，
+// 且业务请求由 familyCall 的 confirming 前门拦截，此处无需重复设卡。
+export function isSameSession(captured) {
+  if (!captured) return false
+  if (captured.epoch === state.epoch) return true
+  return Boolean(captured.fp) && captured.fp === sessionFingerprint()
 }
 
 // 冷启动：只报告是否存在已持久化的"已确认"会话记录；未联网确认前不使用它加载缓存
@@ -151,6 +180,13 @@ export function coldStartConfirm() {
     }
   })()
   return foregroundRecheckPromise
+}
+
+// 等待在途确认落定（R7）：业务操作开始前调用——把选图返回/回前台触发的
+// 自动复核等完，纪元先落定再捕获，常态下根本不进复核窗口。
+// 无在途确认立即返回 null（非 Promise 结果语义，仅表"无需等待"）。
+export function settleConfirm() {
+  return foregroundRecheckPromise || Promise.resolve(null)
 }
 
 // 联网确认身份（冷启动/手动刷新共用）。拒绝即锁定，不自动重试；
@@ -484,8 +520,12 @@ export async function familyCall(name, data) {
     return { ok: false, code: 'unauthenticated-session', message: '身份未确认' }
   }
   const epochAtStart = state.epoch
+  const sessionAtStart = { epoch: epochAtStart, fp: sessionFingerprint() }
   const res = await callCloudFunction(name, data)
-  if (state.epoch !== epochAtStart) {
+  // 纪元推进即丢弃过于粗暴：同成员回前台复核（R7）期间返回的响应对当前
+  // 成员仍然有效，丢弃会造成"会话已切换"误报；真换成员/退出/被拒
+  // （指纹为 null 或不同）仍维持丢弃
+  if (!isSameSession(sessionAtStart)) {
     return { ok: false, code: 'stale-session', message: '会话已切换，响应已丢弃' }
   }
   // 业务函数返回可信身份拒绝（伪造/第三成员/白名单变化）→ 立即锁定会话

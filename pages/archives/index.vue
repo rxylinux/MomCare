@@ -12,7 +12,7 @@
     <view v-else-if="loadError" class="error-state">
       <text class="error-icon">⚠️</text>
       <text class="error-title">{{ loadError }}</text>
-      <text class="error-hint">可能是数据库配额已用完，请稍后重试</text>
+      <text class="error-hint">{{ loadErrorHint }}</text>
       <view class="error-retry" @tap="retryLoad">
         <text class="error-retry-text">重新加载</text>
       </view>
@@ -260,7 +260,7 @@ import UploadSheet from './components/UploadSheet.vue'
 import NavBar from '@/components/NavBar.vue'
 import CustomTabBar from '@/components/CustomTabBar.vue'
 import { useReportStore, TAB_DEFS, getTypeInfo } from '@/stores/report'
-import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
+import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut, settleConfirm } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
 import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
 import { getOutbox } from '@/services/outbox.js'
@@ -376,6 +376,7 @@ const showFilterSheet = ref(false)
 const loading = ref(true)
 const searchKeyword = ref('')
 const loadError = ref('')
+const loadErrorHint = ref('') // 真实失败原因（R7：替代写死的"数据库配额"猜测文案）
 const lastLoadTime = ref(0)
 const LOAD_COOLDOWN = 2000 // 2秒冷却时间
 
@@ -423,6 +424,10 @@ async function loadData() {
   if (dataSource.value === 'family') {
     loading.value = true
     loadError.value = ''
+    loadErrorHint.value = ''
+    // 冷启动/回前台确认在途时不发拉取（R7）：等确认落定再拉，消除
+    // "身份确认进行中"被误报成"同步失败"整页错误
+    await settleConfirm()
     // 实际模板消费：先把【当前】权威数据（含恢复的成员快照）映射进 reportStore
     // 派生源——模板/筛选/分组/计数全部经由 store computeds 消费 family 数据；
     // 拉取失败时暖离线显示最近数据，不因同步失败清空页面
@@ -450,6 +455,7 @@ async function loadData() {
       mapToTemplate() // 缩略 URL 就绪后刷新一次
     } else if (reportStore.reports.length === 0 && reportStore.unarchivedReports.length === 0) {
       loadError.value = '同步失败，请重试' // 仅无任何可显示内容时提示错误；暖数据不被错误提示遮蔽
+      loadErrorHint.value = res.message || res.code || '网络异常或云端暂时不可用，请稍后重试' // 真实原因，不做配额猜测
     }
     loading.value = false
     return
@@ -460,6 +466,7 @@ async function loadData() {
   }
   loading.value = true
   loadError.value = ''
+  loadErrorHint.value = ''
   try {
     await Promise.all([
       reportStore.fetchReports(),
@@ -475,15 +482,16 @@ async function loadData() {
     } else {
       // 没有缓存数据，显示错误
       loadError.value = '云端服务暂时不可用，请稍后重试'
+      loadErrorHint.value = (e && (e.errMsg || e.message)) || '网络异常或云端暂时不可用'
     }
     loading.value = false
   }
 }
 
 function retryLoad() {
-  // 重置冷却时间并重新加载
+  // 重置冷却时间并重新加载（返回 promise 供测试/调用方等待完成）
   lastLoadTime.value = 0
-  loadData()
+  return loadData()
 }
 
 function onTabTap(key) {

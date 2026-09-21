@@ -5,7 +5,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { familyCall, currentEpoch, getMemberCache, setMemberCache, getSessionState, subscribeSession } from '@/services/sessionService.js'
+import { familyCall, captureSession, isSameSession, getMemberCache, setMemberCache, getSessionState, subscribeSession } from '@/services/sessionService.js'
 import {
   enqueueOutbox, getOutbox, markSent, markPendingAgain, markConflict,
   removeEntry, resolveConflictResubmit, resolveConflictDrop, findOutboxEntry,
@@ -117,10 +117,12 @@ export const useFamilyStore = defineStore('familyData', () => {
   }
 
   // 返回是否成功落盘：清单类调用方（迁移批次）以此为发网络门槛——
-  // 落盘失败不得发送（不可假设 persistSnapshot 一定成功）
-  function persistSnapshot(epochAtStart) {
+  // 落盘失败不得发送（不可假设 persistSnapshot 一定成功）。
+  // sessionAtWrite（R7）：真切换成员后拒写（不进新成员命名空间）；同成员回前台
+  // 复核推进纪元不再误判——判定与写入之间无 await，单线程内无插入窗口
+  function persistSnapshot(sessionAtWrite) {
     if (!sessionReady()) return false
-    if (epochAtStart !== undefined && epochAtStart !== currentEpoch()) return false
+    if (sessionAtWrite !== undefined && !isSameSession(sessionAtWrite)) return false
     const fam = getSessionState().member.familyId
     return setMemberCache(snapshotKeyFor(fam), {
       familyId: fam,
@@ -136,7 +138,7 @@ export const useFamilyStore = defineStore('familyData', () => {
       lastCheckupSyncAt: lastCheckupSyncAt.value,
       scheduleLmpKey: scheduleLmpKey.value,
       migrationBatch: migrationBatch.value
-    }, epochAtStart)
+    })
   }
 
   // 分页拉取：全部页成功才推进完整同步时间；任一页失败保留旧快照与待办
@@ -144,7 +146,7 @@ export const useFamilyStore = defineStore('familyData', () => {
     if (!sessionReady() || syncing.value) return { ok: false, reason: 'busy' }
     syncing.value = true
     lastError.value = ''
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     try {
       const newDaily = {}
       const newMoods = {}
@@ -174,7 +176,7 @@ export const useFamilyStore = defineStore('familyData', () => {
         if (pages > 50) throw new Error('分页异常：超过 50 页')
       } while (cursor)
 
-      if (currentEpoch() !== epochAtStart) return { ok: false, reason: 'stale' }
+      if (!isSameSession(sessionAtStart)) return { ok: false, reason: 'stale' }
       // 与本地待办冲突中的实体：待办存在时不让旧拉取覆盖本地输入视图基线，
       // 直接按 revision 合并（待办 flush 时仍以服务端 revision 校验）
       const mergedDaily = { ...daily.value }
@@ -185,12 +187,12 @@ export const useFamilyStore = defineStore('familyData', () => {
       moods.value = mergedMoods
       pregnancy.value = preg.data.record || null
       lastFullSyncAt.value = Date.now()
-      persistSnapshot(epochAtStart)
+      persistSnapshot(sessionAtStart)
       return { ok: true }
     } catch (e) {
-      // 旧 continuation（挂起期间身份/epoch 已变化）的失败不得改写新身份的
+      // 旧 continuation（挂起期间身份已变化）的失败不得改写新身份的
       // 同步异常标记——新身份的 UI 状态只由自己的拉取决定
-      if (currentEpoch() === epochAtStart) {
+      if (isSameSession(sessionAtStart)) {
         lastError.value = `同步失败：${e.message || e}`
         return { ok: false, reason: 'error', message: lastError.value }
       }
@@ -279,7 +281,7 @@ export const useFamilyStore = defineStore('familyData', () => {
     if (!health.ok) return { ok: false, code: 'outbox-unreadable', message: '待同步队列不可读，已停止发送（磁盘原件保留）' }
     const entry = findOutboxEntry(id)
     if (!entry) return { ok: false, code: 'entry-gone' }
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     if (!markSent(id)) {
       // 发送前无法持久化"可能已发送"（everSent=true）的不可变状态：
       // 若继续发送而后台合并该条目，未确认请求会被改写丢失——必须停止网络，
@@ -331,8 +333,8 @@ export const useFamilyStore = defineStore('familyData', () => {
       callData.dateKey = entry.extra && entry.extra.dateKey ? entry.extra.dateKey : undefined
     }
     const res = await familyCall(fnName, callData)
-    if (currentEpoch() !== epochAtStart) {
-      return { ok: false, code: 'stale-session' } // 身份已切换：待办留在原成员名下
+    if (!isSameSession(sessionAtStart)) {
+      return { ok: false, code: 'stale-session' } // 身份已切换：待办留在原成员名下（同成员复核不算，R7）
     }
     // 批量 API 的单项语义：顶层 ok 不代表单项成功（spec 补充说明）——
     // 单项失败按其真实状态落待办/冲突/终态，不以整批 ok 伪装完成
@@ -358,7 +360,7 @@ export const useFamilyStore = defineStore('familyData', () => {
         const authoritative = (item.replayed && item.currentRecord) ? item.currentRecord : item.record
         applyServerRecord(entry.kind, authoritative)
         if (!removeEntry(id)) { /* 保留待办：幂等重放后移除 */ }
-        persistSnapshot(epochAtStart)
+        persistSnapshot(sessionAtStart)
         settleMigrationItem(entry.extra.id, 'ok')
         maybeAdvanceScheduleLmp()
         return { ok: true, replayed: Boolean(item.replayed), record: authoritative }
@@ -385,7 +387,7 @@ export const useFamilyStore = defineStore('familyData', () => {
       if (!removeEntry(id)) {
         // 移除落盘失败：保留条目；下次 flush 幂等重放后移除（服务端不重复写）
       }
-      persistSnapshot(epochAtStart)
+      persistSnapshot(sessionAtStart)
       return { ok: true, record: authoritative, replayed: res.data.replayed }
     }
     if (res.code === 'revision-conflict') {
@@ -497,12 +499,12 @@ export const useFamilyStore = defineStore('familyData', () => {
     flushRunning.value = true
     const results = []
     try {
-      const epochAtStart = currentEpoch()
+      const sessionAtStart = captureSession()
       // 迁移恢复：批次已保存但部分项尚未入队（确认后/入队前退出）——
       // 按原确认目标与预览 revision 恢复到持久待办，不重做预览替换目标
       await recoverMigrationBatch()
       for (const entry of getOutbox()) {
-        if (currentEpoch() !== epochAtStart) break
+        if (!isSameSession(sessionAtStart)) break
         // 重试 pending 与 sent（响应丢失后重启的"不确定态"，原 opId 幂等重放）；
         // conflict 条目必须由用户显式解决，不自动重试
         if ((entry.status === 'pending' || entry.status === 'sent') && !entry.conflict) {
@@ -612,7 +614,7 @@ export const useFamilyStore = defineStore('familyData', () => {
   // ── B2b1：待产包 ──
   async function pullBagItems() {
     if (!sessionReady()) return { ok: false }
-    const epoch = currentEpoch()
+    const sessionAtStart = captureSession()
     let cursor = null, pages = 0
     const newBag = {}
     do {
@@ -623,12 +625,12 @@ export const useFamilyStore = defineStore('familyData', () => {
       pages++
       if (pages > 20) return { ok: false, code: 'pagination-error' }
     } while (cursor)
-    if (currentEpoch() !== epoch) return { ok: false, code: 'stale-session' }
+    if (!isSameSession(sessionAtStart)) return { ok: false, code: 'stale-session' }
     const merged = { ...bagItems.value }
     for (const [k, v] of Object.entries(newBag)) merged[k] = mergeRecord(merged[k], v)
     bagItems.value = merged
     lastBagSyncAt.value = Date.now() // 全部页成功才推进本领域完整同步时间
-    persistSnapshot(epoch)
+    persistSnapshot(sessionAtStart)
     return { ok: true }
   }
   async function saveBagItem(id, partial, baselineRevision, stableOpId) {
@@ -649,7 +651,7 @@ export const useFamilyStore = defineStore('familyData', () => {
   // ── B2b1：产检 ──
   async function pullCheckups() {
     if (!sessionReady()) return { ok: false }
-    const epoch = currentEpoch()
+    const sessionAtStart = captureSession()
     let cursor = null, pages = 0
     const newChk = {}
     do {
@@ -660,7 +662,7 @@ export const useFamilyStore = defineStore('familyData', () => {
       pages++
       if (pages > 20) return { ok: false, code: 'pagination-error' }
     } while (cursor)
-    if (currentEpoch() !== epoch) return { ok: false, code: 'stale-session' }
+    if (!isSameSession(sessionAtStart)) return { ok: false, code: 'stale-session' }
     const merged = { ...checkups.value }
     for (const [k, v] of Object.entries(newChk)) merged[k] = mergeRecord(merged[k], v)
     checkups.value = merged
@@ -677,7 +679,7 @@ export const useFamilyStore = defineStore('familyData', () => {
         scheduleLmpKey.value = lmp
       }
     }
-    persistSnapshot(epoch)
+    persistSnapshot(sessionAtStart)
     return { ok: true }
   }
   async function saveCheckup(id, payload, status, baselineRevision, templateKey, source, stableOpId) {
@@ -710,10 +712,10 @@ export const useFamilyStore = defineStore('familyData', () => {
   // 已删模板不因重试复活（服务端存在即保留语义）
   async function initializeBagTemplates(templates) {
     if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     const results = []
     for (const tpl of templates) {
-      if (currentEpoch() !== epochAtStart) break // 成员切换：停止入队，留待原成员续传
+      if (!isSameSession(sessionAtStart)) break // 成员切换：停止入队，留待原成员续传
       if (!tpl || !tpl.templateKey) { results.push({ templateKey: '', ok: false, code: 'invalid-template' }); continue }
       const entityId = `bag-init:${tpl.templateKey}`
       const queued = getOutbox().find(e => e.entityId === entityId)
@@ -739,11 +741,11 @@ export const useFamilyStore = defineStore('familyData', () => {
 
   async function initializeCheckupTemplates(templates) {
     if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     const lmp = pregnancy.value && pregnancy.value.fields && pregnancy.value.fields.lmpDate
     const results = []
     for (const tpl of templates) {
-      if (currentEpoch() !== epochAtStart) break // 成员切换：停止入队，留待原成员续传
+      if (!isSameSession(sessionAtStart)) break // 成员切换：停止入队，留待原成员续传
       if (!tpl || !tpl.templateKey || !tpl.dateKey) { results.push({ templateKey: (tpl && tpl.templateKey) || '', ok: false, code: 'invalid-template' }); continue }
       const entityId = `checkup-init:${tpl.templateKey}`
       const queued = getOutbox().find(e => e.entityId === entityId)
@@ -773,10 +775,10 @@ export const useFamilyStore = defineStore('familyData', () => {
     }
     // 模板全部落定后记录本次自动安排所基于的 LMP（与记录级 templateLmp 一致）
     // 仅在原会话内推进并落盘（切换后不把原成员状态写进新成员命名空间）
-    if (currentEpoch() === epochAtStart && lmp && results.length > 0 && results.every(r => r.ok || r.skipped) &&
+    if (isSameSession(sessionAtStart) && lmp && results.length > 0 && results.every(r => r.ok || r.skipped) &&
         !getOutbox().some(e => e.kind === 'checkup-init')) {
       scheduleLmpKey.value = lmp
-      persistSnapshot(epochAtStart)
+      persistSnapshot(sessionAtStart)
     }
     const allDone = results.length > 0 && results.every(r => r.ok || r.skipped)
     return { ok: allDone, results }
@@ -836,9 +838,9 @@ export const useFamilyStore = defineStore('familyData', () => {
   async function recoverMigrationBatch() {
     const b = migrationBatch.value
     if (!b || !b.persistedAt || !Array.isArray(b.items) || b.items.length === 0) return
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     for (const m of b.items) {
-      if (currentEpoch() !== epochAtStart) break // 成员切换：停止恢复，留待原成员续传
+      if (!isSameSession(sessionAtStart)) break // 成员切换：停止恢复，留待原成员续传
       if (b.settled && b.settled[m.id]) continue
       const entityId = `checkup-migrate:${m.id}:${m.newDateKey}`
       if (getOutbox().some(e => e.entityId === entityId)) continue
@@ -860,9 +862,9 @@ export const useFamilyStore = defineStore('familyData', () => {
     if (!info) return { ok: false, code: 'no-migration-needed' }
     const valid = (items || []).filter(it => it && it.id && it.newDateKey)
     if (valid.length === 0) return { ok: false, code: 'empty-migration' }
-    // 会话边界：整个 apply 以发起成员的 epoch 为准——期间切换成员（含首项响应
+    // 会话边界：整个 apply 以发起成员的会话为准——期间切换成员（含首项响应
     // 挂起时对端确认他人）不得把后续项入队到新成员名下；清单留在原成员缓存
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     // 1) 网络前：建立覆盖当前变更的完整批次清单并落盘（同变更续传沿用并合并，换变更重建）
     // 落盘失败时内存清单回滚到上次持久化状态——未持久化的清单不得被恢复逻辑发送
     const prevBatchSnapshot = migrationBatch.value ? JSON.parse(JSON.stringify(migrationBatch.value)) : null
@@ -879,8 +881,8 @@ export const useFamilyStore = defineStore('familyData', () => {
     batch.persistedAt = Date.now()
     // 清单承担"尚未入队项"的恢复保障：写入失败必须停止、不发任何迁移请求
     // （与 outbox 落盘失败不发请求同一协议；不可假设 persistSnapshot 一定成功）；
-    // epoch 校验防止清单被写进切换后新成员的命名空间
-    if (!persistSnapshot(epochAtStart)) {
+    // 会话校验防止清单被写进切换后新成员的命名空间
+    if (!persistSnapshot(sessionAtStart)) {
       migrationBatch.value = prevBatchSnapshot
       return { ok: false, code: 'manifest-persist-failed', message: '本机清单写入失败，已停止发送（内容保留，请重试）' }
     }
@@ -890,7 +892,7 @@ export const useFamilyStore = defineStore('familyData', () => {
     for (const it of valid) {
       // 每次入队前核对会话：首项响应挂起期间成员被切换 → 立即停止，
       // 后续项不以新成员入队/发送；原清单与已入队待办留在原成员名下续传
-      if (currentEpoch() !== epochAtStart) { staleSession = true; break }
+      if (!isSameSession(sessionAtStart)) { staleSession = true; break }
       const entityId = `checkup-migrate:${it.id}:${it.newDateKey}`
       const queued = getOutbox().find(e => e.entityId === entityId)
       if (queued) {
@@ -913,7 +915,7 @@ export const useFamilyStore = defineStore('familyData', () => {
       return { ok: false, code: 'stale-session', results, message: '会话已切换，未完成项保留在原成员名下' }
     }
     maybeAdvanceScheduleLmp()
-    persistSnapshot(epochAtStart)
+    persistSnapshot(sessionAtStart)
     const pendingLeft = getOutbox().filter(e => e.kind === 'checkup-migrate').length
     const unsettled = migrationBatch.value
       ? migrationBatch.value.items.filter(m => !(migrationBatch.value.settled || {})[m.id]).length
@@ -923,8 +925,8 @@ export const useFamilyStore = defineStore('familyData', () => {
 
   // ── B2b2：报告 ──
   async function pullReports() {
-    if (!sessionReady()) return { ok: false }
-    const epoch = currentEpoch()
+    if (!sessionReady()) return { ok: false, code: 'unauthenticated-session', message: '身份尚未确认完成，请稍后重试' }
+    const sessionAtStart = captureSession()
     let cursor = null, pages = 0
     const newRpt = {}
     do {
@@ -935,12 +937,12 @@ export const useFamilyStore = defineStore('familyData', () => {
       pages++
       if (pages > 20) return { ok: false, code: 'pagination-error' }
     } while (cursor)
-    if (currentEpoch() !== epoch) return { ok: false, code: 'stale-session' }
+    if (!isSameSession(sessionAtStart)) return { ok: false, code: 'stale-session' }
     const merged = { ...reports.value }
     for (const [k, v] of Object.entries(newRpt)) merged[k] = mergeRecord(merged[k], v)
     reports.value = merged
     lastReportSyncAt.value = Date.now() // 全部页成功才推进本领域完整同步时间
-    persistSnapshot(epoch)
+    persistSnapshot(sessionAtStart)
     return { ok: true }
   }
   async function saveReport(id, partial, baselineRevision, stableOpId) {

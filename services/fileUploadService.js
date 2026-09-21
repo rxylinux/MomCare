@@ -8,8 +8,8 @@
 // - staged-file-unreadable：暂存过期——本机原件【保留】（P1-4），
 //   由调用方决定重暂存（新 uploadId 同原件）或用户显式重选
 // - 身份失败分类：locked（服务端拒绝，调用方清屏）/ stale（成员切换，待办留原成员）
-//   / network 等（可按原 uploadId 重试）
-import { familyCall, currentEpoch } from '@/services/sessionService.js'
+//   / network 等（可按原 uploadId 重试）；同成员回前台复核（R7）不算切换
+import { familyCall, captureSession, isSameSession } from '@/services/sessionService.js'
 
 export const AUTH_REFUSAL_CODES = ['not-family-member', 'wrong-appid', 'unauthenticated', 'not-configured']
 
@@ -18,11 +18,11 @@ export const AUTH_REFUSAL_CODES = ['not-family-member', 'wrong-appid', 'unauthen
 //   {ok:false, code, message, locked?, stale?, discardLocal?}
 //   discardLocal=true 仅在"登记已由其他 uploadId 完成/认领绑定冲突"等本机副本
 //   无恢复意义的场景；staged-file-unreadable 不置 discard（原件保留可重暂存）。
-export function classifyCallFailure(res, epochAtStart, stage) {
+export function classifyCallFailure(res, sessionAtStart, stage) {
   if (res.locked || AUTH_REFUSAL_CODES.includes(res.code)) {
     return { ok: false, stage, code: res.code, message: res.message || '身份被服务端拒绝', locked: true }
   }
-  if (res.code === 'stale-session' || (epochAtStart !== undefined && currentEpoch() !== epochAtStart)) {
+  if (res.code === 'stale-session' || (sessionAtStart !== undefined && !isSameSession(sessionAtStart))) {
     return { ok: false, stage, code: 'stale-session', message: '会话已切换', stale: true }
   }
   return { ok: false, stage, code: res.code || 'network-error', message: res.message || '网络不可用' }
@@ -63,14 +63,14 @@ export async function fetchUploadPolicy() {
 }
 
 // 单文件受控管线：prepare → 直传 → register。
-// 输入 { uploadId, savedFilePath }；全程以发起会话 epoch 为准。
+// 输入 { uploadId, savedFilePath }；全程以发起会话为准（同成员复核 R7 不算切换）。
 export async function uploadSingleFile({ uploadId, savedFilePath }) {
   if (!uploadId || !savedFilePath) return { ok: false, code: 'invalid-params', message: '缺少 uploadId 或本机文件' }
-  const epochAtStart = currentEpoch()
+  const sessionAtStart = captureSession()
 
   const prepared = await familyCall('mc-files', { action: 'prepareUpload', uploadId })
-  if (currentEpoch() !== epochAtStart) return { ok: false, stage: 'prepare', code: 'stale-session', message: '会话已切换', stale: true }
-  if (!prepared.ok) return classifyCallFailure(prepared, epochAtStart, 'prepare')
+  if (!isSameSession(sessionAtStart)) return { ok: false, stage: 'prepare', code: 'stale-session', message: '会话已切换', stale: true }
+  if (!prepared.ok) return classifyCallFailure(prepared, sessionAtStart, 'prepare')
 
   if (!wxCloudUploadAvailable()) {
     return { ok: false, code: 'unsupported-platform', message: '上传仅在微信小程序端可用' }
@@ -89,8 +89,9 @@ export async function uploadSingleFile({ uploadId, savedFilePath }) {
     return { ok: false, stage: 'stage', code: 'stage-upload-failed', message: (e && (e.errMsg || e.message)) || '暂存上传失败' }
   }
   // 二进制直传 await 之后、下一次副作用（registerStaged）之前必须核对开始
-  // epoch：挂起期间切成员，绝不以新成员身份发出登记请求（调用方事后丢弃 UI 不够）
-  if (currentEpoch() !== epochAtStart) {
+  // 会话：挂起期间真切成员，绝不以新成员身份发出登记请求（调用方事后丢弃 UI 不够）；
+  // 同成员回前台复核（R7）不在此列
+  if (!isSameSession(sessionAtStart)) {
     return { ok: false, stage: 'stage', code: 'stale-session', message: '会话已切换（未发送登记请求）', stale: true }
   }
 
@@ -100,7 +101,7 @@ export async function uploadSingleFile({ uploadId, savedFilePath }) {
     uploadId
   })
   // 成功响应同样核对：不把旧会话结果当作当前会话的成功
-  if (currentEpoch() !== epochAtStart) {
+  if (!isSameSession(sessionAtStart)) {
     return { ok: false, stage: 'register', code: 'stale-session', message: '会话已切换', stale: true }
   }
   if (!reg.ok) {
@@ -108,7 +109,7 @@ export async function uploadSingleFile({ uploadId, savedFilePath }) {
       // 暂存过期：本机原件保留（P1-4）——可新 uploadId 重暂存或用户显式重选
       return { ok: false, stage: 'register', code: 'staged-file-unreadable', message: '暂存文件已过期，本机原件已保留' }
     }
-    return classifyCallFailure(reg, epochAtStart, 'register')
+    return classifyCallFailure(reg, sessionAtStart, 'register')
   }
   return { ok: true, replayed: Boolean(reg.data.replayed), fileId: reg.data.file.fileId, file: reg.data.file }
 }

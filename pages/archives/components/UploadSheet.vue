@@ -44,7 +44,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useReportStore } from '@/stores/report'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { request, getToken, isGuestMode } from '@/utils/api.js'
-import { getSessionState, isExplicitDemo, isExplicitLoggedOut, currentEpoch } from '@/services/sessionService.js'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut, captureSession, isSameSession, settleConfirm } from '@/services/sessionService.js'
 import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
 
 const props = defineProps({
@@ -83,19 +83,20 @@ function close() {
 
 // 拍照上传
 async function onCamera() {
-  // 操作级 epoch：授权/选图/持久副本/批次/导航贯穿同一次操作
-  const opEpoch = currentEpoch()
+  // 操作级会话快照：授权/选图/持久副本/批次/导航贯穿同一次操作（R7：
+  // 同成员回前台复核不算切换，选图返回触发的 onShow 复核不再误伤）
+  const opSession = captureSession()
   close()
   try {
     await uni.authorize({ scope: 'scope.camera' })
-    await doCamera(opEpoch)
+    await doCamera(opSession)
   } catch (e) {
     // 权限被拒绝
     showPermissionDialog('camera')
   }
 }
 
-async function doCamera(opEpoch) {
+async function doCamera(opSession) {
   try {
     const res = await new Promise((resolve, reject) => {
       uni.chooseImage({
@@ -106,7 +107,7 @@ async function doCamera(opEpoch) {
         fail: reject
       })
     })
-    await handleUploadResult(res.tempFilePaths, opEpoch)
+    await handleUploadResult(res.tempFilePaths, opSession)
   } catch (e) {
     console.error('Camera error:', e)
   }
@@ -114,7 +115,7 @@ async function doCamera(opEpoch) {
 
 // 相册选择
 async function onGallery() {
-  const opEpoch = currentEpoch()
+  const opSession = captureSession()
   close()
   try {
     const res = await new Promise((resolve, reject) => {
@@ -130,7 +131,7 @@ async function onGallery() {
       uni.showToast({ title: '最多一次上传 20 张', icon: 'none' })
       return
     }
-    await handleUploadResult(res.tempFilePaths, opEpoch)
+    await handleUploadResult(res.tempFilePaths, opSession)
   } catch (e) {
     console.error('Gallery error:', e)
     if (e && e.errMsg && e.errMsg.includes('deny')) {
@@ -141,10 +142,13 @@ async function onGallery() {
 
 // 处理图片上传结果：family 走权威批次（持久副本→受控暂存→登记→报告），
 // 演示/未确认保持明确拦截（不发起请求、不产生假成功）
-async function handleUploadResult(tempFilePaths, opEpoch) {
+async function handleUploadResult(tempFilePaths, opSession) {
   if (!tempFilePaths || tempFilePaths.length === 0) return
-  // 选图返回后核对操作会话：挂起期间切成员，旧选择不得以新成员身份继续
-  if (opEpoch !== undefined && currentEpoch() !== opEpoch) {
+  // 选图返回必触发 App.onShow 自动复核（R7）：先等在途确认落定再做一切判断
+  await settleConfirm()
+  // 选图返回后核对操作会话：挂起期间真切成员，旧选择不得以新成员身份继续；
+  // 同成员回前台复核不算切换；发起时未确认（fp null）交由模式检查拦截
+  if (opSession !== undefined && opSession.fp && !isSameSession(opSession)) {
     uni.showToast({ title: '会话已切换，本次选择已取消', icon: 'none', duration: 2500 })
     return
   }

@@ -12,7 +12,7 @@
 // - 重启恢复：清单从成员缓存恢复，未完成项续传；已排队报告经 outbox 重放
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { getSessionState, subscribeSession, currentEpoch, getMemberCache, setMemberCache, openRecoveryScope } from '@/services/sessionService.js'
+import { getSessionState, subscribeSession, captureSession, isSameSession, settleConfirm, getMemberCache, setMemberCache, openRecoveryScope } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
 import { persistLocalCopy, removeLocalCopy, uploadSingleFile, fetchUploadPolicy } from '@/services/fileUploadService.js'
 
@@ -51,9 +51,10 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     // 已取消的恢复不复活：discard 后即使清理失败留下的持久残留不再可恢复
     if (saved && saved.items && !saved.cancelled) lastRecovery.value = saved
   }
-  function persistRecovery(rec, epochAtWrite) {
+  function persistRecovery(rec, sessionAtWrite) {
     if (!rec || !sessionReady()) return false
-    return setMemberCache(RECOVERY_KEY, rec, epochAtWrite)
+    if (sessionAtWrite !== undefined && !isSameSession(sessionAtWrite)) return false
+    return setMemberCache(RECOVERY_KEY, rec)
   }
   function clearPersistedRecovery() {
     if (!sessionReady()) return
@@ -77,11 +78,13 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
       batches.value = restored
     }
   }
-  // epochAtWrite：批量推进中的落盘必须带发起会话 epoch——成员切换后返回 false
-  //（绝不把原成员批次写进新成员命名空间）
-  function persistBatches(epochAtWrite) {
+  // sessionAtWrite：批量推进中的落盘必须带发起会话快照——真切换成员后返回
+  // false（绝不把原成员批次写进新成员命名空间）；同成员回前台复核（R7）不再
+  // 误判。判定与写入之间无 await，单线程内不可能插入成员切换
+  function persistBatches(sessionAtWrite) {
     if (!sessionReady()) return false
-    return setMemberCache(BATCHES_KEY, { batches: batches.value }, epochAtWrite)
+    if (sessionAtWrite !== undefined && !isSameSession(sessionAtWrite)) return false
+    return setMemberCache(BATCHES_KEY, { batches: batches.value })
   }
   loadPersisted()
 
@@ -129,21 +132,38 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
   function batch(batchId) { return batches.value[batchId] || null }
 
   async function refreshUploadPolicy() {
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     const res = await fetchUploadPolicy()
-    // 迟到门：挂起期间切成员——不把旧会话的策略写入当前 uploadPolicy
-    if (currentEpoch() !== epochAtStart) {
+    // 迟到门：挂起期间真切成员——不把旧会话的策略写入当前 uploadPolicy；
+    // 同成员复核（R7）不误判
+    if (!isSameSession(sessionAtStart)) {
       return { ok: false, clientUploadEnabled: false, reason: '会话已切换', stale: true }
     }
     // 仅成功策略可缓存：临时网络失败不得永久禁用后续重试（保持 null 以便重取）
     uploadPolicy.value = res.ok ? res : null
-    return res.ok ? res : { ok: false, clientUploadEnabled: false, reason: res.message || '上传策略读取失败（可重试）' }
+    if (res.ok) return res
+    return {
+      ok: false, clientUploadEnabled: false,
+      reason: res.message || '上传策略读取失败（可重试）',
+      code: res.code,
+      confirming: res.code === 'confirming', // 调用方可 settle 后重取
+      stale: res.code === 'stale-session'
+    }
   }
 
   // ── 建批：本机持久副本 + 完整清单落盘（网络前）；逐项推进 ──
   async function createBatchFromTempPaths(tempPaths) {
+    // 发起身份锚点：真换成员（settle 等待期间复核换了人）在建批前取消，
+    // 批次归属发起成员；发起时未确认（fp null）不在此拦，由 sessionReady 把关
+    const sessionAtEntry = captureSession()
+    // 选图返回必触发 App.onShow 自动复核（R7）：先把在途确认等完、纪元落定，
+    // 再捕获会话快照——常态下不再撞复核窗口
+    await settleConfirm()
+    if (sessionAtEntry.fp && !isSameSession(sessionAtEntry)) {
+      return { ok: false, code: 'stale-session', message: '会话已切换，未建立上传批次', stale: true }
+    }
     // 整次用户操作以开始会话为准：policy/选图/落盘/清单任何 await 后不得重新认可当前成员
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
     // 存在未处理恢复（本人）时阻止新批次建立：两份失败清单绝不拼接为一份报告；
     // 用户先恢复或放弃当前恢复，再开始新选图
@@ -159,8 +179,17 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     const recoveryScope = openRecoveryScope(RECOVERY_KEY)
     if (!Array.isArray(tempPaths) || tempPaths.length === 0) return { ok: false, code: 'empty-selection' }
     if (tempPaths.length > 20) return { ok: false, code: 'too-many', message: '最多一次上传 20 张' }
-    const policy = uploadPolicy.value || await refreshUploadPolicy()
-    if (currentEpoch() !== epochAtStart) {
+    let policy = uploadPolicy.value
+    if (!policy) {
+      policy = await refreshUploadPolicy()
+      // 策略读取撞上确认窗口（settle 后又来了一次 onShow 复核的极端时序）：
+      // 等确认落定再取一次，不把"确认进行中"误报成"上传通道未启用"
+      if (!policy.clientUploadEnabled && (policy.confirming || policy.stale)) {
+        await settleConfirm()
+        policy = uploadPolicy.value || await refreshUploadPolicy()
+      }
+    }
+    if (!isSameSession(sessionAtStart)) {
       return { ok: false, code: 'stale-session', message: '会话已切换，未建立上传批次', stale: true }
     }
     if (!policy.clientUploadEnabled) {
@@ -171,7 +200,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     const items = []
     let persistFailures = 0
     for (let i = 0; i < tempPaths.length; i++) {
-      if (currentEpoch() !== epochAtStart) {
+      if (!isSameSession(sessionAtStart)) {
         // 切换即停：已落盘本机副本保留在原成员路径（不清除），不写任何成员清单
         return { ok: false, code: 'stale-session', message: '会话已切换，批次未建立', stale: true }
       }
@@ -185,7 +214,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
         persistFailures++
       }
       items.push(item)
-      if (currentEpoch() !== epochAtStart) {
+      if (!isSameSession(sessionAtStart)) {
         // 挂起期间切成员：已落盘副本保留（不清除）；把【原身份绑定的恢复索引】
         // 写回原成员命名空间（不暴露给当前成员；回原成员可恢复续传，非仅"留在磁盘"）
         const originMemberId = originIdentity.memberId
@@ -217,15 +246,15 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     batches.value = { ...batches.value, [batchId]: {
       batchId, reportId, status: initialStatus, items, draft: null, createdAt: Date.now(), updatedAt: Date.now()
     } }
-    // 完整清单落盘门槛（带发起 epoch）：失败不发任何网络；本机已保存原件是唯一
+    // 完整清单落盘门槛（带发起会话快照）：失败不发任何网络；本机已保存原件是唯一
     // 恢复句柄（saveFile 已移动临时文件），必须保留、不得删除
-    if (!persistBatches(epochAtStart)) {
+    if (!persistBatches(sessionAtStart)) {
       const { [batchId]: _drop, ...rest } = batches.value
       void _drop
       batches.value = rest
       const keptLocalPaths = items.filter(i => i.savedFilePath).map(i => i.savedFilePath)
       // 清单失败且会话已切换：不把原成员恢复态写进/展示给新成员（原件保留本机）
-      if (currentEpoch() !== epochAtStart) {
+      if (!isSameSession(sessionAtStart)) {
         return {
           ok: false, code: 'manifest-persist-failed',
           message: '本机批次清单写入失败且会话已切换；原件已保留在本机',
@@ -247,7 +276,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
         at: Date.now(),
         persisted: false
       }
-      rec.persisted = persistRecovery(rec, epochAtStart)
+      rec.persisted = persistRecovery(rec, sessionAtStart)
       // 落盘失败也保留内存恢复句柄（persisted:false 如实标注）——原件恢复线索不因
       // 元数据写盘失败而丢失；切成员内存清空、切回原成员时若磁盘也无可恢复，
       // 如实显示"仅内存"（关进程后不可恢复）
@@ -264,7 +293,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
         keptLocalPaths
       }
     }
-    if (currentEpoch() !== epochAtStart) {
+    if (!isSameSession(sessionAtStart)) {
       return { ok: true, batchId, reportId, started: false, note: '会话已切换，批次保留在原成员名下' }
     }
     const processing_ = processBatch(batchId)
@@ -277,10 +306,10 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     const b = batches.value[batchId]
     if (!b || b.status === 'done' || b.status === 'cancelled') return
     processing.value = true
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     try {
       for (const item of b.items) {
-        if (currentEpoch() !== epochAtStart) break // 成员切换：批次留原成员，停止推进
+        if (!isSameSession(sessionAtStart)) break // 成员切换：批次留原成员，停止推进
         if (item.state === 'registered' || item.state === 'staged-expired') continue
         if (item.state === 'uploading' || item.state === 'persist-failed') continue
         item.state = 'uploading'
@@ -301,7 +330,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
           item.error = res.message || res.code || '上传失败'
         }
         b.updatedAt = Date.now()
-        persistBatches(epochAtStart)
+        persistBatches(sessionAtStart)
       }
       // 汇总批次状态：全部登记=ready；有失败/过期=partial
       const states = b.items.map(i => i.state)
@@ -309,7 +338,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
       else if (states.some(x => x === 'failed' || x === 'staged-expired' || x === 'persist-failed')) b.status = 'partial'
       else b.status = 'uploading'
       b.updatedAt = Date.now()
-      persistBatches(epochAtStart)
+      persistBatches(sessionAtStart)
     } finally {
       processing.value = false
     }
@@ -360,20 +389,21 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     const item = b.items.find(i => i.order === order)
     if (!item || item.state === 'registered') return { ok: false, code: 'not-replaceable' }
     // 整次重选以开始会话为准：选图/落盘每个 await 后核对；失效不删旧副本、
-    // 不写当前成员缓存；新副本元数据失败保留恢复线索
-    const epochAtStart = currentEpoch()
+    // 不写当前成员缓存；新副本元数据失败保留恢复线索。同成员回前台复核
+    //（选图返回必触发，R7）不误判
+    const sessionAtStart = captureSession()
     const recoveryScope = openRecoveryScope(RECOVERY_KEY)
     const choose = await new Promise(resolve => {
       if (typeof uni.chooseImage !== 'function') return resolve(null)
       uni.chooseImage({ count: 1, sizeType: ['original'], sourceType: ['album', 'camera'], success: r => resolve(r), fail: () => resolve(null) })
     })
-    if (currentEpoch() !== epochAtStart) {
+    if (!isSameSession(sessionAtStart)) {
       return { ok: false, code: 'stale-session', stale: true, message: '会话已切换，重选已取消（原副本未动）' }
     }
     const tempPath = choose && choose.tempFilePaths && choose.tempFilePaths[0]
     if (!tempPath) return { ok: false, code: 'cancelled' }
     const persistedCopy = await persistLocalCopy(tempPath)
-    if (currentEpoch() !== epochAtStart) {
+    if (!isSameSession(sessionAtStart)) {
       // 切换：批次槽位不动；新副本已落盘——恢复记录保留【原完整批次】
       // （原 batchId/reportId/全部槽位与顺序/未动项登记状态），仅目标槽位指向
       // 新原件；不删旧副本、不写当前成员缓存；恢复后仍是同一份多页报告
@@ -467,6 +497,13 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
 
   // ── 报告创建：全部登记后，附件按 items.order 组装，走 outbox 稳定 operationId ──
   async function createReportFromBatch(batchId, draft) {
+    // 发起身份锚点：settle 等待期间真换成员 → 不以新成员身份创建报告
+    const sessionAtEntry = captureSession()
+    // 表单填写期间切后台再回来会触发自动复核（R7）：等确认落定再保存
+    await settleConfirm()
+    if (sessionAtEntry.fp && !isSameSession(sessionAtEntry)) {
+      return { ok: false, code: 'stale-session', message: '会话已切换，报告未创建', stale: true }
+    }
     const b = batches.value[batchId]
     if (!b) return { ok: false, code: 'no-batch' }
     if (b.status !== 'ready' && b.status !== 'done' && b.status !== 'reconciling') {
@@ -479,7 +516,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     if (!draft || !draft.reportType || !draft.dateKey) {
       return { ok: false, code: 'invalid-draft', message: '请选择报告类型和日期' }
     }
-    const epochAtStart = currentEpoch()
+    const sessionAtStart = captureSession()
     const attachments = [...b.items].sort((a, c) => a.order - c.order)
       .map(i => ({ fileId: i.fileId }))
     const payload = {
@@ -500,7 +537,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
       // 不返回无条件成功——重试保存将按原意图再对账
       b.status = 'done'
       b.draft = draftUsed
-      if (!persistBatches(epochAtStart)) {
+      if (!persistBatches(sessionAtStart)) {
         b.status = 'reconciling'
         return false
       }
@@ -512,7 +549,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     if (existing && existing.deleted) {
       // 报告已被删除：旧批次不得声称可重建已删除报告
       b.status = 'cancelled'
-      persistBatches(epochAtStart)
+      persistBatches(sessionAtStart)
       return { ok: false, code: 'report-deleted', message: '该报告已被删除；如需再次归档请重新上传' }
     }
     if (existing) {
@@ -540,14 +577,14 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     if (!b.createIntentSaved) {
       b.createIntent = payload
       b.createIntentSaved = true
-      if (!persistBatches(epochAtStart)) {
+      if (!persistBatches(sessionAtStart)) {
         b.createIntent = null
         b.createIntentSaved = false
         return { ok: false, code: 'intent-persist-failed', message: '创建意图写入本机失败，已停止发送（原件已保留），请重试' }
       }
     }
     const r = await familyStore.saveReport(b.reportId, b.createIntent, 0)
-    if (currentEpoch() !== epochAtStart) return { ok: false, code: 'stale-session' }
+    if (!isSameSession(sessionAtStart)) return { ok: false, code: 'stale-session' }
     if (r.ok) {
       const persistedDone = finishBatch(draft)
       if (!persistedDone) {
@@ -571,7 +608,14 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
     const rec = lastRecovery.value
     if (!rec || !Array.isArray(rec.items) || rec.items.length === 0) return { ok: false, code: 'no-recovery' }
     if (!recoveryIdentityMatches(rec)) return { ok: false, code: 'recovery-owner-mismatch', message: '恢复信息属于其他成员' }
-    const epochAtStart = currentEpoch()
+    // 发起身份锚点：settle 等待期间真换成员 → 不以新成员身份恢复
+    const sessionAtEntry = captureSession()
+    // 恢复同样等在途确认落定再开始（R7）
+    await settleConfirm()
+    if (sessionAtEntry.fp && !isSameSession(sessionAtEntry)) {
+      return { ok: false, code: 'stale-session', message: '会话已切换，恢复未开始', stale: true }
+    }
+    const sessionAtStart = captureSession()
     // 恢复记录可能指向【原批次】（重选中断）：合并回原 batchId/reportId，
     // 保留未动项的登记状态与顺序——不产生同 reportId 的竞争批次
     const restoreBatchId = rec.batchId && batches.value[rec.batchId] ? rec.batchId : newId('rptb')
@@ -600,7 +644,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
       createIntentSaved: (prevBatch && prevBatch.createIntentSaved) || false,
       createdAt: (prevBatch && prevBatch.createdAt) || Date.now(), updatedAt: Date.now()
     } }
-    if (!persistBatches(epochAtStart)) {
+    if (!persistBatches(sessionAtStart)) {
       const { [batchId]: _drop2, ...rest2 } = batches.value
       void _drop2
       batches.value = rest2
@@ -613,7 +657,7 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
       const mapped = memoryRecoveryByMember.get(rec.memberId)
       if (mapped && mapped.reportId === reportId) memoryRecoveryByMember.delete(rec.memberId)
     }
-    if (currentEpoch() !== epochAtStart) return { ok: true, batchId, reportId, started: false }
+    if (!isSameSession(sessionAtStart)) return { ok: true, batchId, reportId, started: false }
     const processing_ = processBatch(batchId)
     return { ok: true, batchId, reportId, started: true, processing: processing_ }
   }
