@@ -392,6 +392,12 @@ const editBaseline = { dailyRevision: 0, moodRevision: 0 }
 function openEdit(mode) {
 	editMode.value = mode
 	if (dataMode.value === 'family') {
+		// 未填孕期资料时编辑弹层（RecordEditSheet v-if="heroPregInfoSet"）不渲染，
+		// 而 family 面板卡片区无条件展示——点击必须兜底提示引导建档，不静默无响应
+		if (!heroPregInfoSet.value) {
+			uni.showToast({ title: '请先填写孕期资料（本页下方入口），再开始每日记录', icon: 'none', duration: 2500 })
+			return
+		}
 		const key = dateKeyOf(selectedDate.value)
 		const d = familyStore.dailyRecord(key)
 		const m = familyStore.moodRecord(key)

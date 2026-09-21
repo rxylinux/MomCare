@@ -137,7 +137,7 @@ function buildAll() {
   // 首页
   buildBundle('pages/index/index.vue', {
     anchor: 'const healthStore = useHealthStore()',
-    exports: `export {shows,mounts,dataMode,homeSections,onSwitchView,collabStore,familyStore,nextCheckup,dadTopTasks,tasksForPrepCard,bagSummary,composerVisible,currentRecord,openEdit,handleSave,selectedDate,editBaseline};\nexport * from './services/sessionService.js';export * from './services/cloudAdapter.js';export * from './services/familyStore.js';export * from './services/collabStore.js';export * from './services/outbox.js';export * from './utils/cloudConfig.js';`
+    exports: `export {shows,mounts,dataMode,homeSections,onSwitchView,collabStore,familyStore,nextCheckup,dadTopTasks,tasksForPrepCard,bagSummary,composerVisible,currentRecord,openEdit,handleSave,selectedDate,editBaseline,editVisible,heroPregInfoSet};\nexport * from './services/sessionService.js';export * from './services/cloudAdapter.js';export * from './services/familyStore.js';export * from './services/collabStore.js';export * from './services/outbox.js';export * from './utils/cloudConfig.js';`
   }, path.join(temp, 'page-index.cjs'))
   // 任务页
   buildBundle('pages/tasks/index.vue', {
@@ -276,6 +276,30 @@ async function main() {
       const s = String(typeof v === 'string' ? v : JSON.stringify(v))
       assert.ok(!s.includes(moodCanary), `storage ${k} 泄漏 mama 私人 mood canary`)
     }
+  })
+
+  await scenario('P2b 未填孕期资料点记录卡：兜底提示且不弹层；建档后恢复可编辑', async () => {
+    const stack = makeStack('mama')
+    const client = await confirmed(stack, bundles.index, 'mama')
+    const page = client
+    page.dataMode.value = 'family'
+    // 前置：全新环境 pregnancy 空（family 卡片区可见但弹层组件不渲染）
+    assert.equal(page.heroPregInfoSet.value, false, '前置：未填孕期资料')
+    uniCalls.toasts.length = 0
+    page.openEdit('weight')
+    assert.equal(page.editVisible.value, false, '未建档不打开弹层')
+    assert.equal(uniCalls.toasts.length, 1, `恰好一条兜底提示（实得 ${JSON.stringify(uniCalls.toasts)}）`)
+    assert.ok(String(uniCalls.toasts[0]).includes('孕期资料'), '提示引导填写孕期资料')
+    // 建档（服务端 pregnancy.upsert）+ 拉取 → 恢复正常编辑路径
+    stack.as('mama')
+    const pr = await healthH.main({ action: 'pregnancy.upsert', schemaVersion: 1, operationId: 'p2b-preg', expectedRevision: 0, payload: { lmpDate: '2026-01-01', dueDate: '2026-10-08' } })
+    assert.ok(pr.ok, '建档种子')
+    await page.familyStore.pullAll()
+    assert.equal(page.heroPregInfoSet.value, true, '建档后 heroPregInfoSet')
+    uniCalls.toasts.length = 0
+    page.openEdit('weight')
+    assert.equal(page.editVisible.value, true, '建档后可打开弹层')
+    assert.equal(uniCalls.toasts.length, 0, '建档后不再兜底提示')
   })
 
   await scenario('P3 SharedStatusCard：空态文案/接下点击/已接下标签/撤回确认文案', async () => {
