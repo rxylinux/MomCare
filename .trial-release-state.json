@@ -1,9 +1,7 @@
 {
-  "version": "1.1.5",
-  "desc": "产检重新生成+我的页family数据源修复+AI迁移DeepSeek Flash",
-  "commit": "38a7032b9c919d2bf2488e13430e799b2979f1a1",
-  "functions": [
-    "mc-tools"
-  ],
-  "releasedAt": "2026-09-21T16:05:38.436Z"
+  "version": "1.1.6",
+  "desc": "我的页记录三卡family同源修复+家庭诊断页自动同步",
+  "commit": "c311a346c4846c6afa6ba9397458ba2c19e26e79",
+  "functions": [],
+  "releasedAt": "2026-09-21T16:38:44.340Z"
 }
