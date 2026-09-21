@@ -112,6 +112,7 @@ import { removeToken } from '@/utils/api.js'
 import { endSession, getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { getOutbox } from '@/services/outbox.js'
 import { useFamilyStore } from '@/services/familyStore.js'
+import manifest from '@/manifest.json'
 import ProfileHero from '@/components/profile/ProfileHero.vue'
 import DueCountdownRing from '@/components/common/DueCountdownRing.vue'
 import ProfileSection from '@/components/profile/ProfileSection.vue'
@@ -459,7 +460,7 @@ const todoItems = computed(() => {
 				icon: 'ℹ️',
 				iconBg: '#F2F0EE',
 				title: '关于孕途伴侣',
-				subtitle: '版本 v1.0.0',
+				subtitle: `版本 v${manifest.versionName}`,
 				action: 'about'
 			},
 			{

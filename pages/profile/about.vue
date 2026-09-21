@@ -6,7 +6,7 @@
 			<view class="app-header">
 				<text class="app-icon">🌸</text>
 				<text class="app-name">孕途伴侣</text>
-				<text class="app-version">版本 v1.0.0</text>
+				<text class="app-version">版本 v{{ appVersion }}</text>
 				<text class="app-desc">您的贴心孕期管理助手，陪伴您度过这段美好旅程</text>
 			</view>
 
@@ -33,12 +33,57 @@
 						</view>
 					</view>
 					<view class="feature-item">
+						<view class="feature-icon" style="background: #FDEEF1;">
+							<text>👨‍👩‍👧</text>
+						</view>
+						<view class="feature-body">
+							<text class="feature-title">家庭共享</text>
+							<text class="feature-sub">与另一半云同步，任务互助代记</text>
+						</view>
+					</view>
+					<view class="feature-item">
 						<view class="feature-icon" style="background: #EBF2FB;">
 							<text>🤖</text>
 						</view>
 						<view class="feature-body">
-							<text class="feature-title">AI 报告解读</text>
-							<text class="feature-sub">智能解读产检报告，关注异常指标</text>
+							<text class="feature-title">报告档案与 AI 解读</text>
+							<text class="feature-sub">拍照存档产检报告，智能解读关注异常指标</text>
+						</view>
+					</view>
+					<view class="feature-item">
+						<view class="feature-icon" style="background: #EAF7EF;">
+							<text>⏱️</text>
+						</view>
+						<view class="feature-body">
+							<text class="feature-title">孕期工具</text>
+							<text class="feature-sub">胎动计时、宫缩计时与 511 判定、超声体重估算</text>
+						</view>
+					</view>
+					<view class="feature-item">
+						<view class="feature-icon" style="background: #F0F5E8;">
+							<text>🥗</text>
+						</view>
+						<view class="feature-body">
+							<text class="feature-title">饮食速查</text>
+							<text class="feature-sub">孕期饮食安全词典与 AI 咨询</text>
+						</view>
+					</view>
+					<view class="feature-item">
+						<view class="feature-icon" style="background: #F2F0EE;">
+							<text>📚</text>
+						</view>
+						<view class="feature-body">
+							<text class="feature-title">知识库</text>
+							<text class="feature-sub">孕期知识文章安心阅读</text>
+						</view>
+					</view>
+					<view class="feature-item">
+						<view class="feature-icon" style="background: #EBF0FA;">
+							<text>📅</text>
+						</view>
+						<view class="feature-body">
+							<text class="feature-title">产检提醒</text>
+							<text class="feature-sub">产检日程自动安排提醒</text>
 						</view>
 					</view>
 					<view class="feature-item">
@@ -82,7 +127,7 @@
 						</view>
 						<view class="feature-body">
 							<text class="feature-title">客服与反馈</text>
-							<text class="feature-sub">support@rocdo.app · 点击复制邮箱</text>
+							<text class="feature-sub">344566495@qq.com · 点击复制邮箱</text>
 						</view>
 					</view>
 				</view>
@@ -99,8 +144,10 @@
 
 <script setup>
 import NavBar from '@/components/NavBar.vue'
+import manifest from '@/manifest.json'
 
-const SUPPORT_EMAIL = 'support@rocdo.app'
+const appVersion = manifest.versionName || '1.0.0'
+const SUPPORT_EMAIL = '344566495@qq.com'
 
 function copyEmail() {
 	uni.setClipboardData({
