@@ -37,8 +37,12 @@
           "value": "static/logo.png"
         },
         {
-          "type": "folder",
+          "type": "prefix",
           "value": "static/data"
+        },
+        {
+          "type": "prefix",
+          "value": "cloudfunctions"
         }
       ]
     }
