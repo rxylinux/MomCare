@@ -10,13 +10,16 @@
 //   2. 版本计算：manifest.json versionName 为唯一权威源，patch 位 +1；
 //      versionCode = major*10000 + minor*100 + patch
 //   3. 全量回归 npm run test:all（不过不许发）
+//   3b. 新版本号落盘 manifest（构建前——包内"版本 v"读的是构建时编译进包的
+//       manifest.versionName 静态值，先改再 build 才能显示本次版本；
+//       此后构建/上传失败一律 git 回滚 manifest，保住"失败不跳号"）
 //   4. node cloud/assemble.mjs 重新组装云函数产物
 //   5. npm run build:mp-weixin 构建小程序包
 //   6. 恢复被 build 清掉的 dist/build/mp-weixin/cloudfunctions/ 并补
 //      project.config.json 的 cloudfunctionRoot（部署实录教训）
 //   7. DevTools CLI 上传新版本（体验版即时生效）
-//   8. 上传成功后才落盘：manifest 版本号 + .trial-release-state.json + git 提交。
-//      失败不落盘——下次重跑沿用同一新版本号，不会跳号
+//   8. 上传成功后：.trial-release-state.json + git 提交（manifest 已于 3b 落盘）。
+//      构建或上传失败回滚 manifest——下次重跑沿用同一新版本号，不会跳号
 //   9. --functions 时逐个重新部署云函数（首次部署 Creating 竞态自动重试）
 //
 // 不访问任何第三方网络：CLI 只与本地 DevTools IDE 服务（127.0.0.1）通信。
@@ -85,6 +88,7 @@ if (FUNCTIONS.length) console.log(`  同时部署云函数：${FUNCTIONS.join(',
 if (DRY_RUN) {
   console.log('\n[dry-run] 以下命令将依次执行（现已跳过）：')
   console.log('  npm run test:all')
+  console.log(`  写入 manifest ${NEW_VERSION}（构建前落盘——包内版本显示；失败回滚）`)
   console.log('  node cloud/assemble.mjs')
   console.log('  npm run build:mp-weixin')
   console.log('  cp dist/cloud-functions/mc-* → dist/build/mp-weixin/cloudfunctions/')
@@ -93,7 +97,7 @@ if (DRY_RUN) {
   for (const fn of FUNCTIONS) {
     console.log(`  ${CLI} cloud functions deploy --env ${envId} --names ${fn} --project dist/build/mp-weixin -r`)
   }
-  console.log('  成功后：写回 manifest 版本 + .trial-release-state.json + git 提交')
+  console.log('  成功后：.trial-release-state.json + git 提交（manifest 已于构建前落盘）')
   process.exit(0)
 }
 
@@ -102,12 +106,22 @@ step('全量回归测试（不过不许发）')
 try { execSync('npm run test:all', { cwd: root, stdio: 'inherit' }) }
 catch { die('测试未通过——发布中止（未落盘任何版本变更）') }
 
+// ── 3b. 构建前落盘新版本号 ──
+step(`落盘新版本号 ${NEW_VERSION}（构建前——包内版本显示用）`)
+manifest.versionName = NEW_VERSION
+manifest.versionCode = NEW_CODE
+writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + '\n')
+const rollbackManifestAndDie = msg => {
+  try { execSync('git checkout -- manifest.json', { cwd: root }) } catch { /* 回滚失败保留现场，按提示手动处理 */ }
+  die(msg)
+}
+
 // ── 4/5. 组装云函数产物 + 构建小程序 ──
 step('组装云函数产物 + 构建小程序包')
 try {
   execSync('node cloud/assemble.mjs', { cwd: root, stdio: 'inherit' })
   execSync('npm run build:mp-weixin', { cwd: root, stdio: 'inherit' })
-} catch { die('构建失败——发布中止（未落盘任何版本变更）') }
+} catch { rollbackManifestAndDie('构建失败——已回滚 manifest 版本号，重跑沿用同一新版本号') }
 
 // ── 6. 恢复被 build 清掉的 cloudfunctions + 补 cloudfunctionRoot ──
 step('恢复 cloudfunctions 目录与 project.config.json 补丁（build 会清掉）')
@@ -144,17 +158,19 @@ const up = spawnSync(CLI, ['upload', '--project', UPLOAD_DIR, '-v', NEW_VERSION,
 if (up.stdout) process.stdout.write(up.stdout)
 if (up.stderr) process.stderr.write(up.stderr)
 if (up.status !== 0 || /\[error\]/.test(up.stdout || '') || /\[error\]/.test(up.stderr || '')) {
-  die('上传失败——版本未落盘，修复问题后重跑本脚本将沿用同一版本号')
+  rollbackManifestAndDie('上传失败——已回滚 manifest 版本号，修复问题后重跑本脚本将沿用同一版本号')
 }
 
-// ── 8. 落盘版本 + 状态 + 提交（仅在上传成功后） ──
-step('落盘版本号与发布状态并提交')
-manifest.versionName = NEW_VERSION
-manifest.versionCode = NEW_CODE
-writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2) + '\n')
+// ── 8. 落盘状态 + 提交（仅在上传成功后；manifest 已于 3b 落盘） ──
+step('落盘发布状态并提交')
 const head = execSync('git rev-parse HEAD', { cwd: root }).toString().trim()
 writeFileSync(STATE_FILE, JSON.stringify({ version: NEW_VERSION, desc: DESC, commit: head, functions: FUNCTIONS, releasedAt: new Date().toISOString() }, null, 2) + '\n')
-execSync(`git add manifest.json .trial-release-state.json && git commit -m "chore(release): trial ${NEW_VERSION} — ${DESC.replace(/"/g, "'")}"`, { cwd: root, stdio: 'inherit' })
+try {
+  execSync(`git add manifest.json .trial-release-state.json && git commit -m "chore(release): trial ${NEW_VERSION} — ${DESC.replace(/"/g, "'")}"`, { cwd: root, stdio: 'inherit' })
+} catch {
+  // 上传已成功——此时严禁回滚 manifest（会导致下次跳号），只能手动补提交
+  die(`提交失败但上传已成功，严禁回滚！手动补提交：\n  git add manifest.json .trial-release-state.json && git commit -m "chore(release): trial ${NEW_VERSION} — ${DESC.replace(/"/g, "'")}"`)
+}
 console.log(`  已提交 release commit（版本 ${NEW_VERSION}，基于 ${head.slice(0, 8)}）`)
 
 // ── 9. 可选：重新部署云函数 ──
