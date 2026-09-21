@@ -102,7 +102,7 @@ function aiProvider() {
 1. 最小实调一发（已获用户授权）：生产 key 打 `deepseek-flash` + `thinking:disabled`，确认参数协议与可达性——把"文档读对"变"实测过了"。
 2. `assemble:cloud` 重打包 + 上传 mc-tools（仅此函数）。
 3. 环境变量：`DEEPSEEK_API_KEY` 照旧；`MC_DEEPSEEK_MODEL` 可不设（缺省 flash，安全）。
-4. 函数超时 ≥90s 照旧（OCR 3 页最坏 45s + AI 20s + 余量）。
+4. 函数超时 ≥90s 照旧（OCR 3 页最坏 45s + AI 20s + 余量）。**已执行（2026-09-22 真机定案：默认超时罩不住 AI 真实外呼→"云调用失败"，控制台调大后恢复）**。
 5. 真机验收：真实报告照片走通 上传→OCR→解读；AI 回答正常返回、失败路径如实 `ai-call-failed`。
 
 ## 风险与回滚
