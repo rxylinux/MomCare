@@ -126,9 +126,13 @@ console.log(`  已恢复 ${readdirSync(cfDir).length} 个云函数目录 + cloud
 
 // ── 7. 上传新版本 ──
 step(`上传 ${NEW_VERSION}（体验版即时生效）`)
-try {
-  execSync(`"${CLI}" upload --project "${MP_DIR}" -v ${NEW_VERSION} -d "${DESC.replace(/"/g, "'")}"`, { stdio: 'inherit' })
-} catch { die('上传失败——版本未落盘，修复问题后重跑本脚本将沿用同一版本号') }
+// DevTools CLI 上传失败时退出码仍为 0（如 80051 包体超限），必须同时检查输出错误标记
+const up = spawnSync(CLI, ['upload', '--project', MP_DIR, '-v', NEW_VERSION, '-d', DESC.replace(/"/g, "'")], { encoding: 'utf8' })
+if (up.stdout) process.stdout.write(up.stdout)
+if (up.stderr) process.stderr.write(up.stderr)
+if (up.status !== 0 || /\[error\]/.test(up.stdout || '') || /\[error\]/.test(up.stderr || '')) {
+  die('上传失败——版本未落盘，修复问题后重跑本脚本将沿用同一版本号')
+}
 
 // ── 8. 落盘版本 + 状态 + 提交（仅在上传成功后） ──
 step('落盘版本号与发布状态并提交')

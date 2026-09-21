@@ -35,6 +35,10 @@
         {
           "type": "file",
           "value": "static/logo.png"
+        },
+        {
+          "type": "folder",
+          "value": "static/data"
         }
       ]
     }
