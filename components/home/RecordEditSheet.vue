@@ -259,7 +259,8 @@ function handleSave() {
 .edit-sheet {
 	background: #FFFFFF;
 	border-radius: 48rpx 48rpx 0 0;
-	padding: 0 40rpx 72rpx;
+	padding: 0 40rpx;
+	padding-bottom: calc(72rpx + env(safe-area-inset-bottom));
 	max-height: 75vh;
 	overflow-y: auto;
 	box-sizing: border-box;
