@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1",
-  "desc": "trial-record-guide: record cards fallback toast before pregnancy info",
-  "commit": "8661f09a2a1f4a9b1a4a26f26d64b90be41e2b2e",
+  "version": "1.1.2",
+  "desc": "profile AI入口跳转档案页+删次数展示",
+  "commit": "98a43d6b3e3e0e6956e10f21f1ead556eaec9f14",
   "functions": [],
-  "releasedAt": "2026-09-21T12:20:00.000Z"
+  "releasedAt": "2026-09-21T13:04:31.145Z"
 }
