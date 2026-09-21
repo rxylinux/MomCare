@@ -56,7 +56,6 @@
 				<!-- B2a：正式数据入口已迁移到首页/资料/趋势页；本页保留身份与配置诊断 -->
 				<view class="section-card" v-if="session.status === 'confirmed'">
 					<text class="card-title">数据与同步诊断</text>
-					<text class="card-sub">正式健康记录、孕期资料与私人心情备注已在首页和相关页面直接读写（B2a 权威源）；此处仅展示同步状态。</text>
 					<text class="identity-sub">最近完整同步：{{ diagText }}</text>
 					<text class="identity-sub">待同步操作：{{ pendingCount }} 项{{ conflictCount > 0 ? '；冲突 ' + conflictCount + ' 项（相关页面处理）' : '' }}</text>
 				</view>
@@ -148,6 +147,18 @@ async function refreshDiagnostics() {
 	} catch (e) {
 		// 未确认身份等场景：保持默认展示
 	}
+}
+
+// 进页自动同步：先完整拉取再刷新诊断字段——展示的是新鲜状态（时间/待同步为真值，
+// 而非冷启动快照）。pullAll 自带 syncing 防重入（进行中返回 busy 不叠加）；
+// 失败不弹窗——诊断页如实展示现有状态
+async function syncAndRefreshDiagnostics() {
+	try {
+		const { useFamilyStore } = await import('@/services/familyStore.js')
+		const fam = useFamilyStore()
+		await fam.pullAll()
+	} catch (e) { /* 网络等失败：保持当前诊断展示 */ }
+	refreshDiagnostics()
 }
 
 function newOpId(prefix) {
@@ -404,6 +415,11 @@ onShow(() => {
 	// 已确认过的会话：回到页面时自动重新确认（回前台重新校验身份）
 	if (runtimeReady.value && session.value.status === 'unconfirmed') {
 		handleConfirm(false)
+		return
+	}
+	// 已确认会话：进页即拉一次完整同步再刷新诊断（"最近完整同步"显示真值时间）
+	if (runtimeReady.value && session.value.status === 'confirmed') {
+		syncAndRefreshDiagnostics()
 	}
 })
 </script>
