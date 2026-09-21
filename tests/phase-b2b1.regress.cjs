@@ -1,7 +1,7 @@
 // B2b1 回归：真实客户端（familyStore/outbox/session/adapter/页面 script setup）→
 // 真实 mc-schedule / mc-health 组装产物 handler → SDK 契约模拟（隔离，零真实网络）。
 // 覆盖矩阵对应 docs/PHASE_B2B1_COVERAGE_MATRIX_2026-09-19.md：
-//   服务端 16 组 / store 8 组 / 待产包页 6 组 / 产检页 7 组 / 我的摘要 2 组 / 零旧键与零旧 HTTP 审计。
+//   服务端 16 组 / store 15 组（store11 两则）/ 待产包页 6 组 / 产检页 14 组 / 我的摘要 3 组 / 零旧键与零旧 HTTP 审计。
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -794,6 +794,30 @@ async function main() {
     void firstOpId
   })
 
+  await scenario('store11：pullPregnancy 未就绪拒绝/空档案 ok/拉取合并/快照还原', async () => {
+    const { fam } = fullStack()
+    // 未确认会话：直接拒绝，不发起云调用
+    assert.equal((await fam.pullPregnancy()).ok, false, '未确认会话不得拉取')
+    await api.confirmIdentity()
+    // 云端尚无档案：pregnancy.get 返回 null record → ok 且本地保持 null
+    assert.equal(fam.pregnancy, null)
+    const empty = await fam.pullPregnancy()
+    assert.equal(empty.ok, true, JSON.stringify(empty))
+    assert.equal(fam.pregnancy, null, '空档案不得注入伪造记录')
+    // 对端建档后拉取：字段/revision 落地 + 快照落盘可还原
+    await healthHandler.main({ action: 'pregnancy.upsert', schemaVersion: 1, operationId: 'peer-st11', expectedRevision: 0, payload: { lmpDate: '2026-01-05', hospital: '市一医院', babyNickname: '小汤圆' } })
+    const r = await fam.pullPregnancy()
+    assert.equal(r.ok, true, JSON.stringify(r))
+    assert.equal(fam.pregnancy.fields.lmpDate, '2026-01-05')
+    assert.equal(fam.pregnancy.fields.hospital, '市一医院')
+    assert.equal(fam.pregnancy.fields.babyNickname, '小汤圆')
+    assert.equal(fam.pregnancy.revision, 1)
+    fam.clearMemory()
+    assert.equal(fam.pregnancy, null, '清内存后为空')
+    assert.equal(fam.restoreFromCache(), true)
+    assert.equal(fam.pregnancy.fields.lmpDate, '2026-01-05', '快照还原孕期档案')
+  })
+
   // ══ 待产包页 6 组（真实 SFC）══
   const bagPageExports = `export {dataSource,items,localItems,addItem,doDelete,toggleItem,generateTemplates,retrySync,openEdit,saveEdit,adoptCloudFor,resubmitFor,newItemText,newItemCategory,newItemQuantity,newItemLocation,newItemAssignee,pendingDraftId,editTargetId,editBaselineRevision,editName,editQuantity,editLocation,editAssignee,bagPendingEntries,bagConflictList,familyStore,getOutbox,badgeLabel,badgeClass,deleteTarget,itemMeta};`
 
@@ -941,7 +965,7 @@ async function main() {
   })
 
   // ══ 产检页 7 组（真实 SFC）══
-  const chkPageExports = `export {dataSource,nextCheckup,completedCheckups,handleToggleItem,handleMarkCompleted,doSkipCheckup,doAddItem,openEditor,saveEditor,generateSchedule,openMigrationPreview,confirmMigration,migrationInfo,migrationPreview,famCheckupCount,chkPendingEntries,chkConflictList,editChk,edDate,edTime,edHospital,edCompanion,edMaterials,edQuestions,weekLabelFor,familyStore,getOutbox,infoDate,infoHospital,daysUntil,isOverdue,healthStore,skipTarget,addItemTarget,heroDate,formatHistoryDate,handleSkipCheckup,handleAddItem};`
+  const chkPageExports = `export {dataSource,nextCheckup,completedCheckups,handleToggleItem,handleMarkCompleted,doSkipCheckup,doAddItem,openEditor,saveEditor,generateSchedule,regenerateSchedule,showRegenModal,openMigrationPreview,confirmMigration,migrationInfo,migrationPreview,famCheckupCount,chkPendingEntries,chkConflictList,retrySync,editChk,edDate,edTime,edHospital,edCompanion,edMaterials,edQuestions,weekLabelFor,familyStore,getOutbox,infoDate,infoHospital,daysUntil,isOverdue,healthStore,skipTarget,addItemTarget,heroDate,formatHistoryDate,handleSkipCheckup,handleAddItem};`
 
   function bundleCheckupPage(cloud, controls) {
     const page = bundlePage('pages/profile/checkup-reminder.vue', withPinia, chkPageExports)
@@ -1379,6 +1403,228 @@ async function main() {
     assert.equal(m2.examItems.find(i => i.itemId === 'B1').done, true, '按捕获父记录 ID 勾选（不依赖当前 nextCheckup）')
   })
 
+  await scenario('产检页9：重新生成——未完成自动安排纠偏日期/重置检查项；手动改期、自建不动；缺失补建', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const { page, confirm } = bundleCheckupPage(cloud)
+    await confirm()
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-01' })
+    // 两条模板 + 一条自建；w8 勾掉一项并加自定义项/医院，w16 手动改期（→manual-date）
+    await page.familyStore.initializeCheckupTemplates([
+      { templateKey: 'std_w8', dateKey: '2026-07-27', examItems: [
+        { itemId: 'w8_i0', text: '建档登记', required: true, done: false },
+        { itemId: 'w8_i1', text: '血压体重', required: false, done: false }
+      ] },
+      { templateKey: 'std_w16', dateKey: '2026-09-21', examItems: [
+        { itemId: 'w16_i0', text: '中期唐筛/无创DNA', required: true, done: false }
+      ] }
+    ])
+    await page.familyStore.saveCheckup('chk_manual', { dateKey: '2026-08-10', examItems: [] }, undefined, 0)
+    await page.familyStore.saveCheckup('chk_tpl_std_w8', {
+      hospital: '红房子',
+      time: '16:45',
+      examItems: [
+        { itemId: 'w8_i0', text: '建档登记', required: true, done: true },
+        { itemId: 'w8_i1', text: '血压体重', required: false, done: false },
+        { itemId: 'itm_x1', text: '骨密度', required: false, done: false }
+      ]
+    }, undefined, 1)
+    // 对端把 w8 日期改歪（模拟旧错数据；source 仍 template，重排对象）
+    cloud.__state.store.get('mc_checkups/chk_tpl_std_w8').doc.dateKey = '2026-09-15'
+    await page.familyStore.saveCheckup('chk_tpl_std_w16', { dateKey: '2026-10-01' }, undefined, 1)
+    await page.familyStore.pullCheckups()
+    await page.regenerateSchedule()
+    await tick()
+    const w8 = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w8')
+    assert.equal(w8.dateKey, '2026-07-27', '纠回按当前 LMP 计算的标准日期')
+    assert.equal(w8.hospital, '红房子', '医院等补充信息保留')
+    assert.equal(w8.time, '16:45', '时间保留')
+    assert.equal(w8.examItems.length, 7, '检查项重置为完整标准清单')
+    assert.ok(w8.examItems.every(i => !i.done), '已勾选项清空')
+    assert.ok(!w8.examItems.find(i => i.itemId === 'itm_x1'), '自定义检查项移除')
+    assert.equal(w8.source, 'manual-date', '重排改期即转手动改期（退出后续日期迁移，不二次偏移）')
+    const w16 = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w16')
+    assert.equal(w16.dateKey, '2026-10-01', '手动改期记录不动')
+    assert.equal(w16.source, 'manual-date')
+    assert.equal(w16.examItems.length, 1, '手动改期记录检查项不动')
+    assert.equal(cloud.__snapshot('mc_checkups', 'chk_manual').dateKey, '2026-08-10', '自建产检不动')
+    const ids = [...cloud.__state.store.keys()].filter(k => k.startsWith('mc_checkups/'))
+    assert.equal(ids.length, 15, `14 条标准模板 + 1 条自建（实得 ${ids.length}）`)
+    assert.equal(page.getOutbox().filter(e => e.conflict).length, 0, '无冲突')
+  })
+
+  await scenario('产检页10：重新生成——对端并发推进 revision → 旧基线冲突入横幅，不覆盖云端', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const { page, confirm } = bundleCheckupPage(cloud)
+    await confirm()
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-01' })
+    await page.familyStore.initializeCheckupTemplates([
+      { templateKey: 'std_w8', dateKey: '2026-07-27', examItems: [
+        { itemId: 'w8_i0', text: '建档登记', required: true, done: false }
+      ] }
+    ])
+    await page.familyStore.pullCheckups()
+    // 对端推进 revision（本地未拉取）——重新生成以本地旧基线提交必冲突
+    await scheduleHandler.main({ action: 'checkup.upsert', schemaVersion: 1, operationId: 'peer-regen', expectedRevision: 1, id: 'chk_tpl_std_w8', payload: { hospital: '对方医院' } })
+    await page.regenerateSchedule()
+    await tick()
+    const w8 = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w8')
+    assert.equal(w8.hospital, '对方医院', '云端未被旧基线覆盖')
+    assert.equal(w8.examItems.length, 1, '云端检查项未被重置')
+    const ce = page.getOutbox().find(e => e.conflict && e.entityId === 'checkup:chk_tpl_std_w8')
+    assert.ok(ce, '冲突进入冲突区（同步横幅可见）')
+    assert.equal(page.chkConflictList.value.length, 1, '页面冲突卡显示 1 项')
+    await page.familyStore.adoptCloud(ce.id)
+    assert.equal(page.getOutbox().length, 0, '采用云端后冲突清空')
+  })
+
+  await scenario('产检页11：日期迁移完成后重新生成——不二次偏移、一致项跳过不抬高 revision', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const { page, confirm } = bundleCheckupPage(cloud)
+    await confirm()
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-01' })
+    await page.generateSchedule()
+    await tick()
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-08' })
+    await page.openMigrationPreview()
+    assert.ok(page.migrationPreview.value && page.migrationPreview.value.toUpdate.length > 0, '迁移预览有待调整项')
+    await page.confirmMigration()
+    const before = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w24')
+    assert.equal(before.dateKey, '2026-11-23', '迁移后日期 = 新 LMP + 24 周')
+    assert.equal(page.migrationInfo.value, null, '迁移完成后基线推进、提示消除')
+    await page.regenerateSchedule()
+    await tick()
+    const after = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w24')
+    assert.equal(after.dateKey, before.dateKey, '重新生成不二次偏移')
+    assert.equal(after.revision, before.revision, '与标准一致的记录跳过（不空转抬高 revision）')
+    assert.equal(after.source, 'template', '未改日期不转 manual-date（保留后续迁移资格）')
+    assert.equal(page.getOutbox().length, 0, '无待办遗留')
+  })
+
+  await scenario('产检页12：重新生成——已完成/跳过与已删模板墓碑一律不动（不复活、不重排）', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const { page, confirm } = bundleCheckupPage(cloud)
+    await confirm()
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-01' })
+    await page.familyStore.initializeCheckupTemplates([
+      { templateKey: 'std_w8', dateKey: '2026-07-27', examItems: [
+        { itemId: 'w8_i0', text: '建档登记', required: true, done: false }
+      ] },
+      { templateKey: 'std_w12', dateKey: '2026-08-24', examItems: [
+        { itemId: 'w12_i0', text: 'NT检查', required: true, done: false }
+      ] },
+      { templateKey: 'std_w16', dateKey: '2026-09-21', examItems: [
+        { itemId: 'w16_i0', text: '中期唐筛/无创DNA', required: true, done: false }
+      ] }
+    ])
+    await page.familyStore.pullCheckups()
+    // w8 完成（历史）、w12 跳过、w16 删除（墓碑）
+    await page.familyStore.markCheckupStatus('chk_tpl_std_w8', 'completed')
+    await page.familyStore.markCheckupStatus('chk_tpl_std_w12', 'skipped')
+    await page.familyStore.deleteCheckup('chk_tpl_std_w16')
+    await tick()
+    const w8Before = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w8')
+    const w12Before = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w12')
+    await page.familyStore.pullCheckups()
+    await page.regenerateSchedule()
+    await tick()
+    const w8 = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w8')
+    assert.equal(w8.status, 'completed', '已完成记录不动')
+    assert.equal(w8.dateKey, w8Before.dateKey, '已完成不重排日期')
+    assert.equal(w8.revision, w8Before.revision, '已完成不抬高 revision')
+    assert.equal(w8.examItems.length, 1, '已完成检查项不重置')
+    const w12 = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w12')
+    assert.equal(w12.status, 'skipped', '已跳过记录不动')
+    assert.equal(w12.revision, w12Before.revision, '已跳过不抬高 revision')
+    const w16 = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w16')
+    assert.equal(w16.deleted, true, '已删模板墓碑保持（不复活）')
+    // 标准 14 周各一条文档：3 条既有（含墓碑）+ 11 条补建；w16 不重建
+    const ids = [...cloud.__state.store.keys()].filter(k => k.startsWith('mc_checkups/'))
+    assert.equal(ids.length, 14, `标准 14 周各一条文档（实得 ${ids.length}）`)
+    assert.equal(page.getOutbox().filter(e => e.conflict).length, 0, '无冲突')
+  })
+
+  await scenario('产检页13：重新生成——日期已对仅检查项漂移：重置检查项、不转 manual-date（保留迁移资格）', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const { page, confirm } = bundleCheckupPage(cloud)
+    await confirm()
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-01' })
+    await page.familyStore.initializeCheckupTemplates([
+      { templateKey: 'std_w8', dateKey: '2026-07-27', examItems: [
+        { itemId: 'w8_i0', text: '建档登记', required: true, done: false },
+        { itemId: 'w8_i1', text: '血压体重', required: false, done: false }
+      ] }
+    ])
+    await page.familyStore.pullCheckups()
+    // 日期不动，仅勾掉一项 → 项漂移
+    await page.familyStore.toggleCheckupItem('chk_tpl_std_w8', 'w8_i0')
+    await tick()
+    await page.familyStore.pullCheckups()
+    await page.regenerateSchedule()
+    await tick()
+    const w8 = cloud.__snapshot('mc_checkups', 'chk_tpl_std_w8')
+    assert.equal(w8.dateKey, '2026-07-27', '日期本就正确，保持不变')
+    assert.equal(w8.examItems.length, 7, '检查项补齐/重置为标准清单')
+    assert.ok(w8.examItems.every(i => !i.done), '勾选清空')
+    assert.equal(w8.source, 'template', '日期未变不转 manual-date')
+    // 项重置不丧失日期迁移资格：改 LMP 后预览仍包含该记录
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-08' })
+    await page.openMigrationPreview()
+    const pv = page.migrationPreview.value
+    assert.ok(pv && pv.toUpdate.some(t => t.id === 'chk_tpl_std_w8'), '项重置记录仍可参与日期迁移')
+  })
+
+  await scenario('产检页14：重新生成——未设孕期日期拒绝不改数据；断网补建入持久待办联网续传', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const controls = { offline: false }
+    const { page, confirm } = bundleCheckupPage(cloud, controls)
+    await confirm()
+    // 未设 LMP：拒绝并提示，不产生任何模板写入
+    await page.familyStore.saveCheckup('chk_m', { dateKey: '2026-08-10', examItems: [] }, undefined, 0)
+    await page.familyStore.pullCheckups()
+    const toastsBefore = uniCalls.toasts.length
+    await page.regenerateSchedule()
+    await tick()
+    assert.ok(uniCalls.toasts.slice(toastsBefore).some(t => /末次月经/.test(t)), '提示先设置末次月经日期')
+    assert.equal([...cloud.__state.store.keys()].filter(k => k.startsWith('mc_checkups/chk_tpl_')).length, 0, '未设 LMP 不写模板')
+    assert.equal(page.getOutbox().length, 0, '无待办遗留')
+    // 设 LMP 后断网重新生成：14 条补建全部入持久待办，联网一键补齐
+    await page.familyStore.savePregnancy({ lmpDate: '2026-06-01' })
+    controls.offline = true
+    const toastsBefore2 = uniCalls.toasts.length
+    await page.regenerateSchedule()
+    await tick()
+    const queued = page.getOutbox().filter(e => e.kind === 'checkup-init')
+    assert.equal(queued.length, 14, '断网时 14 条补建进入持久待办')
+    assert.ok(uniCalls.toasts.slice(toastsBefore2).some(t => /待同步/.test(t)), '如实提示部分未完成（不误报"已是最新"）')
+    controls.offline = false
+    await page.retrySync()
+    const ids = [...cloud.__state.store.keys()].filter(k => k.startsWith('mc_checkups/chk_tpl_'))
+    assert.equal(ids.length, 14, '联网重试后补齐全部标准模板')
+    assert.equal(cloud.__snapshot('mc_checkups', 'chk_tpl_std_w8').status, 'pending')
+    assert.equal(page.getOutbox().length, 0, '无待办遗留')
+    // retrySync 尾部有未 await 的 pullCheckups：让其在途落盘结算完再结束场景，
+    // 否则写回快照会落在下一场景 freshDisk 之后（跨场景状态复活）
+    await tick()
+  })
+
   await scenario('显示3：负时区日期显示不回退一天（UTC/洛杉矶/上海三时区一致）', async () => {
     freshDisk(); clearServerEnv(); setServerEnv()
     const cloud = makeMockCloud()
@@ -1429,6 +1675,55 @@ async function main() {
     const legacyReads = storageReads.filter(k => k === 'hospital_bag_items')
     assert.equal(legacyReads.length, 0, '正式路径零读 hospital_bag_items')
     assert.equal(storage.get('hospital_bag_items'), JSON.stringify([{ text: '旧键残留', done: true }]), '旧键原始字节不变')
+  })
+
+  await scenario('摘要2：我的-孕期信息四项/Hero/倒计时 family 同源（修复"永远未设置"）', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const page = bundlePage('pages/profile/index.vue', withPinia,
+      `export {dataSource,pregInfoItems,heroUserInfo,viewLmpDate,viewDueDate,viewWeekInfo,viewDaysUntilDue,viewTotalPregDays,viewProgressPercent,viewPregInfoSet,familyStore};`)
+    await confirmPageBundle(page, cloud)
+    // 云端权威档案（对端已保存的家庭单例）
+    await healthHandler.main({ action: 'pregnancy.upsert', schemaVersion: 1, operationId: 'sm2a', expectedRevision: 0, payload: { lmpDate: '2026-01-05', dueDate: '2099-01-01', hospital: '市一医院', babyNickname: '小汤圆', nickname: '宝妈小美' } })
+    await page.familyStore.pullPregnancy()
+    await tick()
+    assert.equal(page.dataSource.value, 'family')
+    const items = page.pregInfoItems.value
+    assert.equal(items[0].subtitle, '2026年1月5日', '末次月经=云端档案')
+    assert.equal(items[1].subtitle, '2099年1月1日（可由医生修正）', '预产期=云端档案')
+    assert.equal(items[2].subtitle, '市一医院', '就诊医院=云端档案')
+    assert.equal(items[3].subtitle, '小汤圆', '宝宝昵称=云端档案')
+    assert.equal(page.viewPregInfoSet.value, true)
+    assert.ok(page.viewDueDate.value instanceof Date, '倒计时环 dueDate 为 Date')
+    assert.ok(page.viewDaysUntilDue.value > 0, '2099 预产期倒计时为正')
+    const w = page.viewWeekInfo.value
+    assert.ok(w && w.total > 0, 'lmp 已过 → 孕天数为正')
+    assert.equal(w.week, Math.floor(w.total / 7), '周=⌊total/7⌋')
+    assert.equal(w.day, w.total % 7, '天=total mod 7')
+    assert.equal(page.viewTotalPregDays.value, w.total)
+    assert.equal(page.viewProgressPercent.value, Math.min(100, Math.round((w.total / 280) * 1000) / 10))
+    assert.equal(page.heroUserInfo.value.nickname, '妈妈', 'Hero 昵称=当前身份显示名（非共享档案的宝妈昵称）')
+    assert.notEqual(page.heroUserInfo.value.nickname, '宝妈小美')
+  })
+
+  await scenario('摘要3（回归）：未确认路径四项仍读旧 store，不读 family 源', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const page = bundlePage('pages/profile/index.vue', withPinia,
+      `export {dataSource,pregInfoItems,heroUserInfo,viewPregInfoSet,viewDaysUntilDue,viewWeekInfo,familyStore};`)
+    await tick() // 不确认身份：dataSource 停留 prompt，family 源不激活
+    assert.equal(page.dataSource.value, 'prompt')
+    for (const it of page.pregInfoItems.value) {
+      assert.equal(it.subtitle, '未设置', `${it.title} 未确认时显示未设置`)
+    }
+    assert.equal(page.viewPregInfoSet.value, false)
+    assert.equal(page.viewDaysUntilDue.value, 0)
+    assert.equal(page.viewWeekInfo.value, null)
+    assert.equal(page.heroUserInfo.value.nickname, '', 'Hero 昵称沿用旧 store 空值（组件内兜底）')
   })
 
   await scenario('审计：零旧 HTTP（全部流量走云函数路由模拟）', async () => {

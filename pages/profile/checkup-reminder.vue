@@ -78,6 +78,17 @@
 					<text class="generate-arrow">›</text>
 				</view>
 
+				<!-- family：已有安排——重新生成（重排未完成自动安排 + 补建缺失；历史与手动不动）。
+					孕期日期修改待调整时不出现：先用上方横幅完成日期调整，再重新生成 -->
+				<view v-if="dataSource === 'family' && famCheckupCount > 0 && !migrationInfo" class="generate-card generate-card-regen" @tap="showRegenModal = true">
+					<view class="generate-icon"><text class="generate-icon-text">🔄</text></view>
+					<view class="generate-body">
+						<text class="generate-title">重新生成标准安排</text>
+						<text class="generate-desc">按当前孕期日期重排未完成的自动安排、补建缺失项（历史与手动安排不变）</text>
+					</view>
+					<text class="generate-arrow">›</text>
+				</view>
+
 				<template v-if="nextCheckup">
 					<!-- 产检信息卡片 -->
 					<view class="info-card">
@@ -199,6 +210,15 @@
 			content="确定要跳过本次产检吗？\n此操作不可撤销。"
 			confirmType="danger"
 			@confirm="doSkipCheckup"
+		/>
+
+		<!-- 重新生成确认弹窗 -->
+		<ConfirmModal
+			v-model:visible="showRegenModal"
+			title="重新生成标准安排"
+			content="按当前孕期日期重排未完成的自动安排：日期与检查项将重置为标准模板，已勾选和手动添加的检查项会清空。\n已完成/跳过/手动改期/自建的产检不变，医院、陪同等补充信息保留；缺失的标准安排将补建。"
+			confirmType="danger"
+			@confirm="regenerateSchedule"
 		/>
 
 		<!-- 添加检查项弹窗 -->
@@ -781,6 +801,66 @@ async function generateSchedule() {
 	familyStore.pullCheckups().catch(() => {})
 }
 
+// ── 重新生成标准安排：未完成的自动安排按当前孕期日期重排 + 缺失补建 ──
+// 语义：pending 且模板来源（source='template'）的记录重置日期与检查项——服务端改期
+// 即转 manual-date（退出后续日期迁移资格，不会二次偏移）；已完成/跳过/手动改期/
+// 自建记录不动；已删模板不复活（服务端存在即保留语义）；缺失模板走 initialize 补建。
+// 日期与检查项均已等于标准模板的记录跳过（幂等重按不抬高 revision）
+const showRegenModal = ref(false)
+const regenRunning = ref(false)
+function regenItemsSame(rec, items) {
+	const cur = rec.examItems || []
+	if (cur.length !== items.length) return false
+	return cur.every((it, i) => it.itemId === items[i].itemId && it.text === items[i].text &&
+		Boolean(it.required) === Boolean(items[i].required) && Boolean(it.done) === false)
+}
+async function regenerateSchedule() {
+	if (regenRunning.value) return
+	if (dataSource.value !== 'family') return
+	const lmp = famLmpKey.value
+	if (!lmp || !/^\d{4}-\d{2}-\d{2}$/.test(lmp)) {
+		uni.showToast({ title: '请先在「我的-孕期信息」设置末次月经日期', icon: 'none', duration: 2500 })
+		return
+	}
+	regenRunning.value = true
+	uni.showLoading({ title: '重新生成中…' })
+	let resetOk = 0, resetFail = 0, conflicts = 0, created = 0, createFail = 0
+	const missing = []
+	try {
+		for (const s of STANDARD_SCHEDULE) {
+			const dateKey = scheduleDateKey(lmp, s.week)
+			const examItems = s.items.map((t, i) => ({ itemId: `w${s.week}_i${i}`, text: t, required: i === 0, done: false }))
+			const rec = familyStore.checkups['chk_tpl_' + 'std_w' + s.week]
+			if (!rec) { missing.push({ templateKey: 'std_w' + s.week, dateKey, examItems }); continue }
+			if (rec.deleted || rec.status !== 'pending' || rec.source !== 'template') continue
+			if (rec.dateKey === dateKey && regenItemsSame(rec, examItems)) continue
+			// 以点击时捕获的当前 revision 为基线：对端期间推进 → 冲突入横幅由用户解决
+			const r = await familyStore.saveCheckup(rec.id, { dateKey, examItems }, undefined, rec.revision || 0)
+			if (r.ok) resetOk++
+			else if (r.code === 'revision-conflict') conflicts++
+			else resetFail++
+		}
+		if (missing.length > 0) {
+			const res = await familyStore.initializeCheckupTemplates(missing)
+			if (res) {
+				created = res.results.filter(r => r.ok && !r.skipped).length
+				createFail = res.results.filter(r => !r.ok && !r.skipped).length
+			}
+		}
+	} finally {
+		uni.hideLoading()
+		regenRunning.value = false
+	}
+	const parts = []
+	if (resetOk > 0) parts.push(`已重排 ${resetOk} 项`)
+	if (created > 0) parts.push(`补建 ${created} 次`)
+	if (conflicts > 0) parts.push(`${conflicts} 项有修改冲突，请在同步横幅处理`)
+	if (resetFail + createFail > 0) parts.push(`${resetFail + createFail} 项未完成，待同步稍后自动重试`)
+	if (parts.length > 0) uni.showToast({ title: parts.join('，'), icon: 'none', duration: 3000 })
+	else uni.showToast({ title: '安排已是最新', icon: 'none' })
+	familyStore.pullCheckups().catch(() => {})
+}
+
 // ── 孕期日期迁移：预览 → 确认（逐条持久待办，部分失败可恢复续传）──
 const migrationInfo = computed(() => {
 	if (dataSource.value !== 'family' || !familyStore) return null
@@ -1293,6 +1373,10 @@ onMounted(async () => {
 .generate-title { font-size: 28rpx; font-weight: 600; color: #1C1A17; display: block; }
 .generate-desc { font-size: 22rpx; color: #9C9890; margin-top: 4rpx; display: block; }
 .generate-arrow { font-size: 32rpx; color: #C8C4BC; }
+
+/* 重新生成入口：中性底与首代生成卡区分 */
+.generate-card-regen { background: #F2F0EE; border: 2rpx solid #DDD6CC; }
+.generate-card-regen .generate-icon { background: #FFFFFF; }
 
 /* ── 编辑产检信息入口 ── */
 .edit-chk-btn { margin-top: 20rpx; padding: 16rpx; border-radius: 14rpx; background: #FAEAEE; text-align: center; }
