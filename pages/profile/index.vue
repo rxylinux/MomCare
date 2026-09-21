@@ -335,11 +335,54 @@ const pregInfoItems = computed(() => {
 	]
 })
 
+// 我的记录（三态同源，同 Hero 模式）：family=familyStore 云源（口径与 weight/bp/fetal-records
+// 详情页 famStats 一致——latest/gain/preWeightKg/systolic/fetalCount），demo+prompt 沿用旧 store
+const famDailyAsc = computed(() => familyStore.dailyHistoryAsc())
+const famWeightStats = computed(() => {
+	const hist = famDailyAsc.value.map(r => ({
+		date: r.dateKey, weight: r.fields && r.fields.weightKg != null ? String(r.fields.weightKg) : ''
+	})).filter(r => r.weight !== '')
+	if (hist.length === 0) return { latest: null, gain: null, count: 0 }
+	const latest = hist[hist.length - 1].weight
+	const pre = famFields.value.preWeightKg
+	let gain = null
+	if (pre) gain = (parseFloat(latest) - Number(pre)).toFixed(1)
+	return { latest: parseFloat(latest).toFixed(1), gain: gain !== null ? (gain >= 0 ? `+${gain}` : gain) : null, count: hist.length }
+})
+const famBpStats = computed(() => {
+	const entries = famDailyAsc.value.map(r => ({
+		date: r.dateKey,
+		systolic: r.fields && r.fields.systolic != null ? Number(r.fields.systolic) : null,
+		diastolic: r.fields && r.fields.diastolic != null ? Number(r.fields.diastolic) : null
+	})).filter(e => e.systolic != null && e.diastolic != null)
+	if (entries.length === 0) return { latest: null, status: '', count: 0 }
+	const last = entries[entries.length - 1]
+	return {
+		latest: `${last.systolic}/${last.diastolic}`,
+		status: last.systolic >= 140 || last.diastolic >= 90 ? '偏高' : '正常',
+		count: entries.length
+	}
+})
+const famFetalStats = computed(() => {
+	void healthStore.today // 响应式跨日：时钟推进时今日/昨日重算（上海日号——与 fetal-records 页同式）
+	const entries = famDailyAsc.value.filter(r => r.fields && r.fields.fetalCount !== undefined)
+		.map(r => ({ date: r.dateKey, count: Number(r.fields.fetalCount) }))
+	const sh = new Date(healthStore.today.getTime() + (8 * 60 + healthStore.today.getTimezoneOffset()) * 60000)
+	const tk = `${sh.getFullYear()}-${String(sh.getMonth() + 1).padStart(2, '0')}-${String(sh.getDate()).padStart(2, '0')}`
+	const ySh = new Date(sh.getTime() - 86400000)
+	const yk = `${ySh.getFullYear()}-${String(ySh.getMonth() + 1).padStart(2, '0')}-${String(ySh.getDate()).padStart(2, '0')}`
+	return {
+		today: entries.find(e => e.date === tk)?.count ?? 0,
+		yesterday: entries.find(e => e.date === yk)?.count ?? 0,
+		count: entries.length
+	}
+})
+
 // 我的记录
 const recordItems = computed(() => {
-	const ws = healthStore.getWeightStats()
-	const bs = healthStore.getBpStats()
-	const fs = healthStore.getFetalStats()
+	const ws = isFamily.value ? famWeightStats.value : healthStore.getWeightStats()
+	const bs = isFamily.value ? famBpStats.value : healthStore.getBpStats()
+	const fs = isFamily.value ? famFetalStats.value : healthStore.getFetalStats()
 
 	const weightSubtitle = ws.count > 0
 		? `最新 ${ws.latest}kg · 孕期增重 ${ws.gain || '--'}kg`

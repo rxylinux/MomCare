@@ -1726,6 +1726,40 @@ async function main() {
     assert.equal(page.heroUserInfo.value.nickname, '', 'Hero 昵称沿用旧 store 空值（组件内兜底）')
   })
 
+  await scenario('摘要4：我的-记录三卡 family 同源（修复"恒暂无记录"）', async () => {
+    freshDisk(); clearServerEnv(); setServerEnv()
+    const cloud = makeMockCloud()
+    cloud.__setCtx(TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_APPID)
+    scheduleHandler.__setCloud(cloud); healthHandler.__setCloud(cloud)
+    const page = bundlePage('pages/profile/index.vue', withPinia,
+      `export {dataSource,recordItems,familyStore};`)
+    await confirmPageBundle(page, cloud)
+    // 云端权威：档案 preWeightKg（增重基准）+ 相对今日三日记录（前天体重+血压；昨天体重+胎动；今天胎动）
+    // （日期全相对化——同日多字段合并进一次 upsert，避免 expectedRevision 冲突与跨日重跑脆断言）
+    const dk = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const d0 = dk(new Date())
+    const d1 = dk(new Date(Date.now() - 86400000))
+    const d2 = dk(new Date(Date.now() - 2 * 86400000))
+    await healthHandler.main({ action: 'pregnancy.upsert', schemaVersion: 1, operationId: 'sm4p', expectedRevision: 0, payload: { lmpDate: '2026-01-05', preWeightKg: 59 } })
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, operationId: 'sm4a', expectedRevision: 0, dateKey: d2, payload: { weightKg: 62.0, systolic: 118, diastolic: 72 } })
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, operationId: 'sm4b', expectedRevision: 0, dateKey: d1, payload: { weightKg: 62.3, fetalCount: 8 } })
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, operationId: 'sm4c', expectedRevision: 0, dateKey: d0, payload: { fetalCount: 5 } })
+    await page.familyStore.pullAll()
+    await page.familyStore.pullPregnancy()
+    await tick()
+    assert.equal(page.dataSource.value, 'family')
+    const items = page.recordItems.value
+    assert.equal(items[0].title, '体重记录')
+    assert.equal(items[0].subtitle, '最新 62.3kg · 孕期增重 +3.3kg', `体重卡读云端（实得 ${items[0].subtitle}）`)
+    assert.equal(items[0].badge, '2条')
+    assert.equal(items[1].title, '血压记录')
+    assert.equal(items[1].subtitle, '最新 118/72 · 血压正常', `血压卡读云端（实得 ${items[1].subtitle}）`)
+    assert.equal(items[1].badge, '1条')
+    assert.equal(items[2].title, '胎动记录')
+    assert.equal(items[2].subtitle, '今日 5次 · 昨日 8次', `胎动卡读云端（实得 ${items[2].subtitle}）`)
+    assert.equal(items[2].badge, '2条')
+  })
+
   await scenario('审计：零旧 HTTP（全部流量走云函数路由模拟）', async () => {
     assert.equal(uniCalls.requests, 0, '不得出现 uni.request')
     assert.equal(uniCalls.uploadFile, 0, '不得出现 uni.uploadFile')
