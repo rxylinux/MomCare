@@ -1,7 +1,7 @@
 {
-  "version": "1.1.3",
-  "desc": "关于页版本动态化+核心功能补全+客服邮箱修正",
-  "commit": "535152ebdc1c27e1c1b94f1106b64cf941e403bd",
+  "version": "1.1.4",
+  "desc": "修复全面屏iPhone记录弹层保存按钮被Home指示条遮挡",
+  "commit": "5bc4f95908bdbc18452360c26b78820a49dd76f3",
   "functions": [],
-  "releasedAt": "2026-09-21T14:22:42.969Z"
+  "releasedAt": "2026-09-21T14:48:10.196Z"
 }
