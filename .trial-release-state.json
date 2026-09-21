@@ -1,7 +1,9 @@
 {
-  "version": "1.1.4",
-  "desc": "修复全面屏iPhone记录弹层保存按钮被Home指示条遮挡",
-  "commit": "5bc4f95908bdbc18452360c26b78820a49dd76f3",
-  "functions": [],
-  "releasedAt": "2026-09-21T14:48:10.196Z"
+  "version": "1.1.5",
+  "desc": "产检重新生成+我的页family数据源修复+AI迁移DeepSeek Flash",
+  "commit": "38a7032b9c919d2bf2488e13430e799b2979f1a1",
+  "functions": [
+    "mc-tools"
+  ],
+  "releasedAt": "2026-09-21T16:05:38.436Z"
 }
