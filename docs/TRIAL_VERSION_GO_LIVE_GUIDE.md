@@ -142,8 +142,26 @@ mc-identity {}   // 预期 { ok:false, code:'not-configured' } 或 'not-family-m
 
 ## 阶段 9：日常使用与维护
 
-**更新版本**（以后改了代码）：
-改代码 → `npm run build:mp-weixin` → 开发者工具上传新版本 → 后台把新开发版本设为体验版 → 两人下次打开自动是新版（体验版更新即时生效，无审核）。
+**更新版本**（以后改了代码、修了 bug——一律用发布脚本）：
+
+```bash
+# 1. 改代码并提交（脚本要求工作区干净，发布必须基于已提交代码）
+git add -A && git commit -m "fix: ..."
+
+# 2. 一条命令完成：全量回归测试 → 构建小程序包 → 恢复 cloudfunctions/与
+#    project.config.json 补丁 → DevTools CLI 上传新版本（patch 位自动 +1）→ 落盘版本并提交
+npm run release:trial -- --desc "本次发布说明"
+
+# 3. 如果这次还改了云函数（cloud/functions/ 或 cloud/shared/），追加部署变更的函数：
+npm run release:trial -- --desc "修复XX" --functions mc-health,mc-collab
+```
+
+- 前提：微信开发者工具已打开并登录（CLI 与本地 IDE 服务通信）。
+- 版本号唯一权威源是 `manifest.json` 的 `versionName`，脚本自动递增 patch 位并在上传成功后写回+提交；上传失败不落盘，重跑沿用同一版本号。
+- 体验版更新即时生效：两人杀掉小程序进程重开就是新版。
+- 只想预演不真发：加 `--dry-run`，打印将执行的完整命令。
+- 微信后台"开发版本"列表靠 `--desc` 区分每次上传，务必写清楚本次改了什么。
+- 也可以让 ZCode 代跑：修完 bug 提交后直接说"用发布脚本发一版"。
 
 **数据备份**：
 定期用工程内 B3 的**完整导出**功能把数据导出到手机本地（含附件实体，不是只有 JSON）——云环境欠费停服时的数据生命线。建议每月一次。

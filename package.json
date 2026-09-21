@@ -8,7 +8,8 @@
     "preview:legacy": "wrangler dev --name momcare --assets dist/build/h5 --compatibility-date 2026-05-16",
     "assemble:cloud": "node cloud/assemble.mjs",
     "test": "node tests/phase-d-release-prep.regress.cjs",
-    "test:all": "for f in tests/*.regress.cjs; do echo \"=== $f ===\"; node \"$f\" || exit 1; done"
+    "test:all": "for f in tests/*.regress.cjs; do echo \"=== $f ===\"; node \"$f\" || exit 1; done",
+    "release:trial": "node scripts/release-trial.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-alpha-5010320260611001",
