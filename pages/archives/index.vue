@@ -162,7 +162,10 @@
     <view v-if="dataSource === 'family' && reportFamilyStore.activeBatches.length > 0" class="recover-card" style="bottom: 340rpx;">
       <view class="recover-body">
         <text class="recover-title">{{ reportFamilyStore.activeBatches.length }} 个未完成上传批次</text>
-        <text class="recover-desc" v-for="b in reportFamilyStore.activeBatches" :key="b.batchId">批次 {{ b.items.length }} 张 · {{ b.status === 'ready' ? '已登记，待填写报告信息' : b.status === 'partial' ? '部分未完成' : '上传中' }}</text>
+        <view class="recover-row" v-for="b in reportFamilyStore.activeBatches" :key="b.batchId">
+          <text class="recover-desc">批次 {{ b.items.length }} 张 · {{ b.status === 'ready' ? '已登记，待填写报告信息' : b.status === 'partial' ? '部分未完成' : '上传中' }}</text>
+          <view class="recover-row-btn" @tap="abandonBatch(b.batchId)"><text class="recover-row-btn-t">放弃</text></view>
+        </view>
       </view>
       <view class="conflict-actions recover-actions">
         <view class="conflict-btn conflict-btn-solid" @tap="resumeBatch(reportFamilyStore.activeBatches[0].batchId)"><text class="conflict-btn-solid-text">继续处理</text></view>
@@ -262,6 +265,7 @@ import CustomTabBar from '@/components/CustomTabBar.vue'
 import { useReportStore, TAB_DEFS, getTypeInfo } from '@/stores/report'
 import { getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut, settleConfirm } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
+import { familyAiView } from '@/services/aiReportView.js'
 import { useReportFamilyStore } from '@/services/reportFamilyStore.js'
 import { getOutbox } from '@/services/outbox.js'
 import { fetchReportReadUrls } from '@/services/fileUploadService.js'
@@ -384,6 +388,10 @@ function mapFamilyReports() {
       report_date: r.dateKey,
       archive_status: r.archiveStatus,
       note: r.note || '',
+      // 列表徽标消费：ai_status 与详情页同源同语义（familyAiView 从云端 ai_result
+      // 推导 done/pending）；孕周标签消费 weekOfPregnancy（镜像详情页映射）
+      ai_status: familyAiView(r).ai_status,
+      week_of_pregnancy: r.weekOfPregnancy != null ? r.weekOfPregnancy : null,
       file_urls: famThumbUrls.value[r.id] ? [famThumbUrls.value[r.id]] : [],
       _attachmentCount: (r.attachments || []).length,
       _cloud: true
@@ -545,6 +553,23 @@ function resumeBatch(batchId) {
     uni.showToast({ title: '已重试未完成项', icon: 'none' })
   }
   navigateToPage('/pages/archives/classify?source=p2&batchId=' + encodeURIComponent(batchId))
+}
+
+// 整批放弃（未创建报告）：本机原件删除、已登记文件留给孤儿清理自动回收。
+// discardBatch 先持久确认再清原件——落盘失败时原件保留并如实提示
+function abandonBatch(batchId) {
+  uni.showModal({
+    title: '放弃该上传批次？',
+    content: '本机保存的原件将删除；已上传到云端的部分由系统自动回收，不会生成报告。',
+    confirmText: '放弃',
+    confirmColor: '#C0405A',
+    success: (m) => {
+      if (!m.confirm) return
+      const r = reportFamilyStore.discardBatch(batchId)
+      if (r.ok) uni.showToast({ title: '已放弃该批次', icon: 'none' })
+      else uni.showToast({ title: r.message || '本机状态写入失败，未删除原件，请重试', icon: 'none', duration: 2500 })
+    }
+  })
 }
 
 async function recoverUploadNow() {
@@ -1192,6 +1217,15 @@ page {
 .recover-body { margin-bottom: 16rpx; }
 .recover-title { font-size: 26rpx; font-weight: 600; color: #B07818; display: block; }
 .recover-desc { font-size: 22rpx; color: #B07818; opacity: 0.85; margin-top: 6rpx; display: block; line-height: 1.5; }
+.recover-row { display: flex; align-items: center; gap: 16rpx; }
+.recover-row .recover-desc { flex: 1; }
+.recover-row-btn {
+  padding: 8rpx 24rpx;
+  border: 1rpx solid rgba(192, 64, 90, 0.45);
+  border-radius: 999rpx;
+  flex-shrink: 0;
+}
+.recover-row-btn-t { font-size: 22rpx; color: #C0405A; }
 .recover-actions { margin-top: 0; }
 .conflict-actions { display: flex; gap: 16rpx; }
 .conflict-btn { flex: 1; height: 64rpx; border-radius: 32rpx; display: flex; align-items: center; justify-content: center; }

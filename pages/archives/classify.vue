@@ -10,6 +10,7 @@
 				<view v-if="it.state === 'persist-failed' || it.state === 'failed'" class="batch-ctrl-btn" @tap="replaceSlot(it.order)"><text class="batch-ctrl-btn-t">重选图片</text></view>
 				<view v-if="it.state === 'persist-failed'" class="batch-ctrl-btn batch-ctrl-danger" @tap="removeFailedSlot(it.order)"><text class="batch-ctrl-btn-t">移除</text></view>
 			</view>
+			<view class="batch-ctrl-abandon" @tap="discardWholeBatch"><text class="batch-ctrl-abandon-t">放弃整批</text></view>
 		</view>>
     <!-- NavBar -->
     <NavBar title="确认报告信息" />
@@ -374,6 +375,28 @@ function removeFailedSlot(order) {
   if (!familyBatchId.value) return
   const r = reportFamilyStore.discardItem(familyBatchId.value, order)
   if (!r.ok) uni.showToast({ title: r.message || '移除失败', icon: 'none', duration: 2500 })
+}
+
+// 整批放弃（未创建报告）：与档案页批次卡同一入口。确认后先持久确认再清本机
+// 原件（discardBatch），已上传到云端的文件留给孤儿清理自动回收；成功后返回
+function discardWholeBatch() {
+  if (!familyBatchId.value) return
+  uni.showModal({
+    title: '放弃该上传批次？',
+    content: '本机保存的原件将删除；已上传到云端的部分由系统自动回收，不会生成报告。',
+    confirmText: '放弃',
+    confirmColor: '#C0405A',
+    success: (m) => {
+      if (!m.confirm) return
+      const r = reportFamilyStore.discardBatch(familyBatchId.value)
+      if (r.ok) {
+        uni.showToast({ title: '已放弃该批次', icon: 'none' })
+        setTimeout(() => uni.navigateBack(), 600)
+      } else {
+        uni.showToast({ title: r.message || '本机状态写入失败，未删除原件，请重试', icon: 'none', duration: 2500 })
+      }
+    }
+  })
 }
 const famBatch = computed(() => familyBatchId.value ? reportFamilyStore.batch(familyBatchId.value) : null)
 
@@ -898,5 +921,7 @@ page {
 .batch-ctrl-item { font-size: 22rpx; color: #6E6A64; flex: 1; }
 .batch-ctrl-btn { background: #C98A3A; border-radius: 999rpx; padding: 6rpx 20rpx; margin-left: 12rpx; }
 .batch-ctrl-danger { background: #C0405A; }
+.batch-ctrl-abandon { margin-top: 14rpx; border: 1rpx solid rgba(192, 64, 90, 0.45); border-radius: 999rpx; padding: 10rpx 0; text-align: center; }
+.batch-ctrl-abandon-t { font-size: 22rpx; color: #C0405A; }
 .batch-ctrl-btn-t { font-size: 20rpx; color: #fff; }
 </style>
