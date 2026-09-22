@@ -1,10 +1,7 @@
 {
-  "version": "1.1.12",
-  "desc": "修复删除报告后退列表不刷新+新增报告医院/孕周字段录入",
-  "commit": "602e273797ad240e7707a27907eb1d4d8f0f12b6",
-  "functions": [
-    "mc-reports",
-    "mc-restore"
-  ],
-  "releasedAt": "2026-09-22T13:50:09.558Z"
+  "version": "1.1.13",
+  "desc": "修复列表已解读徽标/孕周不显示+上传批次可放弃",
+  "commit": "eae97968e445f3fd85cbc13d3ebe84cb27dac7a2",
+  "functions": [],
+  "releasedAt": "2026-09-22T14:17:24.131Z"
 }

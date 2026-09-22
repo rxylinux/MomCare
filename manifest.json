@@ -2,8 +2,8 @@
   "name": "孕途伴侣",
   "appid": "__UNI__MOMCARE",
   "description": "面向准妈妈的孕期陪伴 App",
-  "versionName": "1.1.12",
-  "versionCode": "10112",
+  "versionName": "1.1.13",
+  "versionCode": "10113",
   "transformPx": false,
   "locale": "zh-Hans",
   "h5": {
