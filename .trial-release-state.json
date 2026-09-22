@@ -1,9 +1,7 @@
 {
-  "version": "1.1.9",
-  "desc": "报告解读视觉直读默认开启（MC_REPORT_VISION 恰0关闭，免控制台配置）",
-  "commit": "83fddff6e70a0fc738642d598601266f431f97f7",
-  "functions": [
-    "mc-tools"
-  ],
-  "releasedAt": "2026-09-22T00:56:34.643Z"
+  "version": "1.1.10",
+  "desc": "AI 解读每日限额 5→50 次",
+  "commit": "b9e96ba8131e8e97dacbe2571e9cef3967125607",
+  "functions": [],
+  "releasedAt": "2026-09-22T01:11:48.831Z"
 }
