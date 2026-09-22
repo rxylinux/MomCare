@@ -99,6 +99,8 @@ function makeStack(member = 'mama') {
   delete process.env.MC_OCR_PROVIDER
   delete process.env.MC_OCR_TENCENT_SECRET_ID
   delete process.env.MC_OCR_TENCENT_SECRET_KEY
+  // 视觉直读 2026-09-22 起默认开启（恰 '0' 关闭）——E3 元数据模式契约须显式关闭
+  process.env.MC_REPORT_VISION = '0'
   cloud.__setCtx(member === 'mama' ? TEST_ENV.MC_MEMBER_MAMA_OPENID : member === 'papa' ? TEST_ENV.MC_MEMBER_PAPA_OPENID : member)
   const tools = requireHandler()
   tools.__setCloud(cloud)

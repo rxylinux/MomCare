@@ -13,9 +13,10 @@
 
 ## 设计
 
-### 开关（fail-closed，独立于 OCR/DeepSeek 两开关）
+### 开关（2026-09-22 用户二次裁定反转：默认开启）
 
-`MC_REPORT_VISION` 恰 `'1'` 启用；未设/其他值=关闭（行为与 OCR 版逐字节一致——既有 51 套回归为守卫）。开启且报告有附件 → **整体绕过 OCR 阶段**（零 printedText 调用、不查 OCR 缓存）；关闭或无附件 → 现行 OCR/元数据流程原样。
+`MC_REPORT_VISION` **恰 `'0'` 关闭（唯一关闭值=回滚通道）**；未设/任意其他值（含 `'1'`/`'true'`/乱值）一律视觉直读——生产部署零控制台步骤。开启且报告有附件 → **整体绕过 OCR 阶段**（零 printedText 调用、不查 OCR 缓存）；恰 `'0'` 或无附件 → 现行 OCR/元数据流程原样。
+首次实现为"恰 `'1'` 启用、未设关闭"（trial 1.1.8）；因云函数环境变量仅桌面端控制台可配（CLI 无入口），用户裁定反转为默认开启（trial 1.1.9 起）。既有套件适配：phase-g-server / e3-server / f-audit 的 makeStack 显式设 `'0'` 锁住各自原测路径（OCR 流水线 / 元数据网关 / 审计联动）。
 
 ### 服务端流水线（全部在 mc-tools/index.js）
 
@@ -41,16 +42,16 @@
 
 ## 测试（tests/phase-g-vision.regress.cjs，test:all 自动发现）
 
-V1 关闭态守卫（OCR 照旧+零下载）；V2 无附件元数据模式；V3 两页全链路（下载页序/ctx.images/vision_result 回写/ocr_result 不写）；V4 模型门 fail-closed；V5 登记门三例；V6 下载失败零写库；V7 单页/合计超限；V8 魔数嗅探（四格式+乱字节拒+全链路）；V9 视觉开时 printedText 零调用；V10 页数上限前 3；V11 请求体锁参（无图=旧形状 deepEqual、有图=官方块数组）；V12 AI 失败语义不变；Z9 冻结源哈希。
+V1 开关语义三守卫（未设=默认视觉+零 printedText；恰 '0'=OCR 路径照旧+零下载；非 '0' 值 'true'=仍视觉）；V2 无附件元数据模式；V3 两页全链路（下载页序/ctx.images/vision_result 回写/ocr_result 不写）；V4 模型门 fail-closed；V5 登记门三例；V6 下载失败零写库；V7 单页/合计超限；V8 魔数嗅探（四格式+乱字节拒+全链路）；V9 视觉开时 printedText 零调用；V10 页数上限前 3；V11 请求体锁参（无图=旧形状 deepEqual、有图=官方块数组）；V12 AI 失败语义不变；Z9 冻结源哈希。
 
-既有套件（phase-g-server 14/0、flash-migration 5/0、全量 51 套）一行不改全绿——关闭态行为不变的验收。
+既有套件适配（默认开启反转的必要变更）：phase-g-server（OCR 套件）/ e3-server（元数据网关）/ f-audit（审计联动）makeStack 设 `MC_REPORT_VISION='0'` 锁原路径；其余 47 套零改动全绿。
 
 ## O2 部署清单（管理员）
 
-1. 发布：`npm run release:trial -- --desc "报告解读切换DeepSeek视觉直读" --functions mc-tools`（内含 test:all 门禁）。
-2. mc-tools 环境变量加 `MC_REPORT_VISION=1`（`MC_OCR_PROVIDER=wechat` 可保留作回滚通道）；确认函数超时 ≥90s。
+1. 发布：`npm run release:trial -- --desc "报告解读视觉直读默认开启" --functions mc-tools`（内含 test:all 门禁）。
+2. **无需任何控制台配置**——默认开启（模型须为 deepseek-flash，缺省即是；函数超时 ≥90s 已是存量配置）。
 3. 真机对同一份报告重试 AI 解读；失败按错误码表对号取 mc-tools 日志。
-4. 回滚：删除 `MC_REPORT_VISION` 即回 OCR/元数据模式，无需回滚代码。
+4. 回滚：mc-tools 环境变量设 `MC_REPORT_VISION=0` 即回 OCR/元数据模式（无需回滚代码）；彻底关闭解读则移除 `DEEPSEEK_API_KEY`。
 
 ## 风险与后续
 

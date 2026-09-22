@@ -90,8 +90,9 @@ const VISION_MAX_PAGES = 3               // 单次直读最多页数（与 OCR �
 const VISION_PAGE_TIMEOUT_MS = 15000     // 单页下载外层超时（race——防挂死拖垮整函数）
 const VISION_IMAGE_MAX_BYTES = 16 * 1024 * 1024
 const VISION_TOTAL_MAX_BYTES = 24 * 1024 * 1024
-// 开关恰 '1' 启用（fail-closed：未设/其他值一律关闭，行为与旧版逐字节一致）
-function visionEnabled() { return process.env.MC_REPORT_VISION === '1' }
+// 开关语义（2026-09-22 用户裁定反转）：默认开启；恰 '0' 关闭（唯一关闭值=回滚通道）。
+// 未设/任意其他值（含 '1'/'true'/乱值）一律视觉直读——OCR 须显式 '0' 才可达。
+function visionEnabled() { return process.env.MC_REPORT_VISION !== '0' }
 
 // ── E3 AI 代理网关 ──
 // 强制免责（一切 AI 生成内容必带——"AI 生成（未人工逐字审校）"+ 医疗免责）
@@ -1144,7 +1145,7 @@ if (action === 'efw.list') {
     if (!provider) {
       return ok({ enabled: false, message: '报告自动 OCR / DeepSeek 解读服务未配置；请以原始检验单与主治医生诊断为准' })
     }
-    // Phase G 视觉直读阶段（规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）：MC_REPORT_VISION 恰 '1'
+    // Phase G 视觉直读阶段（规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）：默认开启（恰 '0' 关闭）
     // 且有附件 → 整体绕过 OCR（零 printedText 调用），图片直送 deepseek-flash。
     // flash 是白名单内唯一原生视觉模型——模型不符 fail-closed 明确拒绝，不静默降级 OCR/元数据。
     const attachments = Array.isArray(report.attachments) ? report.attachments : []

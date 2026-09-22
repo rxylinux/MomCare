@@ -1,8 +1,9 @@
 // Phase G 视觉直读契约回归：mc-tools ai.analyzeReport 的 MC_REPORT_VISION 图片直送 deepseek-flash
 // 流水线（mock 注入，零真实外呼）。规格 docs/PHASE_G_VISION_DIRECT_SPEC.md。
-// 覆盖：关闭态守卫（行为与 OCR 版一致）；无附件元数据模式；多页下载→多模态请求体→vision_result
-// CAS 回写；模型不符 fail-closed；登记门（invalid-attachment）；下载失败/超大（单页与合计）；
-// MIME 魔数嗅探（四格式+未支持格式拒）；视觉开启时整体绕过 printedText；页数上限；
+// 开关语义（2026-09-22 用户裁定）：默认开启，恰 '0' 关闭（未设/任意非 '0' 值一律视觉直读）。
+// 覆盖：默认开启守卫（未设/非 '0' 值→视觉；恰 '0'→OCR 路径照旧+零下载）；无附件元数据模式；
+// 多页下载→多模态请求体→vision_result CAS 回写；模型不符 fail-closed；登记门（invalid-attachment）；
+// 下载失败/超大（单页与合计）；MIME 魔数嗅探（四格式+未支持格式拒）；页数上限；
 // 请求体锁参（无图=旧形状逐字节、有图=官方 vision 块数组）；AI 失败语义不变。
 const fs = require('node:fs')
 const os = require('node:os')
@@ -162,20 +163,46 @@ function armAi(st, answer = 'V-MOCK 解读：整体与孕周相符，建议按�
 async function main() {
   console.log('Phase G 视觉直读契约回归（mc-tools ai.analyzeReport MC_REPORT_VISION → mock 云）\n')
 
-  await scenario('V1 关闭态守卫：未设 MC_REPORT_VISION + wechat OCR 武装 → OCR 路径照旧、零下载', async () => {
-    const st = makeStack()
-    seedVision(st)
-    mkReport(st, 'rpt_v1', [{ fileId: 'f1' }])
-    const aiCalls = armAi(st)
-    process.env.MC_OCR_PROVIDER = 'wechat'
-    // __setOcrMock 是 provider 层注入口（fn(fileID) → 文本），非 printedText 响应对象
-    st.tools.__setOcrMock(() => '双顶径 8.4cm')
-    const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v1' })
-    assert.ok(r.ok && r.data.enabled === true, '走 OCR 成功路径')
-    assert.equal(r.data.ocrIncluded, true, 'ocrIncluded=true（OCR 版行为）')
-    assert.ok(aiCalls[0].prompt.includes('双顶径 8.4cm'), 'prompt 含 OCR 文本')
-    assert.equal(st.cloud.__state.downloadCalls.length, 0, '零下载（视觉未启用）')
-    assert.equal(r.data.visionIncluded, false, 'visionIncluded=false')
+  await scenario('V1 开关语义：未设=默认视觉直读；恰 \'0\'=OCR 路径照旧；非 \'0\' 值=仍视觉', async () => {
+    // V1a 未设（默认开）→ 视觉路径：有下载、零 printedText
+    {
+      const st = makeStack()
+      seedVision(st)
+      mkReport(st, 'rpt_v1a', [{ fileId: 'f1' }])
+      armAi(st)
+      const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v1a' })
+      assert.ok(r.ok && r.data.enabled === true && r.data.visionIncluded === true, '未设默认走视觉')
+      assert.equal(st.cloud.__state.downloadCalls.length, 1, '视觉路径有下载')
+      assert.equal(st.cloud.__state.ocrCalls.length, 0, '零 printedText')
+    }
+    // V1b 恰 '0'（唯一关闭值）→ OCR 路径照旧、零下载
+    {
+      const st = makeStack()
+      seedVision(st)
+      mkReport(st, 'rpt_v1b', [{ fileId: 'f1' }])
+      const aiCalls = armAi(st)
+      process.env.MC_OCR_PROVIDER = 'wechat'
+      // __setOcrMock 是 provider 层注入口（fn(fileID) → 文本），非 printedText 响应对象
+      st.tools.__setOcrMock(() => '双顶径 8.4cm')
+      process.env.MC_REPORT_VISION = '0'
+      const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v1b' })
+      assert.ok(r.ok && r.data.enabled === true, '走 OCR 成功路径')
+      assert.equal(r.data.ocrIncluded, true, 'ocrIncluded=true（OCR 版行为）')
+      assert.ok(aiCalls[0].prompt.includes('双顶径 8.4cm'), 'prompt 含 OCR 文本')
+      assert.equal(st.cloud.__state.downloadCalls.length, 0, '零下载（视觉已关）')
+      assert.equal(r.data.visionIncluded, false, 'visionIncluded=false')
+    }
+    // V1c 非 '0' 值（'true'）→ 仍视觉（唯 '0' 关闭——其他值不构成关闭）
+    {
+      const st = makeStack()
+      seedVision(st)
+      mkReport(st, 'rpt_v1c', [{ fileId: 'f1' }])
+      armAi(st)
+      process.env.MC_REPORT_VISION = 'true'
+      const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v1c' })
+      assert.ok(r.ok && r.data.visionIncluded === true, "'true' 非 '0' → 仍视觉")
+      assert.equal(st.cloud.__state.downloadCalls.length, 1, '有下载')
+    }
   })
 
   await scenario('V2 视觉开+无附件：元数据模式，零下载、零 OCR、无图片指令', async () => {
@@ -183,7 +210,6 @@ async function main() {
     seedVision(st)
     mkReport(st, 'rpt_v2', [])
     const aiCalls = armAi(st)
-    process.env.MC_REPORT_VISION = '1'
     const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v2' })
     assert.ok(r.ok && r.data.enabled === true)
     assert.equal(r.data.ocrIncluded, false, 'ocrIncluded=false')
@@ -200,7 +226,6 @@ async function main() {
     seedVision(st)
     mkReport(st, 'rpt_v3', [{ fileId: 'f1' }, { fileId: 'f2' }])
     const aiCalls = armAi(st)
-    process.env.MC_REPORT_VISION = '1'
     const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v3' })
     assert.ok(r.ok && r.data.enabled === true, '成功')
     assert.deepEqual(st.cloud.__state.downloadCalls, ['cloud://env/formal/f1', 'cloud://env/formal/f2'], '按页序下载 formal 句柄')
@@ -339,7 +364,6 @@ async function main() {
     seedVision(st)
     mkReport(st, 'rpt_v10', [{ fileId: 'f1' }, { fileId: 'f2' }, { fileId: 'f3' }, { fileId: 'f4' }, { fileId: 'f5' }])
     const aiCalls = armAi(st)
-    process.env.MC_REPORT_VISION = '1'
     const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v10' })
     assert.ok(r.ok && r.data.visionIncluded === true)
     assert.equal(st.cloud.__state.downloadCalls.length, 3, '恰下载 3 页')
@@ -388,7 +412,6 @@ async function main() {
     seedVision(st)
     mkReport(st, 'rpt_v12', [{ fileId: 'f1' }])
     st.tools.__setAiMock(async () => { throw new Error('ai-empty-response') })
-    process.env.MC_REPORT_VISION = '1'
     const r = await st.call({ action: 'ai.analyzeReport', reportId: 'rpt_v12' })
     assert.ok(!r.ok && r.code === 'ai-call-failed', `实得 ${r.code}`)
     assert.ok(String(r.message).includes('AI 服务调用失败'), '文案与 OCR 版一致')

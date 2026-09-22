@@ -116,6 +116,8 @@ function makeStack(member = 'mama') {
   delete process.env.MC_OCR_PROVIDER
   delete process.env.MC_OCR_TENCENT_SECRET_ID
   delete process.env.MC_OCR_TENCENT_SECRET_KEY
+  // 本套件锁 OCR 路径契约——视觉直读 2026-09-22 起默认开启（恰 '0' 关闭），须显式关闭
+  process.env.MC_REPORT_VISION = '0'
   cloud.__setCtx(member === 'mama' ? TEST_ENV.MC_MEMBER_MAMA_OPENID : member === 'papa' ? TEST_ENV.MC_MEMBER_PAPA_OPENID : member)
   const tools = requireHandler()
   tools.__setCloud(cloud)

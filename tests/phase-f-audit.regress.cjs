@@ -97,6 +97,8 @@ function makeStack() {
   for (const [k, v] of Object.entries(TEST_ENV)) process.env[k] = v
   process.env.MC_FAMILY_ID = TEST_ENV.MC_FAMILY_ID
   delete process.env.DEEPSEEK_API_KEY
+  // 视觉直读 2026-09-22 起默认开启（恰 '0' 关闭）——F 审计联动走元数据路径须显式关闭
+  process.env.MC_REPORT_VISION = '0'
   toolsH.__setCloud(cloud)
   const wxCloud = {
     init() {},

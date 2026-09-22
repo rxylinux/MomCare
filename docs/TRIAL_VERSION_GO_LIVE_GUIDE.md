@@ -174,8 +174,8 @@ npm run release:trial -- --desc "修复XX" --functions mc-health,mc-collab
 
 **可选项 B——AI 解读与报告图片理解**（可以永远不做）：
 - 给 mc-tools 配 `DEEPSEEK_API_KEY` 即启用报告 AI 解读与饮食 AI 咨询；不配则永远显示"未配置，请遵医嘱"，所有基础功能不受影响。费用走 DeepSeek 自己的账户。
-- **推荐：配 `MC_REPORT_VISION=1` 启用报告图片视觉直读**（2026-09-22 起，规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）——附件照片由服务端下载后直接送 deepseek-flash（原生视觉）逐项解读；不需要服务市场配额/额外账号/密钥，模型须为 `deepseek-flash`（默认即是）。解读页无"报告原文提取"块（图片不落中间文本）。
-- 备选：配 `MC_OCR_PROVIDER=wechat` 走 OCR 两段式（微信 OCR 提取文字→文字送 DeepSeek），解读页显示"报告原文提取（OCR）"供核对。**前置坑（2026-09-22 实录）**：须先在 mp 后台「服务市场」领取/订购 OCR（通用文字识别）资源包，否则报 `not enough market quota`；且手机原图可能识别为空（`ocr-empty-text`）。两者同配时视觉直读生效（整体跳过 OCR）。
+- **报告图片视觉直读默认开启**（2026-09-22 起，规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）——附件照片由服务端下载后直接送 deepseek-flash（原生视觉）逐项解读；**无需任何配置**（模型须为 `deepseek-flash`，缺省即是）。解读页无"报告原文提取"块（图片不落中间文本）。回退：mc-tools 配 `MC_REPORT_VISION=0`。
+- 备选（视觉关闭后可达）：配 `MC_OCR_PROVIDER=wechat` 走 OCR 两段式（微信 OCR 提取文字→文字送 DeepSeek），解读页显示"报告原文提取（OCR）"供核对。**前置坑（2026-09-22 实录）**：须先在 mp 后台「服务市场」领取/订购 OCR（通用文字识别）资源包，否则报 `not enough market quota`；且手机原图可能识别为空（`ocr-empty-text`）。
 - 配好后把 **mc-tools 函数超时调到 ≥90 秒**（控制台 → 云函数 → mc-tools → 配置），图片下载+解读全程可能超过默认超时。
 - 依赖关系：要读真实报告照片，须先开启可选项 A（上传通道）——没有附件就没有图可识别；只开 A 不开 B 也完全可用（原件阅读）。
 - **隐私指引需补充**（按所配模式如实写）：视觉直读=报告图片直接送 DeepSeek 处理；OCR 模式=报告图片经微信 OCR 服务（腾讯体系）提取文字、文字送 DeepSeek——在《用户隐私保护指引》补充第三方处理说明后再启用。
@@ -189,8 +189,8 @@ npm run release:trial -- --desc "修复XX" --functions mc-health,mc-collab
 | "仅限本家庭成员使用" | OpenID 没配或配错（注意 mama/papa 别填反）；改完环境变量需重新打开小程序 |
 | 报告页"上传通道未启用" | 正常，见阶段 9 可选项 A |
 | AI 处处"未配置，请遵医嘱" | 正常，未配 DeepSeek Key 的诚实降级 |
-| 解读没读图（只基于日期/备注） | 正常：未配 `MC_REPORT_VISION`/`MC_OCR_PROVIDER` 或报告无附件；配前先开上传通道（可选项 A） |
-| OCR 解读中途报"OCR 识别失败" | 按日志 errMsg 对号：`not enough market quota`=服务市场 OCR 配额未领取（mp 后台领取）；`ocr-empty-text`=照片识别为空（重拍或改配 `MC_REPORT_VISION=1` 视觉直读） |
+| 解读没读图（只基于日期/备注） | 正常：报告无附件，或配了 `MC_REPORT_VISION=0` 关闭视觉直读；有附件时视觉默认开启，先开上传通道（可选项 A） |
+| OCR 解读中途报"OCR 识别失败" | 仅 `MC_REPORT_VISION=0` 时走 OCR 才可能：按日志 errMsg 对号（`not enough market quota`=服务市场配额未领取；`ocr-empty-text`=识别为空）——建议去掉 `MC_REPORT_VISION=0` 回默认视觉直读 |
 | 视觉直读报"图片格式不受支持" | 照片为 HEIC 等未支持格式（支持 JPEG/PNG/GIF/WebP）——重拍或重新选图 |
 | 视觉直读报"附件过大" | 单图 >16MiB 或合计 >24MiB——减少页数或换较小图片 |
 | 体验版二维码失效/旧版本 | 重新上传后在后台重新设为体验版，取新二维码 |
