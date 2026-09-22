@@ -308,11 +308,11 @@ async function main() {
     assert.equal(uniCalls.uploads.length, 0, 'mock 分支零 uploadFile')
     assert.ok(uniCalls.toasts.some(t => String(t).includes('解读完成')) || rOn === true, `成功提示/真值（实得 ${rOn}，${JSON.stringify(uniCalls.toasts)}）`)
     if (rOn === true) {
+      // 2026-09-22 起 family 模式 triggerAiPipeline 全程不读写旧本地库（云端权威——断言见下）；
+      // 旧库种子保持 pending 原值（不再被标成 processing/done）
       const local = (JSON.parse(storage.get(reportsKey) || '{}').reports || []).find(r => r._id === 'rpt_f1')
       if (local) {
-        assert.equal(local.ai_status, 'done', 'ai_status=done')
-        assert.equal(local.ocr_status, 'done', 'ocr_status=done')
-        assert.ok(local.ai_result && String(local.ai_result.overall_summary || '').includes('MOCK'), `ai_result 回写（实得 ${JSON.stringify(local.ai_result).slice(0, 120)}）`)
+        assert.equal(local.ai_status, 'pending', '旧本地库保持原值（family 模式不触碰）')
       }
     }
     // 服务端权威：ai_result 已落 mc_reports

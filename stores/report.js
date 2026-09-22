@@ -5,6 +5,7 @@ import { request, API_BASE, getToken, isRealAuthed, isGuestMode } from '@/utils/
 import { useToolsStore } from '@/services/toolsStore.js'
 import { reportsStorageKey, isDemoMode, FORMAL_REPORTS_KEY } from '@/utils/storage.js'
 import { legacyFormalStoresEnabled, formalStoresQuarantineMessage, legacyHttpEnabled, legacyDisabledMessage } from '@/utils/backendGate.js'
+import { isFamilyMode } from '@/services/sessionService.js'
 
 // 报告类型映射
 export const REPORT_TYPES = [
@@ -709,7 +710,12 @@ function _markUnverifiedOnRead(list) {
 
     const previousAiStatus = report.ai_status || 'pending'
     const previousOcrStatus = report.ocr_status || 'pending'
-    _updateReportField(reportId, { ai_status: 'processing', ocr_status: 'processing' })
+    // family 模式：权威持久化在云端（mc-tools CAS 写 ai_result/ocr_result/vision_result），
+    // 本管线全程不读写旧本地库（B3 隔离恒拒写——读写都会产生误导态或"本机保存失败"误报）。
+    // demo/legacy：本地库标记/持久化照旧，失败如实提示。
+    const familyMode = isFamilyMode()
+    const localMark = familyMode ? () => {} : updates => _updateReportField(reportId, updates)
+    localMark({ ai_status: 'processing', ocr_status: 'processing' })
 
     try {
       uni.showLoading({ title: 'AI 正在分析…', mask: true })
@@ -721,7 +727,7 @@ function _markUnverifiedOnRead(list) {
 
       if (!res.ok) {
         // 云端调用失败（网络/鉴权/报告不存在等）：如实失败，不消耗次数
-        _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+        localMark({ ai_status: previousAiStatus, ocr_status: previousOcrStatus })
         uni.showToast({ title: res.message || 'AI 解读失败，请稍后重试', icon: 'none', duration: 2500 })
         return false
       }
@@ -730,7 +736,7 @@ function _markUnverifiedOnRead(list) {
 
       if (data.enabled === false) {
         // 未配置 DeepSeek/OCR 服务：优雅提示（规格原文），不抛错、不改失败态、不扣次数
-        _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+        localMark({ ai_status: previousAiStatus, ocr_status: previousOcrStatus })
         uni.showToast({
           title: '报告自动 OCR / DeepSeek 解读服务未配置；请以原始检验单与主治医生诊断为准',
           icon: 'none',
@@ -749,18 +755,21 @@ function _markUnverifiedOnRead(list) {
       // 结构校验：空结果不能标记完成，也不能当作成功扣次数
       if (!isValidAiResult(aiData)) {
         console.warn('triggerAiPipeline: invalid AI payload, treated as failure:', aiData)
-        _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+        localMark({ ai_status: previousAiStatus, ocr_status: previousOcrStatus })
         uni.showToast({ title: 'AI 未返回有效解读内容，未消耗次数，请稍后重试', icon: 'none', duration: 3000 })
         return false
       }
 
-      const persisted = _updateReportField(reportId, {
-        ai_status: 'done',
-        ocr_status: 'done',
-        ai_result: aiData,
-        // Phase G：存服务端 OCR 提取原文（未含 OCR 时为空串）——修复旧占位把 AI 回答误存为 ocr_text
-        ocr_text: typeof data.ocrText === 'string' ? data.ocrText : ''
-      })
+      let persisted = true
+      if (!familyMode) {
+        persisted = _updateReportField(reportId, {
+          ai_status: 'done',
+          ocr_status: 'done',
+          ai_result: aiData,
+          // Phase G：存服务端 OCR 提取原文（未含 OCR 时为空串）——修复旧占位把 AI 回答误存为 ocr_text
+          ocr_text: typeof data.ocrText === 'string' ? data.ocrText : ''
+        })
+      }
       await health.consumeAiInterpretQuota()
 
       uni.showToast({
@@ -772,7 +781,7 @@ function _markUnverifiedOnRead(list) {
     } catch (err) {
       console.error('AI pipeline failed:', err)
       uni.hideLoading()
-      _updateReportField(reportId, { ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+      localMark({ ai_status: previousAiStatus, ocr_status: previousOcrStatus })
       uni.showToast({ title: err?.message || 'AI 解读失败', icon: 'none', duration: 2500 })
       return false
     }

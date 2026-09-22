@@ -486,8 +486,10 @@ async function main() {
     w.report.reports[0] = { ...w.report.reports[0], _id: 'rpt_ai_probe' }
     const ok = await w.report.triggerAiPipeline('rpt_ai_probe')
     assert.equal(ok, true)
-    assert.equal(w.report.reports[0].ai_status, 'done')
-    assert.equal(w.report.reports[0].ocr_status, 'done')
+    // 2026-09-22 起family 模式解读完成态以云端为权威：旧本地库不再标记（B3 隔离恒拒写）
+    assert.ok(w.report.reports[0].ai_status !== 'done', '旧本地库不再标记完成（云端权威）')
+    const srv = w.__aiDocs.get('mc_reports/rpt_ai_probe')
+    assert.ok(srv && srv.ai_result && String(srv.ai_result.text).includes('各项指标大体平稳'), '云端 ai_result 回写为完成态权威')
     assert.equal(w.health.aiInterpretQuota.used, 1)
   })
 
@@ -731,7 +733,7 @@ async function main() {
     assert.equal(w.report.unarchivedReports.length, 0) // 内存已删
   })
 
-  await scenario('AI 解读成功但本机写盘失败：提示明确且仍算解读完成', async () => {
+  await scenario('AI 解读成功但本机写盘失败：family 云端权威——无误报且仍算解读完成', async () => {
     const payload = { overall_summary: 'ok', abnormal_indicators: [], action_suggestions: [] }
     const w = makeWorld({ requestMode: 'aiPayload', aiPayload: payload })
     api.setToken('synthetic-real-token')
@@ -742,8 +744,11 @@ async function main() {
     w.report.reports[0] = { ...w.report.reports[0], _id: 'rpt_ai_probe' }
     const ok = await w.report.triggerAiPipeline('rpt_ai_probe')
     assert.equal(ok, true)
-    assert.equal(w.report.reports[0].ai_status, 'done')
-    assert.ok(w.toasts.some(t => /本机保存失败/.test(t)))
+    // 2026-09-22 误报修复回归：旧库被 B3 隔离恒拒写，family 模式不得再报"本机保存失败"
+    assert.ok(!w.toasts.some(t => /本机保存失败/.test(t)), '无误报 toast')
+    assert.ok(w.toasts.some(t => t === '解读完成'), '如实提示解读完成')
+    assert.equal(w.health.aiInterpretQuota.used, 1)
+    assert.ok(w.__aiDocs.get('mc_reports/rpt_ai_probe').ai_result, '云端权威持久化在场')
   })
 
   await scenario('同孕周两条历史记录迁移后全部保留（Codex P1-C）', async () => {

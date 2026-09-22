@@ -92,9 +92,12 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, getTypeInfo } from '@/stores/report'
-import { getSessionState, isExplicitDemo } from '@/services/sessionService.js'
+import { getSessionState, isExplicitDemo, isFamilyMode } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
+import { familyAiView } from '@/services/aiReportView.js'
 
 const reportStore = useReportStore()
+const familyStore = useFamilyStore()
 // B2b2 原则保持：无真实结果不呈现任何"解读完成"式内容；
 // Phase G 起正式态（家庭模式）有云端真实 ai_result（triggerAiPipeline 成功后写入）即展示。
 import { watch } from 'vue'
@@ -212,6 +215,22 @@ function mapSeverity(severity) {
 
 onLoad(async (options) => {
   if (options.id) {
+    if (isFamilyMode()) {
+      // family 正式态：权威源=云端 mc_reports 记录（detail 已 pull 过；缺场兜底再拉一次）。
+      // 旧本地库在 family 模式为空（B3 隔离）——解读结果只能从这里读
+      if (!familyStore.reports[options.id]) {
+        try { await familyStore.pullReports() } catch (e) { /* 拉取失败保持空态，aiDisabled 如实展示 */ }
+      }
+      const rec = familyStore.reports[options.id]
+      if (rec && !rec.deleted) {
+        report.value = {
+          _id: options.id, report_type: rec.reportType, report_date: rec.dateKey,
+          ...familyAiView(rec)
+        }
+      }
+      return
+    }
+    // demo / legacy：旧本地库（原行为）
     const found = reportStore.reports.find(r => r._id === options.id) ||
                   reportStore.unarchivedReports.find(r => r._id === options.id)
     if (found) {

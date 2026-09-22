@@ -11,6 +11,7 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const assert = require('node:assert/strict')
 const root = path.resolve(__dirname, '..')
+const esbuild = require(require.resolve('esbuild', { paths: [root] }))
 
 const HANDLER_REL = 'cloud/functions/mc-tools/index.js'
 if (!fs.existsSync(path.join(root, HANDLER_REL))) {
@@ -40,6 +41,11 @@ function requireHandler() {
 const FROZEN_RELS = [
   'cloud/functions/mc-tools/index.js',
   'cloud/functions/mc-tools/config.json',
+  'services/aiReportView.js',
+  'services/sessionService.js',
+  'stores/report.js',
+  'pages/archives/detail.vue',
+  'pages/archives/ai-result.vue',
 ]
 const frozenHashes = Object.fromEntries(FROZEN_RELS.map(rel => [rel, sha256(fs.readFileSync(path.join(root, rel)))]))
 console.log('冻结源哈希（加载时快照）:')
@@ -419,6 +425,59 @@ async function main() {
     const doc = st.cloud.__docs.get('mc_reports/rpt_v12')
     assert.equal(doc.revision, 1, '零写库')
     assert.ok(doc.ai_result === undefined && doc.vision_result === undefined)
+  })
+
+  await scenario('W1 familyAiView 单元：云端记录→旧模板 AI 形状（done/OCR 原文/pending/边界）', async () => {
+    const viewBundle = path.join(DIST, 'aiview.cjs')
+    esbuild.buildSync({
+      stdin: { contents: "export * from './services/aiReportView.js';\n", resolveDir: root },
+      bundle: true, platform: 'node', format: 'cjs', alias: { '@': root },
+      outfile: viewBundle, logLevel: 'silent'
+    })
+    const view = require(viewBundle)
+    // 已解读（视觉模式：无 ocr_result）
+    const done = view.familyAiView({ deleted: false, ai_result: { text: '解读正文：整体与孕周相符。', model: 'deepseek-flash', generatedAt: 1 } })
+    assert.equal(done.ai_status, 'done', '有 ai_result.text → done')
+    assert.equal(done.ai_result.overall_summary, '解读正文：整体与孕周相符。', '正文进 overall_summary')
+    assert.deepEqual(done.ai_result.suggestions, [view.AI_SUGGESTION_LINE], '固定提示行与 triggerAiPipeline wrapper 一致')
+    assert.equal(done.ocr_text, '', '无 ocr_result → 空串（OCR 块不渲染）')
+    // OCR 模式记录：ocr_result 原文透传
+    const ocr = view.familyAiView({ deleted: false, ai_result: { text: 'x' }, ocr_result: { text: '双顶径 8.4cm', included: true } })
+    assert.equal(ocr.ocr_text, '双顶径 8.4cm', 'OCR 原文透传')
+    // 未解读 / 删除 / 空记录 / 纯空白文本 → pending 空态
+    for (const [name, rec] of [
+      ['无 ai_result', { deleted: false }],
+      ['deleted', { deleted: true, ai_result: { text: 'x' } }],
+      ['null', null],
+      ['空白文本', { deleted: false, ai_result: { text: '   ' } }],
+      ['text 非串', { deleted: false, ai_result: { text: 42 } }],
+    ]) {
+      const e = view.familyAiView(rec)
+      assert.ok(e.ai_status === 'pending' && e.ai_result === null && e.ocr_text === '', `空态：${name}`)
+    }
+  })
+
+  await scenario('W2 family 读侧接线契约：detail 映射/结果页数据源/误报消除/单一判定源', async () => {
+    const read = rel => fs.readFileSync(path.join(root, rel), 'utf8')
+    // 单一判定源：sessionService 导出 isFamilyMode；detail 本地重复定义已移除
+    const sessSrc = read('services/sessionService.js')
+    assert.ok(sessSrc.includes('export function isFamilyMode()'), 'sessionService 导出 isFamilyMode')
+    const detailSrc = read('pages/archives/detail.vue')
+    assert.ok(detailSrc.includes("import { isFamilyMode, subscribeSession, currentEpoch }"), 'detail 引入共享判定')
+    assert.ok(!detailSrc.includes('const isFamilyMode = () =>'), 'detail 本地重复定义已移除')
+    assert.ok(detailSrc.includes('...familyAiView(r)'), 'famReportToLegacy 铺开云端 AI 字段（此前断层的根）')
+    // 结果页：family 分支读 familyStore 云端记录；demo/legacy 旧库兜底保留
+    const aiResultSrc = read('pages/archives/ai-result.vue')
+    assert.ok(aiResultSrc.includes('familyStore.reports[options.id]'), '结果页 family 分支读云端记录')
+    assert.ok(aiResultSrc.includes('...familyAiView(rec)'), '结果页用共享映射')
+    assert.ok(aiResultSrc.includes('reportStore.reports.find(r => r._id === options.id)'), 'demo/legacy 旧库兜底保留')
+    // 误报消除：family 模式整条管线不读写旧本地库；demo/legacy 失败提示保留（含 G13 契约原文）
+    const reportSrc = read('stores/report.js')
+    assert.ok(reportSrc.includes('const familyMode = isFamilyMode()'), '管线入口单一 family 判定')
+    assert.ok(reportSrc.includes("const localMark = familyMode ? () => {} : updates => _updateReportField(reportId, updates)"), 'family 模式旧库读写全跳过（localMark 空操作）')
+    assert.ok(reportSrc.includes('let persisted = true'), 'family 模式 persisted 恒 true（无误报）')
+    assert.ok(reportSrc.includes("ocr_text: typeof data.ocrText === 'string' ? data.ocrText : ''"), 'G13 契约原文保留')
+    assert.ok(reportSrc.includes('解读完成，但本机保存失败'), 'demo/legacy 保存失败如实提示保留')
   })
 
   await scenario('Z9 冻结源哈希：运行期间源未被并发编辑', async () => {

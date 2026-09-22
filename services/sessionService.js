@@ -121,6 +121,12 @@ export function isExplicitLoggedOut() {
   }
 }
 
+// family 正式态单一判定（2026-09-22 起从 detail.vue 本地定义提升为共享导出）：
+// 已确认家庭会话且非显式演示/登出——解读读侧（detail/ai-result）与 report 店共用
+export function isFamilyMode() {
+  return getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
+}
+
 export function persistedSessionExists() {
   if (cloudRuntimeState() === 'not-configured') return false
   try {

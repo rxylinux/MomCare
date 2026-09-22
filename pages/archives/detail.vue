@@ -192,15 +192,15 @@ import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { navigateToPage } from '@/utils/navigation.js'
 import NavBar from '@/components/NavBar.vue'
 import { useReportStore, REPORT_TYPES, getTypeInfo } from '@/stores/report'
-import { getSessionState, isExplicitDemo, isExplicitLoggedOut, subscribeSession, currentEpoch } from '@/services/sessionService.js'
+import { isFamilyMode, subscribeSession, currentEpoch } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
+import { familyAiView } from '@/services/aiReportView.js'
 import { fetchReportReadUrls } from '@/services/fileUploadService.js'
 import { legacyHttpEnabled } from '@/utils/backendGate.js'
 import { useHealthStore } from '@/stores/health.js'
 
 const reportStore = useReportStore()
 const familyStore = useFamilyStore()
-const isFamilyMode = () => getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut()
 // family 权威报告 → 旧模板消费形状；临时 URL 按需签发（不持久化）
 const famReadUrls = ref([])
 // 会话失效清屏：报告正文/临时 URL/编辑态全部清除（familyStore 清数据外，
@@ -222,7 +222,9 @@ function famReportToLegacy(r) {
     _id: r.id, report_type: r.reportType, report_date: r.dateKey,
     archive_status: r.archiveStatus, note: r.note || '', notes: r.note || '',
     file_urls: famReadUrls.value.map(u => u.tempFileURL),
-    _attachmentCount: (r.attachments || []).length, _cloud: true, revision: r.revision || 0
+    _attachmentCount: (r.attachments || []).length, _cloud: true, revision: r.revision || 0,
+    // 云端解读权威读侧：ai_status/ai_result/ocr_text（此前断层——解读已落云但页面永远"未解读"）
+    ...familyAiView(r)
   }
 }
 const healthStore = useHealthStore()
