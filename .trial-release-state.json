@@ -1,7 +1,10 @@
 {
-  "version": "1.1.11",
-  "desc": "修复family模式解读结果不显示+本机保存失败误报（云端权威读侧接线）",
-  "commit": "a0b898047f5716b7acbcc8ea2e18f4b4d1f8ff72",
-  "functions": [],
-  "releasedAt": "2026-09-22T01:25:15.318Z"
+  "version": "1.1.12",
+  "desc": "修复删除报告后退列表不刷新+新增报告医院/孕周字段录入",
+  "commit": "602e273797ad240e7707a27907eb1d4d8f0f12b6",
+  "functions": [
+    "mc-reports",
+    "mc-restore"
+  ],
+  "releasedAt": "2026-09-22T13:50:09.558Z"
 }
