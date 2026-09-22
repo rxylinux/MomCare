@@ -371,6 +371,27 @@ async function loadFamilyThumbs(list) {
 const famReports = computed(() => Object.values(familyStore.reports)
   .filter(r => !r.deleted && r.archiveStatus === 'archived').map(famReportToLegacy))
 
+// 实际模板消费：把【当前】权威 family 数据（含恢复的成员快照）映射进 reportStore
+// 派生源——模板/筛选/分组/计数全部经由 store computeds 消费 family 数据；
+// 提升到页面作用域供 loadData 与 onShow 共用：详情页删除已给权威记录打墓碑，
+// onShow 先本地重映射即可让已删条目（含概览图）立即下屏，不依赖网络拉取
+function mapFamilyReports() {
+  const mapped = Object.values(familyStore.reports)
+    .filter(r => !r.deleted)
+    .map(r => ({
+      _id: r.id,
+      report_type: r.reportType,
+      report_date: r.dateKey,
+      archive_status: r.archiveStatus,
+      note: r.note || '',
+      file_urls: famThumbUrls.value[r.id] ? [famThumbUrls.value[r.id]] : [],
+      _attachmentCount: (r.attachments || []).length,
+      _cloud: true
+    }))
+  reportStore.reports = mapped.filter(r => r.archive_status === 'archived')
+  reportStore.unarchivedReports = mapped.filter(r => r.archive_status !== 'archived')
+}
+
 const showUploadSheet = ref(false)
 const showFilterSheet = ref(false)
 const loading = ref(true)
@@ -399,6 +420,12 @@ onMounted(async () => {
 })
 
 onShow(async () => {
+  // family 模式：权威 store 可能已被他处更新（如详情页删除打墓碑）——
+  // 先本地重映射让列表立即正确，再走既有刷新判定（不动"避免频繁查询"门槛）
+  if (dataSource.value === 'family') {
+    mapFamilyReports()
+  }
+
   // 检查是否需要刷新（AI 解读后会设置标志）
   if (reportStore.listNeedsRefresh) {
     reportStore.listNeedsRefresh = false
@@ -428,31 +455,12 @@ async function loadData() {
     // 冷启动/回前台确认在途时不发拉取（R7）：等确认落定再拉，消除
     // "身份确认进行中"被误报成"同步失败"整页错误
     await settleConfirm()
-    // 实际模板消费：先把【当前】权威数据（含恢复的成员快照）映射进 reportStore
-    // 派生源——模板/筛选/分组/计数全部经由 store computeds 消费 family 数据；
-    // 拉取失败时暖离线显示最近数据，不因同步失败清空页面
-    const mapToTemplate = () => {
-      const mapped = Object.values(familyStore.reports)
-        .filter(r => !r.deleted)
-        .map(r => ({
-          _id: r.id,
-          report_type: r.reportType,
-          report_date: r.dateKey,
-          archive_status: r.archiveStatus,
-          note: r.note || '',
-          file_urls: famThumbUrls.value[r.id] ? [famThumbUrls.value[r.id]] : [],
-          _attachmentCount: (r.attachments || []).length,
-          _cloud: true
-        }))
-      reportStore.reports = mapped.filter(r => r.archive_status === 'archived')
-      reportStore.unarchivedReports = mapped.filter(r => r.archive_status !== 'archived')
-    }
-    mapToTemplate()
+    mapFamilyReports()
     const res = await familyStore.pullReports()
     if (res.ok) {
-      mapToTemplate()
+      mapFamilyReports()
       await loadFamilyThumbs(Object.values(familyStore.reports).filter(r => !r.deleted))
-      mapToTemplate() // 缩略 URL 就绪后刷新一次
+      mapFamilyReports() // 缩略 URL 就绪后刷新一次
     } else if (reportStore.reports.length === 0 && reportStore.unarchivedReports.length === 0) {
       loadError.value = '同步失败，请重试' // 仅无任何可显示内容时提示错误；暖数据不被错误提示遮蔽
       loadErrorHint.value = res.message || res.code || '网络异常或云端暂时不可用，请稍后重试' // 真实原因，不做配额猜测
