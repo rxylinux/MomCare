@@ -65,7 +65,7 @@
             <view class="form-label">
               <text class="form-label-text">就诊医院（可选）</text>
             </view>
-            <input v-if="!isFamilyMode()" class="form-input" v-model="hospital" placeholder="输入医院名称" placeholder-class="input-placeholder" />
+            <input class="form-input" v-model="hospital" placeholder="输入医院名称" placeholder-class="input-placeholder" />
           </view>
 
           <!-- Pregnancy Week -->
@@ -73,7 +73,7 @@
             <view class="form-label">
               <text class="form-label-text">当时孕周（可选）</text>
             </view>
-            <input v-if="!isFamilyMode()" class="form-input" v-model="gestationWeek" placeholder="如：12" type="number" placeholder-class="input-placeholder" />
+            <input class="form-input" v-model="gestationWeek" placeholder="如：12" type="number" placeholder-class="input-placeholder" />
           </view>
 
           <!-- Notes -->
@@ -127,6 +127,8 @@ watch(subscribeSession(), () => {
     editBaseline.value = null
     selectedType.value = ''
     reportDate.value = ''
+    hospital.value = ''
+    gestationWeek.value = ''
     notes.value = ''
     fileUrls.value = []
     previewUrl.value = ''
@@ -189,6 +191,8 @@ onLoad((options) => {
         editBaseline.value = { id: rec.id, revision: rec.revision || 0 }
         selectedType.value = rec.reportType || ''
         reportDate.value = rec.dateKey || ''
+        hospital.value = rec.hospital || ''
+        gestationWeek.value = rec.weekOfPregnancy != null ? String(rec.weekOfPregnancy) : ''
         notes.value = rec.note || ''
         nextTick(() => { hydrating = false }) // watch flush:pre 在下一 tick——同步复位太早
         return true
@@ -201,6 +205,8 @@ onLoad((options) => {
           if (ed.reportType !== undefined && ed.reportType !== null) selectedType.value = ed.reportType
           if (ed.dateKey !== undefined && ed.dateKey !== null) reportDate.value = ed.dateKey
           if ('note' in ed) notes.value = ed.note === null ? '' : ed.note // null→''（旧格式兼容）；''=显式清空
+          if ('hospital' in ed) hospital.value = ed.hospital === null ? '' : (ed.hospital || '')
+          if ('gestationWeek' in ed) gestationWeek.value = ed.gestationWeek === null || ed.gestationWeek === undefined ? '' : String(ed.gestationWeek)
           // 草稿保存的编辑基线优先：恢复后不被最新云 revision 替换
           if (ed.baselineRevision !== undefined && ed.baselineRevision !== null) {
             editBaseline.value = { id: reportId.value, revision: ed.baselineRevision }
@@ -224,6 +230,8 @@ onLoad((options) => {
       if (b && b.draft) {
         selectedType.value = b.draft.reportType || ''
         reportDate.value = b.draft.dateKey || ''
+        hospital.value = b.draft.hospital || ''
+        gestationWeek.value = b.draft.gestationWeek != null ? String(b.draft.gestationWeek) : ''
         notes.value = b.draft.note || ''
       }
     }
@@ -315,10 +323,17 @@ function goBack() {
 // ── 编辑期草稿持久化：表单字段变更即落盘（批次→batch.draft；已有报告→成员编辑草稿），
 // 未点击保存的输入不丢失；onLoad 已恢复批次草稿/编辑草稿 ──
 let draftPersistTimer = null
+// family 云端值归一：hospital ''→null（显式清空）；week ''/非整数→null（type=number 输入以字符串持有）
+function famHospitalOut() { return hospital.value === '' ? null : hospital.value }
+function famWeekOut() {
+  if (gestationWeek.value === '' || gestationWeek.value == null) return null
+  const n = Number(gestationWeek.value)
+  return Number.isInteger(n) ? n : null
+}
 function persistDraftNow() {
   if (!(getSessionState().status === 'confirmed' && !isExplicitDemo() && !isExplicitLoggedOut())) return
   // note 保留原始字符串（含空串=用户显式清空）；不以 || null 把 '' 抹成 null
-  const draft = { reportType: selectedType.value, dateKey: reportDate.value, note: notes.value }
+  const draft = { reportType: selectedType.value, dateKey: reportDate.value, note: notes.value, hospital: hospital.value, gestationWeek: gestationWeek.value }
   if (familyBatchId.value) {
     reportFamilyStore.persistBatchDraft(familyBatchId.value, { ...draft, archiveStatus: 'archived' })
   } else if (reportId.value) {
@@ -329,7 +344,7 @@ function persistDraftNow() {
   }
 }
 let hydrating = false // 程序化 hydrate 期间不触发自动草稿保存
-watch([selectedType, reportDate, notes], () => {
+watch([selectedType, reportDate, notes, hospital, gestationWeek], () => {
   if (hydrating) return
   if (draftPersistTimer) clearTimeout(draftPersistTimer)
   draftPersistTimer = setTimeout(persistDraftNow, 30)
@@ -375,10 +390,11 @@ async function save() {
       if (familyBatchId.value) {
         const b = reportFamilyStore.batch(familyBatchId.value)
         if (b) {
-          b.draft = { reportType: selectedType.value, dateKey: reportDate.value, note: notes.value || null, archiveStatus: 'archived' }
+          b.draft = { reportType: selectedType.value, dateKey: reportDate.value, note: notes.value || null, hospital: hospital.value, gestationWeek: gestationWeek.value, archiveStatus: 'archived' }
         }
         const r = await reportFamilyStore.createReportFromBatch(familyBatchId.value, {
-          reportType: selectedType.value, dateKey: reportDate.value, note: notes.value || null, archiveStatus: 'archived'
+          reportType: selectedType.value, dateKey: reportDate.value, note: notes.value || null, archiveStatus: 'archived',
+          hospital: famHospitalOut(), weekOfPregnancy: famWeekOut()
         })
         uni.hideLoading()
         if (r.draftChanged) {
@@ -403,7 +419,9 @@ async function save() {
                 const ok = reportFamilyStore.persistEditDraft(targetId, {
                   reportType: selectedType.value,
                   dateKey: reportDate.value,
-                  note: notes.value
+                  note: notes.value,
+                  hospital: hospital.value,
+                  gestationWeek: gestationWeek.value
                 }, createBaseline)
                 if (ok) {
                   navigateToPage('/pages/archives/classify?source=p6&reportId=' + encodeURIComponent(targetId))
@@ -452,6 +470,8 @@ async function save() {
         const r = await familyStore2.saveReport(reportId.value, {
           reportType: selectedType.value || undefined,
           dateKey: reportDate.value || undefined,
+          hospital: famHospitalOut(),
+          weekOfPregnancy: famWeekOut(),
           note: notes.value === '' ? null : (notes.value || undefined),
           archiveStatus: 'archived'
         }, bl.revision)
@@ -542,6 +562,8 @@ async function save() {
       const r = await familyStore2.saveReport(reportId.value, {
         reportType: selectedType.value || undefined,
         dateKey: reportDate.value || undefined,
+        hospital: famHospitalOut(),
+        weekOfPregnancy: famWeekOut(),
         note: notes.value === '' ? null : (notes.value || undefined)
       }, bl.revision)
       uni.hideLoading()
@@ -563,6 +585,8 @@ async function save() {
         reportType: selectedType.value,
         dateKey: reportDate.value,
         note: notes.value || null,
+        hospital: hospital.value,
+        weekOfPregnancy: famWeekOut(),
         archiveStatus: 'archived'
       })
       uni.hideLoading()

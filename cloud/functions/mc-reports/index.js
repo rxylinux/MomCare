@@ -42,6 +42,9 @@ const REPORT_TYPES = [
   'nipt', 'obstetric', 'biochemical', 'other'
 ]
 const NOTE_MAX = 500
+const HOSPITAL_MAX = 100
+const WEEK_MIN = 1
+const WEEK_MAX = 45
 const ATTACHMENTS_MAX = 20
 const FILEID_RE = /^[A-Za-z0-9:_-]{1,128}$/
 // 清理协议参数（部署期可按需调整为配置；默认值用于隔离验证）
@@ -131,6 +134,20 @@ function sanitizeReport(input) {
     if (input.note === null || input.note === '') out.note = null
     else if (typeof input.note !== 'string' || input.note.length > NOTE_MAX) errors.push(`note 须 ≤${NOTE_MAX} 字`)
     else out.note = input.note
+  }
+  // 就诊医院（2026-09-22 补齐）：值语义与 note 一致——null/'' 归一为 null（显式清空）
+  if (input.hospital !== undefined) {
+    if (input.hospital === null || input.hospital === '') out.hospital = null
+    else if (typeof input.hospital !== 'string' || input.hospital.length > HOSPITAL_MAX) errors.push(`hospital 须 ≤${HOSPITAL_MAX} 字`)
+    else out.hospital = input.hospital
+  }
+  // 当时孕周（2026-09-22 补齐）：整数周；null 归一为 null；'' 拒绝（客户端须归一，不猜意图）
+  if (input.weekOfPregnancy !== undefined) {
+    if (input.weekOfPregnancy === null) out.weekOfPregnancy = null
+    else if (typeof input.weekOfPregnancy !== 'number' || !Number.isInteger(input.weekOfPregnancy) ||
+      input.weekOfPregnancy < WEEK_MIN || input.weekOfPregnancy > WEEK_MAX) {
+      errors.push(`weekOfPregnancy 须 ${WEEK_MIN}-${WEEK_MAX} 的整数周或 null`)
+    } else out.weekOfPregnancy = input.weekOfPregnancy
   }
   if (input.attachments !== undefined) {
     if (!Array.isArray(input.attachments)) errors.push('attachments 必须是数组')
@@ -400,6 +417,7 @@ exports.main = async function main(event) {
         familyId: config.familyId, type: 'report',
         dateKey: out.dateKey || '', reportType: out.reportType || 'other',
         archiveStatus: out.archiveStatus || 'unarchived', note: null,
+        hospital: null, weekOfPregnancy: null,
         attachments: [], uploaderId: caller.memberId,
         schemaVersion: SUPPORTED_SCHEMA, deleted: false
       },

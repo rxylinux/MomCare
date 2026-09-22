@@ -524,6 +524,10 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
       reportType: draft.reportType,
       archiveStatus: draft.archiveStatus || 'unarchived',
       note: draft.note || null,
+      hospital: draft.hospital === '' || draft.hospital == null ? null : draft.hospital,
+      weekOfPregnancy: draft.weekOfPregnancy === '' || draft.weekOfPregnancy == null
+        ? null
+        : (Number.isInteger(Number(draft.weekOfPregnancy)) ? Number(draft.weekOfPregnancy) : null),
       attachments
     }
     // 创建意图对账（create-lost）：reportId 是本批次的稳定意图 ID——云端已存在
@@ -558,7 +562,9 @@ export const useReportFamilyStore = defineStore('reportFamilyData', () => {
       const intent = b.createIntent && b.createIntentSaved ? b.createIntent : null
       const sameForm = intent
         ? (intent.reportType === payload.reportType && intent.dateKey === payload.dateKey &&
-           intent.archiveStatus === payload.archiveStatus && (intent.note || null) === (payload.note || null))
+           intent.archiveStatus === payload.archiveStatus && (intent.note || null) === (payload.note || null) &&
+           (intent.hospital || null) === (payload.hospital || null) &&
+           (intent.weekOfPregnancy || null) === (payload.weekOfPregnancy || null))
         : (existing.reportType === payload.reportType && existing.dateKey === payload.dateKey)
       const persistedDone = finishBatch(draft)
       if (!persistedDone) {

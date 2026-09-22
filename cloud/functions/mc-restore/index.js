@@ -216,7 +216,7 @@ const DAILY_FIELDS = ['weightKg', 'systolic', 'diastolic', 'fetalCount', 'shared
 const MOOD_FIELDS = ['mood', 'symptoms', 'note', 'plans']
 const CHECKUP_FIELDS = ['dateKey', 'time', 'hospital', 'companion', 'materials', 'questions', 'examItems', 'status', 'templateKey', 'source']
 const BAG_FIELDS = ['name', 'category', 'quantity', 'location', 'assignee', 'prepared', 'templateKey']
-const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus']
+const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus', 'hospital', 'weekOfPregnancy']
 const RECORD_TOP_ALLOWED = {
   pregnancy: ['id', 'fields', 'revision', 'deleted'],
   daily: ['id', 'dateKey', 'fields', 'revision', 'deleted'],

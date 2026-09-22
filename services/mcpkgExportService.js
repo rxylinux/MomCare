@@ -126,7 +126,8 @@ export async function recoverInterruptedExport() {
 }
 
 // ── 记录白名单投影（SPEC：字段严格白名单；不含 token/OpenID/会话/配额/临时 URL）──
-// 各域白名单 = 源 handler view/sanitize 的真实输出字段（逐行核对 2026-09-20）：
+// 各域白名单 = 源 handler view/sanitize 的真实输出字段（逐行核对 2026-09-20；
+// 2026-09-22 报告域补 hospital/weekOfPregnancy，与 mc-reports sanitizeReport 对齐）：
 // - pregnancy.get viewPregnancy：临床字段在 record.fields（非顶层）——P0 修复
 // - checkup：dateKey/time/hospital/companion/materials/questions/examItems + status/templateKey/source
 // - bag：name/category/quantity/location/assignee/prepared（非 text/done）
@@ -135,7 +136,7 @@ const MOOD_FIELDS = ['mood', 'symptoms', 'note', 'plans']
 const PREGNANCY_FIELDS = ['lmpDate', 'dueDate', 'nickname', 'babyNickname', 'hospital', 'doctor', 'hospitalPhone', 'preWeightKg', 'heightCm']
 const CHECKUP_FIELDS = ['dateKey', 'time', 'hospital', 'companion', 'materials', 'questions', 'examItems', 'status', 'templateKey', 'source']
 const BAG_FIELDS = ['name', 'category', 'quantity', 'location', 'assignee', 'prepared', 'templateKey']
-const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus']
+const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus', 'hospital', 'weekOfPregnancy']
 
 // 服务端文档的非临床元数据键（不进包也不算未知字段）
 const META_IGNORED = ['familyId', 'sortKey', 'updatedAt', 'createdAt', 'updatedBy', 'uploaderId', 'type', 'schemaVersion', 'unsupportedSchema', 'appId', '_id', '__v', 'lastDetachedAt', 'registeredAt']

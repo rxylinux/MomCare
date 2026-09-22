@@ -221,6 +221,8 @@ function famReportToLegacy(r) {
   return {
     _id: r.id, report_type: r.reportType, report_date: r.dateKey,
     archive_status: r.archiveStatus, note: r.note || '', notes: r.note || '',
+    week_of_pregnancy: r.weekOfPregnancy != null ? r.weekOfPregnancy : null,
+    hospital: r.hospital || '',
     file_urls: famReadUrls.value.map(u => u.tempFileURL),
     _attachmentCount: (r.attachments || []).length, _cloud: true, revision: r.revision || 0,
     // 云端解读权威读侧：ai_status/ai_result/ocr_text（此前断层——解读已落云但页面永远"未解读"）
@@ -448,9 +450,15 @@ async function saveEdit() {
         return
       }
       // note 值语义：表单由记录初始化（未改=原值重提，不抹除）；空串=显式清空
+      // hospital/week 同语义：''→null 显式清空；week 表单以字符串持有须转整数
+      const weekRaw = editForm.value.week_of_pregnancy
+      const weekOut = weekRaw === '' || weekRaw == null ? null
+        : (Number.isInteger(Number(weekRaw)) ? Number(weekRaw) : null)
       const r = await familyStore.saveReport(reportId.value, {
         reportType: editForm.value.report_type || undefined,
         dateKey: editForm.value.report_date || undefined,
+        hospital: editForm.value.hospital === '' || editForm.value.hospital == null ? null : editForm.value.hospital,
+        weekOfPregnancy: weekOut,
         note: editForm.value.notes === '' ? null : (editForm.value.notes || undefined)
       }, bl.revision)
       if (currentEpoch() !== bl.epoch) {

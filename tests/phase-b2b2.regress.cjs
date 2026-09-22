@@ -1277,6 +1277,148 @@ await scenario('store12：重选跨身份切换保留原完整批次（两页不
     assert.equal(page.items.value.length, 0, '正式直达不渲染旧原件 canary')
   })
 
+  await scenario('服务11：hospital/weekOfPregnancy 字段语义（入库/非法拒绝/清空归一/部分编辑保留/默认 null）', async () => {
+    const cloud = makeMockCloud()
+    const sv = freshServer(cloud)
+    const stageKey = `mc/${TEST_ENV.MC_FAMILY_ID}/stage/${TEST_ENV.MC_MEMBER_MAMA_OPENID}/hw1`
+    cloud.__stored.set(stageKey, JPEG)
+    const reg = await sv.files({ action: 'registerStaged', uploadId: 'hw1', stageFileID: `cloud://env-b2b2.bucket/${stageKey}` })
+    const fid = reg.data.file.fileId
+    // 创建带两字段：入库并返回
+    const c1 = await sv.request('report.upsert', { id: 'rpt_hw', payload: { dateKey: '2026-09-22', reportType: 'other', hospital: '市妇幼保健院', weekOfPregnancy: 12, attachments: [{ fileId: fid }] } })
+    assert.ok(c1.ok, JSON.stringify(c1))
+    assert.equal(c1.data.record.hospital, '市妇幼保健院')
+    assert.equal(c1.data.record.weekOfPregnancy, 12)
+    // 非法孕周：0/46/1.5/'12'/''——整单拒绝（客户端须归一，服务端不猜意图）
+    for (const bad of [0, 46, 1.5, '12', '']) {
+      const r = await sv.request('report.upsert', { id: 'rpt_hw2', payload: { dateKey: '2026-09-22', reportType: 'other', weekOfPregnancy: bad, attachments: [{ fileId: fid }] } })
+      assert.equal(r.ok, false, `week=${JSON.stringify(bad)} 应拒绝`)
+    }
+    // 非法医院：>100 字 / 非字符串
+    const r2 = await sv.request('report.upsert', { id: 'rpt_hw2', payload: { dateKey: '2026-09-22', reportType: 'other', hospital: '长'.repeat(101), attachments: [{ fileId: fid }] } })
+    assert.equal(r2.ok, false)
+    const r3 = await sv.request('report.upsert', { id: 'rpt_hw2', payload: { dateKey: '2026-09-22', reportType: 'other', hospital: 123, attachments: [{ fileId: fid }] } })
+    assert.equal(r3.ok, false)
+    // 清空归一：hospital ''→null；week null→null
+    const c2 = await sv.request('report.upsert', { id: 'rpt_hw', expectedRevision: 1, payload: { hospital: '', weekOfPregnancy: null } })
+    assert.ok(c2.ok, JSON.stringify(c2))
+    assert.equal(c2.data.record.hospital, null)
+    assert.equal(c2.data.record.weekOfPregnancy, null)
+    // 部分编辑保留：只改 note，hospital/week 不重置
+    const c3 = await sv.request('report.upsert', { id: 'rpt_hw', expectedRevision: 2, payload: { hospital: '省人民医院', weekOfPregnancy: 30 } })
+    assert.ok(c3.ok)
+    const c4 = await sv.request('report.upsert', { id: 'rpt_hw', expectedRevision: 3, payload: { note: 'only note' } })
+    assert.ok(c4.ok)
+    assert.equal(c4.data.record.hospital, '省人民医院')
+    assert.equal(c4.data.record.weekOfPregnancy, 30)
+    // 创建不带两字段：默认 null
+    const c5 = await sv.request('report.upsert', { id: 'rpt_hw3', payload: { dateKey: '2026-09-22', reportType: 'other', attachments: [{ fileId: fid }] } })
+    assert.ok(c5.ok, JSON.stringify(c5))
+    assert.equal(c5.data.record.hospital, null)
+    assert.equal(c5.data.record.weekOfPregnancy, null)
+  })
+
+  await scenario('页面7：医院/孕周全链路（classify 填写→创建入库→p6 回填编辑→清空→detail 映射与编辑）', async () => {
+    const cloud = makeMockCloud(); freshServer(cloud)
+    const page = bundlePage('pages/archives/classify.vue',
+      src => src.replace('const reportStore = useReportStore()', 'setActivePinia(createPinia());\nconst reportStore = useReportStore()'),
+      `export {save,selectedType,reportDate,hospital,gestationWeek,notes,familyBatchId,reportFamilyStore,familyStore2};`)
+    setupPageRoutes(page, cloud)
+    await page.confirmIdentity()
+    const rfs = page.useReportFamilyStore()
+    const created = await rfs.createBatchFromTempPaths(['tmp://hw-p1.png'])
+    await created.processing
+    const b0 = rfs.batch(created.batchId)
+    if (b0.status !== 'ready') {
+      await rfs.retryBatch(created.batchId)
+      await tick(); await tick()
+    }
+    assert.equal(rfs.batch(created.batchId).status, 'ready', JSON.stringify(b0.items.map(i => [i.state, i.error])))
+    page.loads[0]({ batchId: created.batchId, source: 'p2' })
+    page.selectedType.value = 'ultrasound'
+    page.reportDate.value = '2026-09-22'
+    page.hospital.value = '市妇幼'
+    page.gestationWeek.value = '24'
+    await new Promise(r => setTimeout(r, 100)) // 草稿 30ms 去抖落盘
+    const bDraft = rfs.batch(created.batchId)
+    assert.ok(bDraft.draft && bDraft.draft.hospital === '市妇幼' && bDraft.draft.gestationWeek === '24', '批次草稿含医院/孕周（未保存不丢）')
+    await page.save()
+    await tick(); await tick()
+    const fam = page.useFamilyStore()
+    await fam.pullReports()
+    const rec = fam.reports[created.reportId]
+    assert.ok(rec, '报告经真实 classify 保存创建')
+    assert.equal(rec.hospital, '市妇幼', '创建入库 hospital')
+    assert.equal(rec.weekOfPregnancy, 24, '创建入库 weekOfPregnancy（字符串→整数）')
+    // classify p6 编辑：hydrate 回填→修改→保存生效
+    page.familyBatchId.value = ''
+    page.loads[0]({ reportId: created.reportId, source: 'p6' })
+    await tick(); await tick()
+    assert.equal(page.hospital.value, '市妇幼', 'p6 hydrate 回填医院')
+    assert.equal(page.gestationWeek.value, '24', 'p6 hydrate 回填孕周（数字→字符串）')
+    page.hospital.value = '省人民'
+    page.gestationWeek.value = '25'
+    await page.save()
+    await tick(); await tick()
+    await fam.pullReports()
+    assert.equal(fam.reports[created.reportId].hospital, '省人民', 'p6 编辑医院生效')
+    assert.equal(fam.reports[created.reportId].weekOfPregnancy, 25, 'p6 编辑孕周生效')
+    // 清空：重进 p6（真实路径：保存成功即返回，再次编辑重开页面重捕基线）→ ''→null 归一
+    page.loads[0]({ reportId: created.reportId, source: 'p6' })
+    await tick(); await tick()
+    assert.equal(page.hospital.value, '省人民', '重进 p6 回填最新医院')
+    page.hospital.value = ''
+    page.gestationWeek.value = ''
+    await page.save()
+    await tick(); await tick()
+    await fam.pullReports()
+    const rec3 = fam.reports[created.reportId]
+    assert.equal(rec3.hospital, null, '清空医院归一 null')
+    assert.equal(rec3.weekOfPregnancy, null, '清空孕周归一 null')
+
+    // detail.vue：legacy 映射 + family 编辑保存两字段
+    const dpage = bundlePage('pages/archives/detail.vue',
+      src => src
+        .replace("import { ref, computed, getCurrentInstance, watch } from 'vue'",
+                 "const getCurrentInstance=()=>({proxy:{}});import { ref, computed, watch } from 'vue'")
+        .replace('const reportStore = useReportStore()', 'setActivePinia(createPinia());\nconst reportStore = useReportStore()'),
+      `export {loadReport,report,reportId,familyStore,startEdit,saveEdit,editForm};`)
+    setupPageRoutes(dpage, cloud)
+    await dpage.confirmIdentity()
+    const dfam = dpage.familyStore
+    await dfam.pullReports()
+    dpage.reportId.value = created.reportId
+    await dpage.loadReport()
+    assert.ok(dpage.report.value && dpage.report.value._id === created.reportId)
+    assert.equal(dpage.report.value.hospital, '', '清空后 detail 映射为空串（未记录显示态）')
+    assert.equal(dpage.report.value.week_of_pregnancy, null, '清空后 detail 映射孕周 null')
+    // 对端设置两字段后走 detail 编辑链路
+    await reportsH.main({ action: 'report.upsert', schemaVersion: 1, operationId: 'hw-peer', expectedRevision: fam.reports[created.reportId].revision, id: created.reportId, payload: { hospital: '对方填的医院', weekOfPregnancy: 33 } })
+    await dfam.pullReports()
+    await dpage.loadReport()
+    assert.equal(dpage.report.value.hospital, '对方填的医院', 'famReportToLegacy 映射 hospital')
+    assert.equal(dpage.report.value.week_of_pregnancy, 33, 'famReportToLegacy 映射 week')
+    dpage.startEdit()
+    assert.equal(dpage.editForm.value.hospital, '对方填的医院', 'detail 编辑表单预填医院')
+    assert.equal(String(dpage.editForm.value.week_of_pregnancy), '33', 'detail 编辑表单预填孕周')
+    dpage.editForm.value.hospital = 'detail 改的医院'
+    dpage.editForm.value.week_of_pregnancy = '34'
+    await dpage.saveEdit()
+    await tick(); await tick()
+    await dfam.pullReports()
+    assert.equal(dfam.reports[created.reportId].hospital, 'detail 改的医院', 'detail 编辑保存医院生效')
+    assert.equal(dfam.reports[created.reportId].weekOfPregnancy, 34, 'detail 编辑保存孕周生效')
+    // detail 清空：''→null
+    dpage.startEdit()
+    dpage.editForm.value.hospital = ''
+    dpage.editForm.value.week_of_pregnancy = ''
+    await dpage.saveEdit()
+    await tick(); await tick()
+    await dfam.pullReports()
+    assert.equal(dfam.reports[created.reportId].hospital, null, 'detail 清空医院归一 null')
+    assert.equal(dfam.reports[created.reportId].weekOfPregnancy, null, 'detail 清空孕周归一 null')
+  })
+
   await scenario('审计：零旧 HTTP；旧正式报告键零读写且字节不变', async () => {
     assert.equal(uniCalls.requests, 0, '零 uni.request')
     assert.equal(uniCalls.uploadFile, 0, '零 uni.uploadFile（旧二进制通道）')
