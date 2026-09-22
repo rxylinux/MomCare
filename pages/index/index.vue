@@ -233,9 +233,12 @@ const greeting = computed(() => {
 	const base = healthStore.getGreeting()
 	if (dataMode.value === 'demo') return `演示模式 · ${base}`
 	if (dataMode.value === 'family') {
-		const nickname = familyStore.pregnancy?.fields?.nickname || '妈妈'
 		const hour = new Date().getHours()
 		const hi = hour < 6 ? '夜深了' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好'
+		// 称呼随视角（渲染偏好，同页 checkup-hint 同一口径）：
+		// 妈妈视角称呼孕妈本人（建档昵称）；爸爸视角称呼看页面的爸爸
+		if (collabHomeView.value === 'dad') return `${hi}，爸爸`
+		const nickname = familyStore.pregnancy?.fields?.nickname || '妈妈'
 		return `${hi}，${nickname}`
 	}
 	return base
@@ -635,7 +638,11 @@ async function handleResubmit(entryId) {
 }
 async function handleFlushAll() {
 	const r = await familyStore.flushAll()
-	uni.showToast({ title: r.ok ? '已重试待同步项' : (r.message || '重试失败'), icon: 'none', duration: 2200 })
+	// 如实反馈：成功带条数；失败带原因（busy/部分失败/中断），不掩盖
+	const title = r.ok
+		? ((r.sent || 0) > 0 ? `已同步 ${r.sent} 项` : '没有待同步项')
+		: (r.message || '重试失败')
+	uni.showToast({ title, icon: 'none', duration: 2200 })
 }
 
 function goFamilyEntry() {

@@ -493,7 +493,7 @@ export const useFamilyStore = defineStore('familyData', () => {
 
   // 冲突/失败条目的统一重发（网络恢复或手动"重试全部"）
   async function flushAll() {
-    if (flushRunning.value || !sessionReady()) return { ok: false, reason: 'busy' }
+    if (flushRunning.value || !sessionReady()) return { ok: false, reason: 'busy', message: '正在同步中，请稍候再试' }
     const health = outboxReadable()
     if (!health.ok) return { ok: false, reason: health.reason, message: '待同步队列不可读，已停止发送（磁盘原件保留）' }
     flushRunning.value = true
@@ -503,8 +503,9 @@ export const useFamilyStore = defineStore('familyData', () => {
       // 迁移恢复：批次已保存但部分项尚未入队（确认后/入队前退出）——
       // 按原确认目标与预览 revision 恢复到持久待办，不重做预览替换目标
       await recoverMigrationBatch()
+      let sessionBroken = false
       for (const entry of getOutbox()) {
-        if (!isSameSession(sessionAtStart)) break
+        if (!isSameSession(sessionAtStart)) { sessionBroken = true; break }
         // 重试 pending 与 sent（响应丢失后重启的"不确定态"，原 opId 幂等重放）；
         // conflict 条目必须由用户显式解决，不自动重试
         if ((entry.status === 'pending' || entry.status === 'sent') && !entry.conflict) {
@@ -512,7 +513,14 @@ export const useFamilyStore = defineStore('familyData', () => {
         }
       }
       maybeAdvanceScheduleLmp()
-      return { ok: true, results }
+      // ok=本轮全部条目真正发成；失败条目已由 flushEntry 落回队列（markPendingAgain）
+      // 保留本机自动重试——绝不以"动作执行了"伪装成功（条目全败也报 ok 的旧病）
+      const failed = results.filter(r => !r.ok).length
+      const ok = !sessionBroken && failed === 0
+      const message = sessionBroken
+        ? '同步已中断（账号切换），未发条目保留本机'
+        : failed > 0 ? `${failed} 项仍待同步（已保留本机，恢复网络后自动重试）` : undefined
+      return { ok, sent: results.length - failed, failed, results, ...(message ? { message } : {}) }
     } finally {
       flushRunning.value = false
     }

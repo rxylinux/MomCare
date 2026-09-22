@@ -202,7 +202,7 @@
 import { ref, computed, reactive, onMounted, nextTick } from 'vue'
 import { useHealthStore } from '@/stores/health.js'
 import { isRealAuthed } from '@/utils/api.js'
-import { getSessionState } from '@/services/sessionService.js'
+import { getSessionState, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
 import { legacyHttpEnabled } from '@/utils/backendGate.js'
 import { buildPayload } from '@/utils/localProfileMigrate.js'
@@ -510,16 +510,21 @@ async function handleSave() {
 
 		uni.hideLoading()
 
+		// 演示模式=本地玩具数据语义自明；其余未确认/被拒状态落本机时必须
+		// 显著标注"未上云"——9-21 事故成因即两条 toast 仅差四字、用户无感知
+		const localOnly = !isExplicitDemo() && !isExplicitLoggedOut()
 		uni.showToast({
-			title: '保存成功',
-			icon: 'success',
-			duration: 1500
+			title: localOnly
+				? '已保存至本机（未上云）；确认家庭身份后可迁入共享档案'
+				: '保存成功',
+			icon: localOnly ? 'none' : 'success',
+			duration: localOnly ? 3000 : 1500
 		})
 
 		// 保存成功后返回
 		setTimeout(() => {
 			uni.navigateBack()
-		}, 1500)
+		}, localOnly ? 3000 : 1500)
 	} catch (e) {
 		uni.hideLoading()
 		uni.showToast({

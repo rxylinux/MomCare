@@ -332,7 +332,7 @@ async function main() {
   })
 
   // ══════════ DailyChanges（首页每日变化轮播——偏移换算）══════════
-  const DC_EXPORTS = ['currentIndex', 'offset', 'isCurrentToday', 'getDateByOffset', 'formatDateLabel', 'formatDate', 'navLabel', 'onSwiperChange']
+  const DC_EXPORTS = ['currentIndex', 'offset', 'isCurrentToday', 'getDateByOffset', 'formatDate', 'navLabel', 'onSwiperChange']
   const dcBundle = (weekInfo) => bundleComponent('components/home/DailyChanges.vue',
     `{ weekInfo: ${JSON.stringify(weekInfo)}, selectedDate: new Date(${TODAY.getTime()}), slidesData: [] }`, DC_EXPORTS)
 
@@ -358,13 +358,13 @@ async function main() {
     assert.equal(s2.navLabel.value, '孕 0 周 1 天', '负折算回退')
   })
 
-  await scenario('DC3 formatDateLabel 同一套折算（滑动视角标签）', async () => {
+  await scenario('DC3 navLabel 跨周边界：70-1=孕 9 周 6 天（原 formatDateLabel 死函数已删，折算唯一权威=navLabel）', async () => {
     const s = dcBundle({ week: 10, day: 0, total: 70 })
-    assert.equal(s.formatDateLabel(TODAY), '孕 10 周 0 天', '居中')
+    assert.equal(s.navLabel.value, '孕 10 周 0 天', '居中')
     s.currentIndex.value = 3
-    assert.equal(s.formatDateLabel(TODAY), '孕 10 周 1 天', '右移一天')
+    assert.equal(s.navLabel.value, '孕 10 周 1 天', '右移一天')
     s.currentIndex.value = 1
-    assert.equal(s.formatDateLabel(TODAY), '孕 9 周 6 天', '左移一天跨周边界')
+    assert.equal(s.navLabel.value, '孕 9 周 6 天', '左移一天跨周边界')
   })
 
   await scenario('DC4 onSwiperChange 守卫：合法索引采纳、越界/非数忽略', async () => {

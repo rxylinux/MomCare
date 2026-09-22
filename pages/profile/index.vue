@@ -581,7 +581,7 @@ const todoItems = computed(() => {
 				icon: '👨‍👩‍👧',
 				iconBg: '#FDEEF1',
 				title: '家庭共享（云）',
-				subtitle: '两人共享记录 / 本人私人笔记（阶段 B 新入口）',
+				subtitle: '两人共享记录 / 本人私人笔记',
 				action: 'family'
 			},
 			// 每日推送提醒、产检提醒、胎动记录提醒、隐私与数据 — 暂时隐藏，功能开发中

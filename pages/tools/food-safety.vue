@@ -26,17 +26,17 @@
 			</view>
 		</view>
 
-		<!-- 级别胶囊 -->
+		<!-- 级别胶囊（按词典实际收录动态渲染：0 词条级别不显示，防死标签） -->
 		<scroll-view scroll-x class="pill-scroll">
 			<view class="pill-row">
 				<view
-					v-for="p in LEVEL_PILLS"
+					v-for="p in levelPills"
 					:key="p.key"
 					class="pill"
 					:class="[p.key, { active: level === p.key }]"
 					@tap="level = p.key"
 				>
-					<text class="pill-text" :class="{ active: level === p.key }">{{ p.label }}</text>
+					<text class="pill-text" :class="{ active: level === p.key }">{{ p.label }}{{ p.key ? ` ${levelCounts[p.key]}` : '' }}</text>
 				</view>
 			</view>
 		</scroll-view>
@@ -67,13 +67,21 @@
 			</view>
 		</view>
 
-		<!-- 未收录空态（诚实未知 + AI 入口） -->
-		<view v-else-if="keyword !== ''" class="empty-card">
+		<!-- 空/未收录三态（诚实区分：被筛选挡住 ≠ 未收录） -->
+		<view v-else-if="keyword.trim() !== '' && keywordHits.length > 0" class="empty-card">
+			<text class="empty-title">已收录，与当前筛选不符</text>
+			<text class="empty-desc">资料库中与「{{ keyword.trim() }}」相关：{{ keywordHitSummary }}。调整分类/级别筛选即可查看。</text>
+		</view>
+		<view v-else-if="keyword.trim() !== ''" class="empty-card">
 			<text class="empty-title">未收录此条目</text>
-			<text class="empty-desc">资料库未查到「{{ keyword }}」——绝不假标为安全；请咨询产科医生，或向 AI 咨询（需网络与服务支持）</text>
+			<text class="empty-desc">资料库未查到「{{ keyword.trim() }}」——绝不假标为安全；请咨询产科医生，或向 AI 咨询（需网络与服务支持）</text>
 			<view class="empty-ai-btn" @tap="onAskAi">
-				<text class="empty-ai-btn-text">向 AI 咨询「{{ keyword }}」</text>
+				<text class="empty-ai-btn-text">向 AI 咨询「{{ keyword.trim() }}」</text>
 			</view>
+		</view>
+		<view v-else-if="category !== 'all' || level !== ''" class="empty-card">
+			<text class="empty-title">该筛选下暂无收录</text>
+			<text class="empty-desc">当前分类/级别组合暂无审定词条，可调整筛选或直接搜索名称</text>
 		</view>
 		<view v-else class="empty-card">
 			<text class="empty-title">开始搜索</text>
@@ -129,6 +137,27 @@ const expanded = reactive({})
 const aiState = reactive({ visible: false, enabled: null, text: '' })
 
 const results = computed(() => toolsStore.searchSafetyDictionary({ keyword: keyword.value, category: category.value, level: level.value }))
+
+// 级别计数与动态胶囊：词典中 0 词条的级别不渲染（防"资料不足"类死标签恒空）
+const levelCounts = computed(() => {
+	const counts = {}
+	for (const e of toolsStore.searchSafetyDictionary({})) {
+		counts[e.level] = (counts[e.level] || 0) + 1
+	}
+	return counts
+})
+const levelPills = computed(() => LEVEL_PILLS.filter(p => !p.key || (levelCounts.value[p.key] || 0) > 0))
+
+// 只按关键词命中（不带分类/级别）：区分"真未收录"与"已收录但被筛选挡住"
+const keywordHits = computed(() => {
+	const kw = keyword.value.trim()
+	return kw ? toolsStore.searchSafetyDictionary({ keyword: kw }) : []
+})
+const keywordHitSummary = computed(() => {
+	const hits = keywordHits.value.slice(0, 3).map(e => `${e.name}（${levelLabel(e.level)}）`)
+	const rest = keywordHits.value.length - hits.length
+	return rest > 0 ? `${hits.join('、')} 等 ${keywordHits.value.length} 条` : hits.join('、')
+})
 
 function levelLabel(lv) { return LEVEL_LABELS[lv] || lv }
 

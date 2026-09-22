@@ -78,7 +78,7 @@ const pageBundle = path.join(temp, 'page-food.cjs')
     .replace(/^import .* from ['"][^'"\n]+\.vue['"];?$/mg, '')
     .replace(/import\s*\{\s*onShow\s*\}\s*from\s*['"]@dcloudio\/uni-app['"];?/, 'const shows=[];const onShow=fn=>shows.push(fn);')
   code = 'import { createPinia, setActivePinia } from "pinia";\nsetActivePinia(createPinia());\n' + code.replace('const toolsStore = useToolsStore()', 'setActivePinia(createPinia());\nconst toolsStore = useToolsStore()')
-  code += `\nexport {shows,keyword,category,level,expanded,aiState,results,clearKeyword,toggleDetail,onAskAi,levelLabel,AI_MEDICAL_DISCLAIMER,AI_LABEL,CATEGORY_TABS,LEVEL_PILLS};\n` +
+  code += `\nexport {shows,keyword,category,level,expanded,aiState,results,clearKeyword,toggleDetail,onAskAi,levelLabel,AI_MEDICAL_DISCLAIMER,AI_LABEL,CATEGORY_TABS,LEVEL_PILLS,levelPills,levelCounts,keywordHits,keywordHitSummary};\n` +
     `export * from './services/toolsStore.js';\nexport * from './services/sessionService.js';\nexport * from './services/familyStore.js';\nexport * from './services/outbox.js';\nexport * from './services/cloudAdapter.js';\nexport * from './utils/cloudConfig.js';\n`
   esbuild.buildSync({ stdin: { contents: code, resolveDir: root }, bundle: true, platform: 'node', format: 'cjs', alias: { '@': root }, outfile: pageBundle, logLevel: 'silent' })
 }
@@ -216,6 +216,46 @@ async function main() {
     assert.equal(page.aiState.enabled, false, '失败态如实')
     assert.ok(!String(page.aiState.text).includes('MOCK 答'), '失败不显示答案')
     toolsH.__setAiMock(null)
+  })
+
+  await scenario('P4 动态胶囊+空态三分支（死标签/谎报未收录修复锁定）', async () => {
+    const stack = makeStack()
+    const client = await confirmed(stack)
+    const page = client
+    await tick()
+    // 动态胶囊：0 词条级别（insufficient）不渲染死标签；计数按词典实际
+    assert.deepEqual(page.levelPills.value.map(p => p.key), ['', 'safe', 'caution', 'avoid'], 'insufficient 死标签隐藏')
+    assert.ok(page.levelCounts.value.safe >= 3, 'safe 计数')
+    assert.equal(page.levelCounts.value.insufficient, undefined, 'insufficient 0 词条无计数')
+    // 谎报修复：词条存在但被级别筛选挡住 → keywordHits 命中（不再谎称未收录）
+    page.keyword.value = '三文鱼'; page.level.value = 'avoid'
+    await tick()
+    assert.equal(page.results.value.length, 0, '筛选后结果空')
+    assert.ok(page.keywordHits.value.length >= 1, '仅关键词命中非零——分支条件指向"已收录，与当前筛选不符"')
+    assert.ok(String(page.keywordHitSummary.value).includes('三文鱼（熟）（安全）'), `摘要带真实级别（实得 ${page.keywordHitSummary.value}）`)
+    // 分类挡住同分支：behavior 词条被 food 分类筛掉
+    page.level.value = ''; page.keyword.value = '口腔'; page.category.value = 'food'
+    await tick()
+    assert.equal(page.results.value.length, 0)
+    assert.ok(page.keywordHits.value.length >= 1, '分类筛掉也走"已收录"分支')
+    page.category.value = 'all'
+    // 真·未收录：keywordHits 空 → 分支条件指向"未收录此条目"+AI 入口
+    page.keyword.value = '不存在的词条QQQ'
+    await tick()
+    assert.equal(page.results.value.length, 0)
+    assert.equal(page.keywordHits.value.length, 0, '真未收录')
+    // 筛选组合空分支：keyword 空+存量选中 0 词条级别（胶囊已隐藏，直赋模拟残留）
+    page.keyword.value = ''; page.level.value = 'insufficient'
+    await tick()
+    assert.equal(page.results.value.length, 0)
+    assert.equal(page.keywordHits.value.length, 0, '无关键词——分支条件指向"该筛选下暂无收录"')
+    page.level.value = ''
+    // 模板三态结构锁定（渲染分支文案+动态胶囊消费在场）
+    const tpl = fs.readFileSync(path.join(root, 'pages/tools/food-safety.vue'), 'utf8')
+    assert.ok(tpl.includes('已收录，与当前筛选不符'), '分支1 文案在场')
+    assert.ok(tpl.includes('该筛选下暂无收录'), '分支2 文案在场')
+    assert.ok(tpl.includes('未收录此条目'), '分支3 文案保留')
+    assert.ok(tpl.includes('v-for="p in levelPills"'), '模板消费动态胶囊而非静态 LEVEL_PILLS')
   })
 
   await scenario('Z9 冻结源哈希：运行期间页面/store 源未被并发编辑', async () => {

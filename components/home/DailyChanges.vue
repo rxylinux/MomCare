@@ -113,25 +113,6 @@ function getDateByOffset(off) {
 }
 
 // Format date label for navigation header
-function formatDateLabel(date) {
-  const store = props.healthStore
-  let wi = props.weekInfo
-  if (store && store.getWeekInfo) {
-    const calculated = store.getWeekInfo(date)
-    if (calculated) wi = calculated
-  }
-  if (!wi) wi = props.weekInfo
-  // Adjust week/day based on offset
-  const baseTotal = props.weekInfo.total
-  const adjustedTotal = baseTotal + (currentIndex.value - 2)
-  if (adjustedTotal >= 0) {
-    const week = Math.floor(adjustedTotal / 7)
-    const day = adjustedTotal % 7
-    return `孕 ${week} 周 ${day} 天`
-  }
-  return `孕 ${wi.week} 周 ${wi.day} 天`
-}
-
 function formatDate(date) {
   const y = date.getFullYear()
   const m = date.getMonth() + 1

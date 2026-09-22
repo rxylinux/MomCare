@@ -610,6 +610,41 @@ async function main() {
     assert.equal(still.attempts, 1, '未增加重试次数')
   })
 
+  await scenario('B2a-flushAll 聚合：部分失败不再伪装成功（sent/failed/message 如实）', async () => {
+    const stack = fullStack()
+    const fam = stack.fam
+    await api.confirmIdentity()
+    // 条目1：幂等成功——服务端已落库、客户端停在 sent（响应丢失重放路径）
+    await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: '2026-08-01', operationId: 'agg-1', expectedRevision: 0, payload: { weightKg: 61 } })
+    const enq1 = api.enqueueOutbox({ kind: 'daily', entityId: 'daily:2026-08-01', opId: 'agg-1', expectedRevision: 0, payload: { weightKg: 61 }, extra: { dateKey: '2026-08-01' } })
+    api.markSent(enq1.entry.id)
+    // 条目2：pending、网络断 → 发送失败回队列。
+    api.enqueueOutbox({ kind: 'daily', entityId: 'daily:2026-08-02', opId: 'agg-2', expectedRevision: 0, payload: { weightKg: 62 }, extra: { dateKey: '2026-08-02' } })
+    // 分流路由：agg-1 走真实 handler（幂等重放成功），agg-2 抛网络错
+    api.__setWxCloud(freshFakeWxCloud({
+      'mc-health': e => {
+        if (e.operationId === 'agg-1') { stack.applyCtx(); return healthHandler.main(e) }
+        throw { errMsg: 'request:fail offline' }
+      },
+      'mc-identity': () => ({ ok: true, data: { memberId: 'mama', displayName: '妈妈', familyId: 'f' } })
+    }))
+    const flush = await fam.flushAll()
+    assert.equal(flush.ok, false, '部分失败不得报成功（旧病：恒 ok:true 掩盖失败）')
+    assert.equal(flush.sent, 1, 'sent 计数')
+    assert.equal(flush.failed, 1, 'failed 计数')
+    assert.ok(String(flush.message).includes('1 项仍待同步'), `message 如实（实得 ${flush.message}）`)
+    assert.equal(api.getOutbox().find(e => e.opId === 'agg-1'), undefined, '成功条目收尾移除')
+    assert.ok(api.getOutbox().find(e => e.opId === 'agg-2'), '失败条目保留本机')
+    // 网络恢复重试 → 全部成功：ok:true、无告警 message、队列清空
+    api.__setWxCloud(stack.wxCloud)
+    const flush2 = await fam.flushAll()
+    assert.equal(flush2.ok, true)
+    assert.equal(flush2.sent, 1)
+    assert.equal(flush2.failed, 0)
+    assert.equal(flush2.message, undefined, '全成功不带告警')
+    assert.equal(api.getOutbox().length, 0, '队列清空')
+  })
+
   await scenario('B2a-零旧 HTTP：B2a 全流程零 request/uploadFile', async () => {
     assert.equal(uniCalls.requests, 0)
     assert.equal(uniCalls.uploadFile, 0)
