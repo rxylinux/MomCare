@@ -703,7 +703,7 @@ function _markUnverifiedOnRead(list) {
 
     const health = getHealthStore()
     if (!canUseAi(health)) {
-      uni.showToast({ title: '今日 5 次 AI 解读已用完，明天再来吧', icon: 'none', duration: 3000 })
+      uni.showToast({ title: '今日 50 次 AI 解读已用完，明天再来吧', icon: 'none', duration: 3000 })
       return false
     }
 

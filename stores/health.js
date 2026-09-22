@@ -178,7 +178,8 @@ export function getFruitComparison(week) {
 	return result
 }
 
-const AI_INTERPRET_DAILY_LIMIT = 5
+// 2026-09-22 用户裁定：5 → 50（夫妻二人试用；视觉直读单次成本极低——每图 ≤1024 token+输出 1600）
+const AI_INTERPRET_DAILY_LIMIT = 50
 
 // 旧正式键隔离（R2）：非演示模式下 YUNTU_HEALTH_DATA 读取返回空、写入拒绝，
 // 数据保留磁盘待 B3 迁移；演示键与成员缓存不受影响

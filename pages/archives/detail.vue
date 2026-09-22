@@ -506,7 +506,7 @@ async function onAiCardTap() {
   }
   if (isFamilyMode()) {
     if (!healthStore.canUseAiInterpret()) {
-      uni.showToast({ title: '今日 5 次 AI 解读已用完，明天再来吧', icon: 'none', duration: 3000 })
+      uni.showToast({ title: '今日 50 次 AI 解读已用完，明天再来吧', icon: 'none', duration: 3000 })
       return
     }
     uni.showLoading({ title: '开始解读…' })
