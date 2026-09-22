@@ -112,6 +112,7 @@ import { removeToken } from '@/utils/api.js'
 import { endSession, getSessionState, subscribeSession, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { getOutbox } from '@/services/outbox.js'
 import { useFamilyStore } from '@/services/familyStore.js'
+import { useReportStore } from '@/stores/report.js'
 import manifest from '@/manifest.json'
 import ProfileHero from '@/components/profile/ProfileHero.vue'
 import DueCountdownRing from '@/components/common/DueCountdownRing.vue'
@@ -120,6 +121,7 @@ import CustomTabBar from '@/components/CustomTabBar.vue'
 
 const healthStore = useHealthStore()
 const familyStore = useFamilyStore()
+const reportStore = useReportStore()
 const showLogoutModal = ref(false)
 const logoutPendingCount = ref(0)
 const logoutConflictCount = ref(0)
@@ -132,9 +134,10 @@ import { onShow as __onShow } from '@dcloudio/uni-app'
 import { foregroundRecheck, coldStartConfirm } from '@/services/sessionService.js'
 
 function pullDomain() {
-	familyStore.pullCheckups().catch(() => {})
-	familyStore.pullBagItems().catch(() => {})
-	familyStore.pullPregnancy().catch(() => {})
+  familyStore.pullCheckups().catch(() => {})
+  familyStore.pullBagItems().catch(() => {})
+  familyStore.pullPregnancy().catch(() => {})
+  familyStore.pullReports().catch(() => {}) // 产检档案卡计数权威源（冷启动未经档案页也能显示）
 }
 let __activatedMember = null
 function activateFamilyDomain() {
@@ -165,9 +168,15 @@ watch(subscribeSession(), () => {
 
 // setup 时已确认（热路径）：恢复成员快照并拉取
 if (dataSource.value === 'family') {
-	familyStore.restoreFromCache()
-	pullDomain()
-	__activatedMember = getSessionState().member ? getSessionState().member.memberId : null
+  familyStore.restoreFromCache()
+  pullDomain()
+  __activatedMember = getSessionState().member ? getSessionState().member.memberId : null
+}
+// demo 档案卡计数源：reportStore 不自水合（依赖各页显式 fetch），此处本地读一次
+// ——不经档案页直达"我的"页也能显示报告份数
+if (dataSource.value === 'demo') {
+  reportStore.fetchReports().catch(() => {})
+  reportStore.fetchUnarchivedReports().catch(() => {})
 }
 
 __onShow(() => {
@@ -378,6 +387,29 @@ const famFetalStats = computed(() => {
 	}
 })
 
+// 产检档案卡计数（三态同源）：family=familyStore.reports 权威（滤墓碑；分桶口径同
+// 档案列表 mapFamilyReports——archiveStatus==='archived' 为已归档、其余待分类）；
+// demo/prompt=reportStore 本地两桶（prompt 恒空 → "暂无报告"）
+const famReportStats = computed(() => {
+  const all = Object.values(familyStore.reports).filter(r => !r.deleted)
+  const unarchived = all.filter(r => r.archiveStatus !== 'archived').length
+  return { total: all.length, unarchived }
+})
+const localReportStats = computed(() => ({
+  total: reportStore.reports.length + reportStore.unarchivedReports.length,
+  unarchived: reportStore.unarchivedReports.length
+}))
+const archiveStats = computed(() => (isFamily.value ? famReportStats.value : localReportStats.value))
+const archiveSubtitle = computed(() => {
+  const s = archiveStats.value
+  if (s.total === 0) return '暂无报告'
+  return s.unarchived > 0 ? `共 ${s.total} 份 · 待分类 ${s.unarchived} 份` : `共 ${s.total} 份`
+})
+const archiveBadge = computed(() => {
+  const s = archiveStats.value
+  return s.total > 0 ? `${s.total}份` : ''
+})
+
 // 我的记录
 const recordItems = computed(() => {
 	const ws = isFamily.value ? famWeightStats.value : healthStore.getWeightStats()
@@ -428,7 +460,8 @@ const recordItems = computed(() => {
 		icon: '📁',
 		iconBg: '#FDF3E3',
 		title: '产检档案',
-		subtitle: '暂无报告',
+		subtitle: archiveSubtitle.value,
+		badge: archiveBadge.value,
 		action: 'archives'
 	}
 ]
