@@ -1,9 +1,7 @@
 {
-  "version": "1.1.14",
-  "desc": "详情上传时间显示+我的页产检档案卡计数（family 两单修复）",
-  "commit": "d3cf62f17fc02fef0e7aef1ea34ac1e616d2b194",
-  "functions": [
-    "mc-reports"
-  ],
-  "releasedAt": "2026-09-22T16:27:49.833Z"
+  "version": "1.1.15",
+  "desc": "六项遗留修复：问候语爸妈视角/速查诚实空态与动态胶囊/同步toast如实/未上云提示/组件清理+删阶段B文案",
+  "commit": "73ca1962be059051496b06aff03774c5b4a8cb41",
+  "functions": [],
+  "releasedAt": "2026-09-22T23:22:45.710Z"
 }
