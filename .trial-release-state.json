@@ -1,7 +1,7 @@
 {
-  "version": "1.1.10",
-  "desc": "AI 解读每日限额 5→50 次",
-  "commit": "b9e96ba8131e8e97dacbe2571e9cef3967125607",
+  "version": "1.1.11",
+  "desc": "修复family模式解读结果不显示+本机保存失败误报（云端权威读侧接线）",
+  "commit": "a0b898047f5716b7acbcc8ea2e18f4b4d1f8ff72",
   "functions": [],
-  "releasedAt": "2026-09-22T01:11:48.831Z"
+  "releasedAt": "2026-09-22T01:25:15.318Z"
 }
