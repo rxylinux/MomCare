@@ -1,9 +1,9 @@
 {
-  "version": "1.1.8",
-  "desc": "报告解读切换DeepSeek视觉直读（MC_REPORT_VISION，OCR空识别绕行）",
-  "commit": "3b822f6df4273670c7f56ef03eb359c74c1ba2b5",
+  "version": "1.1.9",
+  "desc": "报告解读视觉直读默认开启（MC_REPORT_VISION 恰0关闭，免控制台配置）",
+  "commit": "83fddff6e70a0fc738642d598601266f431f97f7",
   "functions": [
     "mc-tools"
   ],
-  "releasedAt": "2026-09-22T00:45:27.099Z"
+  "releasedAt": "2026-09-22T00:56:34.643Z"
 }
