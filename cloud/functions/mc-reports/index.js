@@ -230,6 +230,8 @@ async function commitReportTx(db, config, { collection, docId, kind, caller, ope
 
     // 引用集合差量：旧附件（existing）→ 新附件（合并后 base）
     const base = existing ? { ...existing } : { ...extraFields }
+    // 创建时刻：此后编辑只刷 updatedAt 不动 createdAt（详情页"上传时间"权威来源）
+    if (!existing) base.createdAt = now
     const merged = applyChanges(base, existing)
     const oldIds = existing && Array.isArray(existing.attachments) ? existing.attachments.map(a => a.fileId) : []
     // 有效引用：删除后引用集合为空（审计保留的 attachments 不等于有效引用）——

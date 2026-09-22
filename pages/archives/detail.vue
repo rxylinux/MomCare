@@ -225,6 +225,8 @@ function famReportToLegacy(r) {
     hospital: r.hospital || '',
     file_urls: famReadUrls.value.map(u => u.tempFileURL),
     _attachmentCount: (r.attachments || []).length, _cloud: true, revision: r.revision || 0,
+    // 上传时间：createdAt=云端创建事务时刻（权威）；存量记录兜底 updatedAt；皆缺保持 undefined → "-"
+    create_time: r.createdAt != null ? r.createdAt : r.updatedAt,
     // 云端解读权威读侧：ai_status/ai_result/ocr_text（此前断层——解读已落云但页面永远"未解读"）
     ...familyAiView(r)
   }
