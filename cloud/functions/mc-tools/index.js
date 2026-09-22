@@ -82,6 +82,17 @@ const OCR_PAGE_TIMEOUT_MS = 15000 // 单页提取外层超时（race——防单
 const OCR_TEXT_MAX = 2000        // OCR 文本字符上限（Array.from 计数；超出截断并标注）
 const OCR_TRUNCATED_SUFFIX = '…（OCR 文本超长已截断）'
 
+// ── Phase G 视觉直读边界（规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）──
+// 官方限制（api-docs.deepseek.com/zh-cn/guides/vision，2026-09-22 核实）：单图 base64 32MiB、
+// 请求体 48MiB、格式 JPEG/PNG/GIF/WebP 按内容判定、每图计费封顶 1024 token。
+// 工程上限留余量：单页 16MiB、合计 24MiB（base64 后 ≈32MB < 48MiB）。
+const VISION_MAX_PAGES = 3               // 单次直读最多页数（与 OCR 页数语义一致）
+const VISION_PAGE_TIMEOUT_MS = 15000     // 单页下载外层超时（race——防挂死拖垮整函数）
+const VISION_IMAGE_MAX_BYTES = 16 * 1024 * 1024
+const VISION_TOTAL_MAX_BYTES = 24 * 1024 * 1024
+// 开关恰 '1' 启用（fail-closed：未设/其他值一律关闭，行为与旧版逐字节一致）
+function visionEnabled() { return process.env.MC_REPORT_VISION === '1' }
+
 // ── E3 AI 代理网关 ──
 // 强制免责（一切 AI 生成内容必带——"AI 生成（未人工逐字审校）"+ 医疗免责）
 const AI_DISCLAIMER = 'AI 生成（未人工逐字审校）· 仅供一般参考，不构成医疗诊断、处方或用药建议；如有疑问请咨询产科医生并以产检结果为准。'
@@ -115,13 +126,23 @@ const AI_MAX_TOKENS = { explainFood: 800, analyzeReport: 1600 }
 // 请求体构造（纯函数）：thinking 显式关——V4.1-Flash 默认开 thinking（effort=high），
 // 思考 token 挤占 max_tokens 且拉高延迟，本场景必须关（关后 temperature 恢复生效）。
 // __deepseekRequestBody 为测试注入口——零外呼锁参数回归。
+// 视觉直读（规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）：opts.images 非空时 user content 为
+// 块数组（文字块在前、图片按页序、data URI base64——官方 vision 格式）；无 images 时形状与
+// 纯文本体逐字节一致（既有锁参套件即此回归守卫）。图片只进 user 消息（官方：system/assistant 带图 400）。
 function deepseekRequestBody(prompt, opts) {
   const maxTokens = opts && Number.isInteger(opts.maxTokens) && opts.maxTokens > 0 ? opts.maxTokens : AI_MAX_TOKENS.explainFood
+  const images = opts && Array.isArray(opts.images) ? opts.images.filter(Boolean) : []
+  const userContent = images.length > 0
+    ? [{ type: 'text', text: prompt }].concat(images.map(im => ({
+        type: 'image_url',
+        image_url: { url: 'data:' + String(im.mime) + ';base64,' + String(im.base64) }
+      })))
+    : prompt
   return {
     model: deepseekModel(),
     messages: [
       { role: 'system', content: safetySystemPrompt() },
-      { role: 'user', content: prompt }
+      { role: 'user', content: userContent }
     ],
     thinking: { type: 'disabled' },
     temperature: 0.3,
@@ -139,7 +160,8 @@ function aiProvider() {
       // kind=真实模型名（透传响应 model 与落库 ai_result.model；原笼统 'deepseek'）
       kind: deepseekModel(),
       call: (prompt, context) => callDeepSeek(key, prompt, {
-        maxTokens: context && context.kind === 'analyzeReport' ? AI_MAX_TOKENS.analyzeReport : AI_MAX_TOKENS.explainFood
+        maxTokens: context && context.kind === 'analyzeReport' ? AI_MAX_TOKENS.analyzeReport : AI_MAX_TOKENS.explainFood,
+        images: context && context.images
       })
     }
   }
@@ -283,10 +305,10 @@ function boundOcrText(raw) {
   return chars.slice(0, OCR_TEXT_MAX).join('') + OCR_TRUNCATED_SUFFIX
 }
 
-// 附件登记核对 + 逐页 OCR（登记校验与 mc-reports report.getReadUrls 同规则）。
-// 任一页失败 → 抛错（整次解读失败——多页报告缺页解读会误导，宁失败不部分成功）。
-async function extractOcrForReport(db, fid, attachments, provider) {
-  const pageFileIds = attachments.slice(0, OCR_MAX_PAGES).map(a => a.fileId)
+// 附件登记核对（OCR 与视觉直读共用；登记校验与 mc-reports report.getReadUrls 同规则）：
+// 页数封顶截取 + 本家庭 + status=registered + formalFileID 非空；任一不符抛 invalid-attachment。
+async function validateAttachmentPages(db, fid, attachments, maxPages) {
+  const pageFileIds = attachments.slice(0, maxPages).map(a => a.fileId)
   const formalFileIDs = []
   for (const fileId of pageFileIds) {
     const fdoc = await getDocMaybe(db, FILES, fileId)
@@ -297,6 +319,12 @@ async function extractOcrForReport(db, fid, attachments, provider) {
     }
     formalFileIDs.push(fdoc.formalFileID)
   }
+  return { pageFileIds, formalFileIDs }
+}
+
+// 逐页 OCR。任一页失败 → 抛错（整次解读失败——多页报告缺页解读会误导，宁失败不部分成功）。
+async function extractOcrForReport(db, fid, attachments, provider) {
+  const { pageFileIds, formalFileIDs } = await validateAttachmentPages(db, fid, attachments, OCR_MAX_PAGES)
   const pageTexts = []
   for (let i = 0; i < formalFileIDs.length; i++) {
     let text
@@ -324,6 +352,65 @@ function reusableOcr(report, provider, attachments) {
   const curIds = attachments.slice(0, OCR_MAX_PAGES).map(a => a.fileId)
   if (prevIds.length !== curIds.length || prevIds.some((v, i) => v !== curIds[i])) return null
   return prev
+}
+
+// ── Phase G 视觉直读提取（规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）──
+// 魔数嗅探 MIME：官方按文件实际内容判格式（不可信扩展名）；认不出返回 null——
+// 由调用方如实报 vision-unsupported-format，绝不伪造 MIME（HEIC 等未支持格式走此分支）。
+function sniffImageMime(buf) {
+  if (!buf || buf.length < 12 || typeof buf.slice !== 'function') return null
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  if (buf.slice(0, 4).toString('latin1') === 'GIF8') return 'image/gif'
+  if (buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'image/webp'
+  return null
+}
+exports.__sniffImageMime = sniffImageMime
+
+// 视觉直读图片提取：登记核对 → 逐页下载（15s race）→ 单页/合计字节门 → MIME 门。
+// 任一页失败 → 整次抛错（与 OCR 同语义：多页报告缺页解读会误导，宁失败不部分成功）。
+// 错误码：invalid-attachment / vision-download-failed / vision-image-too-large / vision-unsupported-format。
+async function extractVisionImages(db, fid, attachments) {
+  const { pageFileIds, formalFileIDs } = await validateAttachmentPages(db, fid, attachments, VISION_MAX_PAGES)
+  const images = []
+  let totalBytes = 0
+  for (let i = 0; i < formalFileIDs.length; i++) {
+    let fileContent
+    try {
+      fileContent = await Promise.race([
+        cloud.downloadFile({ fileID: formalFileIDs[i] }).then(r => r && r.fileContent),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('vision-page-timeout')), VISION_PAGE_TIMEOUT_MS))
+      ])
+    } catch (e) {
+      const err = new Error('第 ' + (i + 1) + ' 张附件下载失败，请重试')
+      err.code = 'vision-download-failed'
+      throw err
+    }
+    if (!fileContent || !fileContent.length) {
+      const err = new Error('第 ' + (i + 1) + ' 张附件下载内容为空，请重试')
+      err.code = 'vision-download-failed'
+      throw err
+    }
+    if (fileContent.length > VISION_IMAGE_MAX_BYTES) {
+      const err = new Error('第 ' + (i + 1) + ' 张附件过大（单图须 ≤' + (VISION_IMAGE_MAX_BYTES / 1024 / 1024) + 'MiB），请使用较小图片')
+      err.code = 'vision-image-too-large'
+      throw err
+    }
+    totalBytes += fileContent.length
+    if (totalBytes > VISION_TOTAL_MAX_BYTES) {
+      const err = new Error('附件合计过大（须 ≤' + (VISION_TOTAL_MAX_BYTES / 1024 / 1024) + 'MiB），请减少页数或使用较小图片')
+      err.code = 'vision-image-too-large'
+      throw err
+    }
+    const mime = sniffImageMime(fileContent)
+    if (!mime) {
+      const err = new Error('第 ' + (i + 1) + ' 张附件图片格式不受支持（支持 JPEG/PNG/GIF/WebP），请重拍')
+      err.code = 'vision-unsupported-format'
+      throw err
+    }
+    images.push({ mime, base64: fileContent.toString('base64') })
+  }
+  return { images, pageFileIds, pageCount: images.length }
 }
 
 async function getDocMaybe(db, col, id) {
@@ -1057,9 +1144,33 @@ if (action === 'efw.list') {
     if (!provider) {
       return ok({ enabled: false, message: '报告自动 OCR / DeepSeek 解读服务未配置；请以原始检验单与主治医生诊断为准' })
     }
-    // Phase G OCR 阶段（独立开关）：附件存在且 OCR 提供方配置时提取文本，否则元数据模式
+    // Phase G 视觉直读阶段（规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）：MC_REPORT_VISION 恰 '1'
+    // 且有附件 → 整体绕过 OCR（零 printedText 调用），图片直送 deepseek-flash。
+    // flash 是白名单内唯一原生视觉模型——模型不符 fail-closed 明确拒绝，不静默降级 OCR/元数据。
     const attachments = Array.isArray(report.attachments) ? report.attachments : []
-    const ocrOp = attachments.length > 0 ? ocrProvider() : null
+    const useVision = attachments.length > 0 && visionEnabled()
+    if (useVision && deepseekModel() !== 'deepseek-flash') {
+      return fail('vision-config-error', '视觉直读需 deepseek-flash 模型（当前 MC_DEEPSEEK_MODEL 非 flash），请修正配置或取消 MC_REPORT_VISION')
+    }
+    let visionImages = null
+    let visionPageFileIds = []
+    let visionPageCount = 0
+    if (useVision) {
+      try {
+        const v = await extractVisionImages(db, fid, attachments)
+        visionImages = v.images
+        visionPageFileIds = v.pageFileIds
+        visionPageCount = v.pageCount
+      } catch (e) {
+        if (e && e.code === 'invalid-attachment') return fail('invalid-attachment', e.message)
+        if (e && (e.code === 'vision-download-failed' || e.code === 'vision-image-too-large' || e.code === 'vision-unsupported-format')) {
+          return fail(e.code, e.message)
+        }
+        return fail('vision-download-failed', '图片提取失败，请重试或以原始检验单为准', { errMsg: String((e && e.message) || e).slice(0, 120) })
+      }
+    }
+    // Phase G OCR 阶段（独立开关）：视觉直读启用时整体跳过；附件存在且 OCR 提供方配置时提取文本，否则元数据模式
+    const ocrOp = !useVision && attachments.length > 0 ? ocrProvider() : null
     let ocrIncluded = false
     let ocrText = ''
     let ocrPageFileIds = []
@@ -1102,10 +1213,20 @@ if (action === 'efw.list') {
         '\n请优先依据 OCR 文本逐项分析实际出现的指标与参考值；OCR 文本中未出现的指标不得编造。'
       )
     }
+    if (visionImages) {
+      // 视觉直读：指令随图下发（图片作为 image_url 块附在同一条 user 消息）
+      promptParts.push(
+        `\n本次请求附报告图片前 ${visionPageCount} 张（可能与报告附件总数不一致——页数封顶）。`,
+        '\n请优先依据图片中实际出现的指标与参考值逐项分析；图片中未出现的指标不得编造。'
+      )
+    }
     const prompt = promptParts.join('')
     let answer
     try {
-      answer = await provider.call(prompt, { kind: 'analyzeReport', reportId, dateKey: report.dateKey, reportType: report.reportType, attachments: atts, ocrIncluded })
+      answer = await provider.call(prompt, {
+        kind: 'analyzeReport', reportId, dateKey: report.dateKey, reportType: report.reportType, attachments: atts, ocrIncluded,
+        ...(visionImages ? { images: visionImages } : {})
+      })
     } catch (e) {
       return fail('ai-call-failed', 'AI 服务调用失败，请稍后重试或以原始检验单为准', { errMsg: String((e && e.message) || e).slice(0, 120) })
     }
@@ -1122,6 +1243,10 @@ if (action === 'efw.list') {
         // ocr_result 仅在实际提取（或复用）时写入；元数据模式不动旧值
         merged.ocr_result = { text: ocrText, included: true, provider: ocrProviderKind, generatedAt: ocrGeneratedAt || now, pageFileIds: ocrPageFileIds }
       }
+      if (visionImages) {
+        // vision_result 仅在视觉直读时写入（与 ocr_result 互斥——视觉模式整体跳过 OCR）
+        merged.vision_result = { included: true, pageCount: visionPageCount, generatedAt: now, pageFileIds: visionPageFileIds }
+      }
       merged.revision = (fresh.revision || 0) + 1
       merged.updatedAt = now
       merged.updatedBy = caller.memberId
@@ -1131,7 +1256,7 @@ if (action === 'efw.list') {
       try { await t.rollback() } catch (e) { /* 已回滚 */ }
       return txFailed(err)
     }
-    return ok({ enabled: true, answer: text, disclaimer: AI_DISCLAIMER, model: provider.kind, ocrIncluded, ocrText: ocrIncluded ? ocrText : '', reportRevision: (report.revision || 0) + 1 })
+    return ok({ enabled: true, answer: text, disclaimer: AI_DISCLAIMER, model: provider.kind, ocrIncluded, ocrText: ocrIncluded ? ocrText : '', visionIncluded: Boolean(visionImages), reportRevision: (report.revision || 0) + 1 })
   }
 
   return fail('invalid-action', `未知 action: ${String(action)}`)
