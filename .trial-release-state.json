@@ -1,7 +1,9 @@
 {
-  "version": "1.1.13",
-  "desc": "修复列表已解读徽标/孕周不显示+上传批次可放弃",
-  "commit": "eae97968e445f3fd85cbc13d3ebe84cb27dac7a2",
-  "functions": [],
-  "releasedAt": "2026-09-22T14:17:24.131Z"
+  "version": "1.1.14",
+  "desc": "详情上传时间显示+我的页产检档案卡计数（family 两单修复）",
+  "commit": "d3cf62f17fc02fef0e7aef1ea34ac1e616d2b194",
+  "functions": [
+    "mc-reports"
+  ],
+  "releasedAt": "2026-09-22T16:27:49.833Z"
 }
