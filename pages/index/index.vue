@@ -67,6 +67,7 @@
 							:weekInfo="heroWeekInfo"
 							:selectedDate="selectedDate"
 							:slidesData="dailySlides"
+							:todayTip="todayTip"
 						/>
 						<WeeklyGuideCard
 							v-if="heroPregInfoSet"
@@ -93,6 +94,7 @@
 						:weekInfo="heroWeekInfo"
 						:selectedDate="selectedDate"
 						:slidesData="dailySlides"
+						:todayTip="todayTip"
 					/>
 
 					<!-- 本周指南卡片 -->
@@ -197,6 +199,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useHealthStore, getFruitComparison } from '@/stores/health.js'
+import { buildTodayTip, gestationalLabel } from '@/utils/dailyTipCore.js'
 import { isLoggedIn } from '@/utils/api.js'
 import { getSessionState, foregroundRecheck, coldStartConfirm, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
@@ -565,6 +568,32 @@ const dadTopTasks = computed(() => collabStore.dadTopTasks)
 const tasksForPrepCard = computed(() => collabStore.homeView === 'dad'
 	? activeFamilyTasks.value.filter(t => !t.assigneeId)
 	: activeFamilyTasks.value)
+
+// 今日提醒三级瀑布（产检→家庭任务→静态兜底）：共用核心=utils/dailyTipCore.js，
+// 云端 mc-daily-push 转译同一单源——两端同一天算出同一句，改口径只动那一处。
+// 本 computed 只做数据归一（薄壳零业务规则）；任务池按视角排序：爸爸先"我负责的"。
+const MASKED_TASK_TITLE = '（分享已撤回）'
+const todayTip = computed(() => {
+	const today = new Date()
+	if (dataMode.value === 'family') {
+		const c = nextCheckup.value
+		// family 产检无标题字段——折算"孕X周+Y"用共用核心（与产检提醒页同口径）
+		const checkups = c && c.dateKey ? [{ date: c.dateKey, title: gestationalLabel(editLmpDate.value, c.dateKey) }] : []
+		const pool = collabHomeView.value === 'dad' && dadTopTasks.value.length
+			? dadTopTasks.value
+			: activeFamilyTasks.value
+		const tasks = pool
+			.filter(t => t && t.title && t.title !== MASKED_TASK_TITLE)
+			.map(t => ({ title: t.title }))
+		return buildTodayTip({ today, checkups, tasks })
+	}
+	if (dataMode.value === 'demo') {
+		const nc = healthStore.nextCheckup
+		const checkups = nc && nc.checkup_date ? [{ date: nc.checkup_date, title: nc.week_label || '' }] : []
+		return buildTodayTip({ today, checkups, tasks: [] })
+	}
+	return null
+})
 
 // 待产包进度（权威=mc_bag_items 投影；只展示不重复记账）
 const bagSummary = computed(() => {

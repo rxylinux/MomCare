@@ -56,6 +56,9 @@
               <view class="di-header">
                 <text class="di-icon">{{ slide.tip.icon }}</text>
                 <text class="di-lbl">今日提醒</text>
+                <view v-if="slide.tipTag" class="tip-tag">
+                  <text class="tip-tag-text">{{ slide.tipTag }}</text>
+                </view>
               </view>
               <text class="di-text">{{ slide.tip.text }}</text>
             </view>
@@ -93,6 +96,12 @@ const props = defineProps({
   slidesData: {
     type: Array,
     default: () => []
+  },
+  // 今日提醒瀑布覆盖（utils/dailyTipCore.buildTodayTip 产出：
+  // {tag,icon,text} | null）——null/无 text 时回落静态内容库，行为与旧版一致
+  todayTip: {
+    type: Object,
+    default: null
   }
 })
 
@@ -382,28 +391,41 @@ function getSlideForDay(dayTotal) {
 }
 
 const slides = computed(() => {
+  const baseTotal = props.weekInfo.total
+  let baseSlides
   // 优先使用云端数据
   if (props.slidesData && props.slidesData.length > 0) {
-    const baseTotal = props.weekInfo.total
     const cloudMap = {}
     for (const r of props.slidesData) {
       cloudMap[r.total_days] = cloudToSlide(r)
     }
-    return [-2, -1, 0, 1, 2].map(off => {
+    baseSlides = [-2, -1, 0, 1, 2].map(off => {
       const dayTotal = baseTotal + off
       if (dayTotal < 0) return FALLBACK[off + 2]
       return cloudMap[dayTotal] || FALLBACK[off + 2]
     })
+  } else {
+    // 降级使用本地数据
+    baseSlides = [-2, -1, 0, 1, 2].map(off => {
+      const dayTotal = baseTotal + off
+      if (dayTotal < 0) return MOCK_DATA[off + 2]
+      return getSlideForDay(dayTotal)
+    })
   }
-
-  // 降级使用本地数据
-  const baseTotal = props.weekInfo.total
-  return [-2, -1, 0, 1, 2].map(off => {
-    const dayTotal = baseTotal + off
-    if (dayTotal < 0) return MOCK_DATA[off + 2]
-    return getSlideForDay(dayTotal)
-  })
+  // 瀑布覆盖只作用于"今天"这一屏（offset 0）——左右滑动的昨天/明天是
+  // 历史回看视角，维持静态内容库文案
+  return baseSlides.map((slide, idx) => withTodayTip(idx - 2, slide))
 })
+
+function withTodayTip(off, slide) {
+  const tip = props.todayTip
+  if (off !== 0 || !tip || !tip.text) return slide
+  return {
+    ...slide,
+    tip: { icon: tip.icon || '💡', text: tip.text },
+    tipTag: tip.tag || ''
+  }
+}
 
 // Navigation methods
 function slideDay(dir) {
@@ -603,6 +625,20 @@ $sh: 0 4rpx 28rpx rgba(60, 30, 10, 0.07);
   font-weight: 600;
   color: $gray400;
   letter-spacing: 2rpx;
+}
+
+// 今日提醒来源标签（瀑布级：产检/待办）——为什么提醒我这个，一眼可见
+.tip-tag {
+  margin-left: auto;
+  background: $amber-lt;
+  border-radius: $rp;
+  padding: 2rpx 12rpx;
+}
+
+.tip-tag-text {
+  font-size: 18rpx;
+  font-weight: 600;
+  color: $amber;
 }
 
 .di-text {
