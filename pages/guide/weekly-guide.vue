@@ -14,9 +14,9 @@
 					<text class="back-arrow">‹</text>
 				</view>
 			</view>
-			<text class="hero-title">孕 {{ currentWeek }} 周完整指南</text>
-			<text class="hero-sub">{{ heroSubtitle }}</text>
-			<view class="hero-stats">
+				<text class="hero-title">{{ heroTitle }}</text>
+				<text class="hero-sub">{{ heroSubtitle }}</text>
+				<view class="hero-stats" v-if="guideData">
 				<view class="stat-card">
 					<text class="stat-val">{{ guideData.babyWeight }}</text>
 					<text class="stat-lbl">宝宝体重</text>
@@ -37,7 +37,7 @@
 		</view>
 
 		<!-- Week selector -->
-		<scroll-view class="week-strip" scroll-x :scroll-into-view="'week-' + currentWeek" scroll-with-animation>
+			<scroll-view class="week-strip" scroll-x :scroll-into-view="scrollTarget" scroll-with-animation>
 			<view class="week-strip-inner">
 				<view
 					v-for="w in weekRange"
@@ -53,7 +53,7 @@
 		</scroll-view>
 
 		<!-- Content -->
-		<scroll-view class="content-scroll" scroll-y>
+		<scroll-view class="content-scroll" scroll-y v-if="guideData">
 			<view class="content">
 
 				<!-- 宝宝发育 -->
@@ -152,29 +152,65 @@
 				<view style="height: 40rpx;"></view>
 			</view>
 		</scroll-view>
+
+		<!-- 内容未收录（周龄在本地兜底覆盖之外 / 数据缺）——诚实空态，不拿别的周冒充 -->
+		<view v-else class="content-scroll">
+			<view class="content">
+				<view class="gc-card">
+					<view class="gc-header">
+						<text class="gc-header-icon">📖</text>
+						<text class="gc-header-title">本周内容暂未收录</text>
+					</view>
+					<view class="gc-body">
+						<view class="gc-list">
+							<view class="gc-list-item">
+								<view class="gc-dot gc-dot-sage"><text class="gc-dot-text">→</text></view>
+								<text class="gc-list-text">上面选择其他孕周可继续浏览（孕 30 周起内容齐全）</text>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
-import { useHealthStore } from '@/stores/health.js'
+import { ref, computed, watch, nextTick } from 'vue'
+import { onLoad, onReady } from '@dcloudio/uni-app'
 import { useStaticDataStore } from '@/stores/staticData.js'
 
-const healthStore = useHealthStore()
 const staticDataStore = useStaticDataStore()
 
-// Get week from query params
-const currentWeek = ref(32)
+// 0 = 未就绪（参数未达/非法）。不再写死演示假默认 32——那个假默认会在首次渲染
+// 瞬间把周条滚动并高亮到孕 32 周，参数纠正后高亮移走但滚动不跟随（真机已复现）。
+const currentWeek = ref(0)
 const cloudData = ref(null)
 const loadError = ref(false)
 
+// 周条定位目标：首渲染恒为空（不抢跑），onReady 布局完成后一次性定位到真实孕周；
+// 切周时先清空再赋值，保证 scroll-into-view 属性发生真实变更（微信端才可靠触发）
+const scrollTarget = ref('')
+function locateWeek() {
+	scrollTarget.value = ''
+	nextTick(() => {
+		scrollTarget.value = currentWeek.value > 0 ? `week-${currentWeek.value}` : ''
+	})
+}
+watch(currentWeek, () => locateWeek())
+onReady(() => locateWeek())
+
+const heroTitle = computed(() => currentWeek.value > 0 ? `孕 ${currentWeek.value} 周完整指南` : '孕期指南')
+
 // Load from page options (uni-app lifecycle)
 onLoad((options) => {
-	if (options.week) {
-		currentWeek.value = parseInt(options.week) || 32
+	const w = parseInt(options && options.week)
+	if (w >= 1 && w <= 40) {
+		currentWeek.value = w
 	}
-	loadGuideData(currentWeek.value)
+	if (currentWeek.value > 0) {
+		loadGuideData(currentWeek.value)
+	}
 })
 
 const weekRange = computed(() => {
@@ -191,6 +227,7 @@ const daysLeft = computed(() => {
 
 const heroSubtitle = computed(() => {
 	const w = currentWeek.value
+	if (w < 1 || !guideData.value) return '选择孕周查看对应指南'
 	let month = ''
 	if (w <= 12) month = '孕早期'
 	else if (w <= 27) month = '孕中期'
@@ -672,17 +709,14 @@ const guideData = computed(() => {
 		if (pageData) return pageData
 	}
 
-	// 降级到本地兜底数据
+	// 降级到本地兜底数据（仅覆盖孕 30-40 周）。覆盖之外的周龄诚实返回 null——
+	// 模板显示"暂未收录"空态，不再拿孕 30/32 周内容冒充（原 closest 初值取首键，
+	// 30 周以前会静默展示孕 30 周内容）
 	const w = currentWeek.value
 	if (GUIDE_DATA[w]) return GUIDE_DATA[w]
-	// Find closest week
 	const keys = Object.keys(GUIDE_DATA).map(Number).sort((a, b) => a - b)
-	let closest = keys[0]
-	for (const k of keys) {
-		if (k <= w) closest = k
-		else break
-	}
-	return GUIDE_DATA[closest] || GUIDE_DATA[32]
+	const closest = keys.filter(k => k <= w).pop()
+	return closest ? GUIDE_DATA[closest] : null
 })
 </script>
 
