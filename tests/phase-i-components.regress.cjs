@@ -37,7 +37,8 @@ global.uni = {
   navigateTo: o => uniCalls.navigations.push(o),
   redirectTo: o => uniCalls.navigations.push({ ...o, _redirect: true }),
   switchTab: o => uniCalls.switches.push(o),
-  showModal: o => { if (o && o.success) o.success({ confirm: true }) }
+  showModal: o => { if (o && o.success) o.success({ confirm: true }) },
+  requestSubscribeMessage: o => { if (o && o.success) o.success({ errMsg: 'ok', [o.tmplIds[0]]: 'accept' }) }
 }
 global.getApp = () => ({ globalData: { statusBarHeight: 42 } })
 

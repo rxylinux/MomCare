@@ -106,6 +106,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { calcWeekInfo } from '@/stores/health.js'
+import { requestPushSubscribe } from '@/utils/pushSubscribe.js'
 
 const props = defineProps({
 	visible: { type: Boolean, default: false },
@@ -215,6 +216,8 @@ function handleMaskTap() {
 }
 
 function handleSave() {
+	// 点按手势内先攒订阅推送配额（fire-and-forget；模板未配置时整体 no-op）
+	void requestPushSubscribe()
 	const result = {}
 	switch (props.mode) {
 		case 'weight':

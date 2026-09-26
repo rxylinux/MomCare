@@ -3,8 +3,8 @@
     <!-- Radial highlight overlay -->
     <view class="hero-overlay"></view>
 
-    <!-- Greeting row -->
-    <view class="hero-top">
+    <!-- Greeting row（点按攒订阅推送配额——首弹勾"总是保持"后完全静默） -->
+    <view class="hero-top" @tap="onGreetingTap">
       <text class="hero-greet">{{ greeting }}</text>
     </view>
 
@@ -65,6 +65,7 @@
 import { ref, computed } from 'vue'
 import { getTrimester, getTrimesterName } from '@/stores/health.js'
 import { navigateToPage } from '@/utils/navigation.js'
+import { requestPushSubscribe } from '@/utils/pushSubscribe.js'
 
 const statusBarHeight = ref(0)
 const app = getApp()
@@ -153,6 +154,11 @@ const babyLength = computed(() => {
 
 function goSetup() {
   navigateToPage('/pages/profile/onboarding')
+}
+
+// 问候卡点按：攒订阅消息配额（fire-and-forget；模板未配置时整体 no-op）
+function onGreetingTap() {
+  void requestPushSubscribe()
 }
 </script>
 

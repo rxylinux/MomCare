@@ -5,6 +5,7 @@
 import { cpSync, mkdirSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import * as esbuild from 'esbuild'
 
 // wx-server-sdk 版本锁定依据：Codex 于 2026-09-19 从 npm 获取 wx-server-sdk@4.0.2
 // 发布包并逐文件核对本项目使用的契约（init 配置级 throwOnNotFound、doc.set 拒绝
@@ -49,6 +50,16 @@ for (const dir of dirs) {
     console.log(`  + ${dir.name}/${c.name}`)
   }
   cpSync(sharedDir, join(outDir, 'shared'), { recursive: true })
+  // 共用核心单源投放（2026-09-25 架构定案）：utils/dailyTipCore.js 是纯 ESM 零依赖
+  // 单一源（客户端 vite 直引）；此处转译为 CJS 放进每个函数的 shared/，云函数
+  // require('./shared/dailyTipCore') 与客户端同字节——改口径只动 utils 一处。
+  esbuild.buildSync({
+    entryPoints: [join(root, 'utils', 'dailyTipCore.js')],
+    bundle: true, platform: 'node', format: 'cjs',
+    outfile: join(outDir, 'shared', 'dailyTipCore.js'),
+    logLevel: 'silent'
+  })
+  console.log(`  + ${dir.name}/shared/dailyTipCore.js (共用核心单源转译)`)
   writeFileSync(join(outDir, 'package.json'), JSON.stringify({
     name: dir.name,
     version: '1.0.0',

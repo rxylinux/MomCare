@@ -160,3 +160,52 @@ mc-health { action:'mood.get', schemaVersion:1, dateKey:'2026-09-20' }
 4. 客户端测试（仅合成数据）
 
 **当前状态：Phase 1 核心动作已实现但未部署。Phase 2 目前仅 progress/list 有本地入口；attachFile/preview/readUrl/commit/verify/abandon 尚无公共 action 实现。V20 的 `declaring→preparing→finalizeDeclare→indexing` 有界服务端路径已实现，默认关闭；`indexDeclarePage` 的 V20 块消费、客户端续作与真实云端验证仍待完成。阶段二整体未验收，也未提交或部署。**
+
+## 8. mc-daily-push 部署（每日提醒推送——2026-09 落地）
+
+代码就绪即部署，但**推送真正生效还需控制台选模板**（见下）。未配模板时：
+定时触发每日 8 点照跑但明确返回 `push-template-missing`（fail-closed 不静默），
+客户端点按挂点整体 no-op 不弹窗——功能处于"装好待启用"状态。
+
+### 8.1 组装产物（assemble 自动处理，无需手工）
+
+- `index.js` + `config.json`（`subscribeMessage.send` 云调用权限 + 定时触发器
+  `daily-reminder`，cron `0 0 8 * * * *` = 每天 08:00，云开发七段式）
+- `shared/` 全套 + **`shared/dailyTipCore.js`**（assemble 从 `utils/dailyTipCore.js`
+  转译投放的共用核心单源——与客户端同一份字节，改口径只动 utils 一处）
+
+### 8.2 部署步骤（DevTools，约 10 分钟）
+
+1. `npm run assemble:cloud`（或随 release:trial 自动）；
+2. 云开发 → 云函数 → `mc-daily-push` → 上传并部署（云端安装依赖）；
+3. **右键 → 上传触发器**，控制台确认 `daily-reminder` 存在且 cron 正确；
+4. **函数超时调 20 秒**（默认 3s 罩不住读库 + 两条订阅消息外呼——DeepSeek 超时教训延续）；
+5. 环境变量（函数配置）：
+   - `MC_PUSH_TEMPLATE_ID`：控制台选定模板后的模板 ID（与 `utils/pushConfig.js` 保持一致）
+   - 可选 `MC_PUSH_FIELD_MAIN/NOTE/DATE`：字段映射覆盖（默认 thing1/thing2/time3）
+
+### 8.3 启用推送（模板已选定——2026-09-26）
+
+模板已选：公共模板 **571「日程提醒」**（备忘录类目，场景说明：孕期提醒），
+字段 = `thing11` 备注（唯一内容字段 ≤20 字）+ `date4` 日程时间。代码已按其固化：
+`utils/pushConfig.js` 的 PUSH_TEMPLATE_ID 与 mc-daily-push 的 FIELD_CONTENT/FIELD_DATE。
+单内容字段取舍：有产检事件（当天/倒计时/过期）推主行，平日推轮换提示行。
+剩余动作：云函数环境变量 `MC_PUSH_TEMPLATE_ID` 填该模板 ID（见 8.2 步骤 5）。
+
+### 8.4 验收（sendNow 不用等次日 8 点）
+
+1. 真机：两台手机各点一次首页问候卡（或保存任意记录）→ 授权弹窗勾
+   **"总是保持以上选择，不再询问"** → 允许（此后点按完全静默攒配额）；
+2. DevTools → 云开发 → 云函数 → mc-daily-push → 云端测试 → 入参
+   `{"action":"sendNow"}` → 运行 → 两台手机应各收到一条服务通知；
+3. 返回摘要判读：每人 `sent:true`；`skipped:"quota"`（43101）= 该人未授权或
+   配额用尽——如实记录非错误；`error` 字段 = 模板字段映射问题（对照 8.3.3）；
+4. 次日 8:00 自动触发验收（函数日志 `[mc-daily-push]` 可核对）。
+
+### 8.5 边界（设计内，勿当故障）
+
+- **配额制硬约束**：当天两人都没打开过小程序且配额耗尽 → 当天发不出
+  （日志 skipped:"quota"），次日自动恢复，数据无影响；
+- 推送内容 ≤20 字/行（thing 字段限制）；点击消息落地首页；
+- `miniprogramState: 'trial'`——当前仅体验版策略，将来发正式版改常量；
+- 停用：控制台删触发器即停（代码零改动）；模板撤掉 → 回到 fail-closed。

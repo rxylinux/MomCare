@@ -68,3 +68,65 @@ export function buildTodayTip({ today, checkups = [], tasks = [] } = {}) {
 
 	return null
 }
+
+// ══ 每日推送内容（mc-daily-push 消费；主页内容库二期同源演进）══
+// 内容三规则（2026-09-25 用户定）：①结合孕周阶段变化（按周段分池）
+// ②营养主题按孕周轮换（早期叶酸→中期钙/铁/DHA→晚期铁钙控糖）
+// ③涉水果必写当季具体果名（按月份，禁泛泛"补维生素"；适量 200~350g 不催多吃）。
+// note 按天轮换（todayOrd 取模），同周不同日不重句；词条为 v1 起草稿，待用户审后扩库。
+// 订阅消息 thing 字段 ≤20 字——main/note 一律裁到 20。
+
+const SEASONAL_FRUIT = {
+	1: ['橙子', '柚子'], 2: ['猕猴桃', '橙子'], 3: ['草莓', '菠萝'],
+	4: ['芒果', '菠萝'], 5: ['樱桃', '枇杷'], 6: ['荔枝', '樱桃'],
+	7: ['桃子', '西瓜'], 8: ['西瓜', '葡萄'], 9: ['鲜枣', '梨', '葡萄'],
+	10: ['梨', '柿子', '石榴'], 11: ['苹果', '冬枣'], 12: ['橙子', '甘蔗']
+}
+
+function monthOf(input) {
+	if (input instanceof Date) return input.getMonth() + 1
+	const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(input || ''))
+	return m ? Number(m[2]) : null
+}
+
+function notePool(week, fruit) {
+	const f = fruit || '当季水果'
+	if (week < 13) {
+		return ['宝宝器官形成期，叶酸别停', '孕吐期少食多餐，清淡为主', `今日维C：${f}正当时`]
+	}
+	if (week < 28) {
+		return ['补钙：每天300~500ml牛奶', `补铁：瘦牛肉配${f}促吸收`, 'DHA：每周吃2~3次深海鱼', '胎动明显了，静心感受一下']
+	}
+	return ['数胎动：早中晚各数1小时', '铁钙继续，甜食要节制', `${f}当季，每天200~350g就好`, '证件和待产包备好了吗']
+}
+
+export function buildPushContent(input) {
+	const todayOrd = dayOrdinal(input && input.today)
+	const lmpOrd = dayOrdinal(input && input.lmp)
+	if (todayOrd === null || lmpOrd === null || todayOrd < lmpOrd) return null
+	const days = todayOrd - lmpOrd
+	const week = Math.floor(days / 7)
+	const label = `孕${week}周+${days % 7}`
+
+	// 主行：孕周 + 产检动态（与 buildTodayTip 同口径：过期 ≤14 天提醒补约，
+	// 未来 7 天内倒计时；取调用方传入的最近一条 pending 产检）
+	let main = label
+	let event = null
+	const cuOrd = dayOrdinal(input.nextCheckupDate)
+	if (cuOrd !== null) {
+		if (cuOrd === todayOrd) { main = `${label} · 今天产检`; event = 'today' }
+		else if (cuOrd > todayOrd && cuOrd - todayOrd <= 7) { main = `${label} · 距产检${cuOrd - todayOrd}天`; event = 'countdown' }
+		else if (cuOrd < todayOrd && todayOrd - cuOrd <= 14) { main = `${label} · 产检已过${todayOrd - cuOrd}天`; event = 'overdue' }
+	}
+
+	// 提示行：阶段池按天轮换；当季果名按月份取、按孕天数轮换挑一枚
+	const month = monthOf(input.today)
+	const fruits = (month && SEASONAL_FRUIT[month]) || []
+	const fruit = fruits.length ? fruits[days % fruits.length] : ''
+	const pool = notePool(week, fruit)
+	const note = pool[((todayOrd % pool.length) + pool.length) % pool.length]
+
+	// event：当天/倒计时/过期三态或 null——单内容字段模板（如 571 日程提醒）
+	// 据此取舍：有事件用主行，平时用提示行
+	return { main: clampText(main, 20), note: clampText(note, 20), event, week, days, month }
+}

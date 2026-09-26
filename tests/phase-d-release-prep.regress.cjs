@@ -30,7 +30,7 @@ const manifest = JSON.parse(frozenBytes['manifest.json'].toString('utf8'))
 const scripts = pkg.scripts || {}
 
 // 装配产物契约（源目录 cloud/functions/*/index.js 全集，排序后须恰为这 10 个）
-const EXPECTED_FUNCTIONS = ['mc-collab', 'mc-files', 'mc-health', 'mc-identity', 'mc-private-notes',
+const EXPECTED_FUNCTIONS = ['mc-collab', 'mc-daily-push', 'mc-files', 'mc-health', 'mc-identity', 'mc-private-notes',
   'mc-reports', 'mc-restore', 'mc-schedule', 'mc-shared-records', 'mc-tools']
 const DIST_FNS = path.join(root, 'dist/cloud-functions')
 const SRC_FNS = path.join(root, 'cloud/functions')
@@ -93,10 +93,10 @@ async function main() {
     assert.ok(entries.has('file:static/logo.png'), `产物须含 logo.png 排除（实得 ${JSON.stringify([...entries])}）`)
   })
 
-  await scenario('D3a 云函数装配：执行 assemble 后 dist 恰 10 函数齐备', async () => {
+  await scenario('D3a 云函数装配：执行 assemble 后 dist 恰 11 函数齐备', async () => {
     execFileSync('node', [path.join(root, 'cloud/assemble.mjs')], { stdio: 'pipe' })
     const dirs = fs.readdirSync(DIST_FNS, { withFileTypes: true }).filter(e => e.isDirectory() && !e.name.startsWith('_')).map(e => e.name).sort()
-    assert.deepEqual(dirs, EXPECTED_FUNCTIONS, `10 函数齐备（实得 ${JSON.stringify(dirs)}）`)
+    assert.deepEqual(dirs, EXPECTED_FUNCTIONS, `11 函数齐备（实得 ${JSON.stringify(dirs)}）`)
     assert.ok(fs.existsSync(path.join(DIST_FNS, '_collections.json')), '附 _collections.json 副本')
     const rules = fs.readdirSync(path.join(DIST_FNS, '_rules'))
     assert.ok(rules.includes('database.rules.json') && rules.includes('storage.rules.json'), '附 _rules 规则副本')
@@ -135,10 +135,14 @@ async function main() {
       const expect = ['index.js', 'package.json', 'shared', ...companions, ...(hasCfg ? ['config.json'] : [])].sort()
       const actual = fs.readdirSync(path.join(DIST_FNS, fn)).sort()
       assert.deepEqual(actual, expect, `${fn} 产物恰为期望文件集（实得 ${JSON.stringify(actual)}）`)
-      // shared 与源全量同构
+      // shared 与源同构 + assemble 转译产物（dailyTipCore.js 由 utils/ 单源转译投放，
+      // 非源拷贝——字节断言不适用，改为存在性 + CJS 可加载断言）
       const distShared = Object.fromEntries(walkFiles(path.join(DIST_FNS, fn, 'shared')).map(p => [path.relative(path.join(DIST_FNS, fn, 'shared'), p), sha256(fs.readFileSync(p))]))
-      assert.deepEqual(Object.keys(distShared).sort(), Object.keys(srcShared).sort(), `${fn}/shared 文件集与源一致`)
+      const expectKeys = [...Object.keys(srcShared), 'dailyTipCore.js'].sort()
+      assert.deepEqual(Object.keys(distShared).sort(), expectKeys, `${fn}/shared 文件集=源+转译产物`)
       for (const [rel, h] of Object.entries(srcShared)) assert.equal(distShared[rel], h, `${fn}/shared/${rel} 与源逐字节一致`)
+      const artifact = require(path.join(DIST_FNS, fn, 'shared', 'dailyTipCore.js'))
+      assert.equal(typeof artifact.buildPushContent, 'function', `${fn}/shared/dailyTipCore.js 可 CJS 加载（共用核心单源投放）`)
     }
   })
 
