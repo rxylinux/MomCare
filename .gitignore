@@ -9,6 +9,7 @@ openspec/
 .claude/
 .opencode/
 .trae/
+.workbuddy-ai/
 
 # Environment variables - NEVER commit real API keys
 .env

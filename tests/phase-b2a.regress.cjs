@@ -1530,7 +1530,7 @@ async function main() {
     assert.equal(todayCell.hasRecord, true)
     assert.equal(todayCell.count, 5)
     assert.ok(Number.isInteger(todayCell.revision), '格子随行 revision')
-    assert.ok(cells.some(c => c.future === true), '未来日标记存在（不可点）')
+    assert.ok(cells.some(c => c.future === true) || Number(TODAY.slice(8, 10)) === new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate(), '未来日标记存在（不可点；月末当天当月无未来日为设计行为）')
     assert.ok(cells.every(c => typeof c.dateKey === 'string'), '格子带 dateKey')
     // 格子编辑（修正今日 5 → 12；页面 initial.value 为 Number——String 化由组件装载时做）
     page.openCell(todayCell)
@@ -1549,6 +1549,16 @@ async function main() {
     await page.handleSheetRemove({ dateKey: TODAY })
     assert.ok(!('fetalCount' in page.familyStore.dailyRecord(TODAY).fields), '胎动字段清除')
     assert.equal(page.familyStore.dailyRecord('2026-01-15').fields.fetalCount, 3, '他日记录不受影响')
+    // 未来日标记完整验证（月末当天当月无未来日——补一条下月记录使热力图渲染下月再断言）
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+    if (Number(TODAY.slice(8, 10)) === daysInMonth) {
+      const d = new Date(); d.setDate(d.getDate() + 1)
+      const NEXT = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      await healthHandler.main({ action: 'daily.upsert', schemaVersion: 1, dateKey: NEXT, operationId: 'fe3', expectedRevision: 0, payload: { fetalCount: 2 } })
+      await page.familyStore.pullAll()
+      await new Promise(r => setTimeout(r, 0))
+      assert.ok(page.fetalData.value.heatmap.data.some(c => c.future === true), '下月热力图存在未来日（月末当天）')
+    }
   })
 
   console.log(`\n通过 ${passed} 项，失败 ${failed.length} 项`)
