@@ -58,6 +58,16 @@
 					<text class="card-title">数据与同步诊断</text>
 					<text class="identity-sub">最近完整同步：{{ diagText }}</text>
 					<text class="identity-sub">待同步操作：{{ pendingCount }} 项{{ conflictCount > 0 ? '；冲突 ' + conflictCount + ' 项（相关页面处理）' : '' }}</text>
+
+					<!-- 每日提醒推送试发（真机验收入口：云函数 sendNow 白名单试发，
+					     控制台"云端测试"无微信身份上下文会被 resolveCaller 拒绝） -->
+					<view class="btn-row" style="margin-top: 20rpx;">
+						<view class="primary-btn" :class="{ disabled: pushTesting }" @tap="handlePushTest">
+							<text class="primary-btn-text">{{ pushTesting ? '试发中…' : '试发每日提醒' }}</text>
+						</view>
+					</view>
+					<text class="identity-sub" style="margin-top: 8rpx;">两人都已点过首页问候卡或保存过记录（攒到订阅配额）后试发；未授权/配额用尽会如实提示。</text>
+					<text v-if="pushTestMsg" class="field-msg" :class="{ 'field-msg-warn': pushTestWarn }">{{ pushTestMsg }}</text>
 				</view>
 
 				<!-- 文件：服务端开关驱动的真实上传闭环（默认关闭，如实展示） -->
@@ -237,6 +247,39 @@ async function handleMyOpenid() {
 		showOpenidSetup.value = true
 	} else {
 		uni.showToast({ title: res.message || '获取失败', icon: 'none', duration: 2500 })
+	}
+}
+
+// 每日提醒推送试发（mc-daily-push sendNow：白名单成员即时各发一条，验收用）。
+// 结果如实展示：sent=成功；skipped quota=该成员未订阅授权/配额用尽（43101 机制常态）；
+// 其余 code 原样透出（not-configured/push-template-missing 等）便于排查。
+const pushTesting = ref(false)
+const pushTestMsg = ref('')
+const pushTestWarn = ref(false)
+async function handlePushTest() {
+	if (pushTesting.value) return
+	pushTesting.value = true
+	pushTestMsg.value = ''
+	try {
+		const res = await familyCall('mc-daily-push', { action: 'sendNow' })
+		if (res.ok) {
+			const results = (res.data && res.data.results) || []
+			const parts = results.map(r => {
+				if (r.sent) return `${r.member === 'mama' ? '妈妈' : '爸爸'}已发送`
+				if (r.skipped === 'quota') return `${r.member === 'mama' ? '妈妈' : '爸爸'}未订阅或配额用尽（点首页问候卡授权后重试）`
+				return `${r.member === 'mama' ? '妈妈' : '爸爸'}发送失败：${r.error || '未知'}`
+			})
+			pushTestWarn.value = !results.every(r => r.sent)
+			pushTestMsg.value = parts.length ? parts.join('；') : (res.message || '无返回结果')
+		} else {
+			pushTestWarn.value = true
+			pushTestMsg.value = `试发未执行：${res.message || res.code}`
+		}
+	} catch (e) {
+		pushTestWarn.value = true
+		pushTestMsg.value = `试发异常：${(e && e.message) || e}`
+	} finally {
+		pushTesting.value = false
 	}
 }
 
