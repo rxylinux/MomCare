@@ -1,9 +1,7 @@
 {
-  "version": "1.1.18",
-  "desc": "推送全链上线：订阅攒配额挂点+每日提醒云函数（补发 9-26 已提交未发布的推送功能）",
-  "commit": "a88405a81fd2fb91645ecd653f3aba5912f30943",
-  "functions": [
-    "mc-daily-push"
-  ],
-  "releasedAt": "2026-09-30T05:46:40.253Z"
+  "version": "1.1.19",
+  "desc": "推送试发入口：家庭诊断页 sendNow 白名单试发（补齐推送验收最后一环）",
+  "commit": "90cf6626bc971f7e924827d7cfe37a4832991986",
+  "functions": [],
+  "releasedAt": "2026-09-30T06:28:03.171Z"
 }
