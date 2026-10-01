@@ -300,12 +300,12 @@ async function main() {
     assert.equal(res2.ok, true)
   })
 
-  await scenario('N16 config.json 形状：subscribeMessage.send 权限 + 每天 8 点七段 cron', async () => {
+  await scenario('N16 config.json 形状：subscribeMessage.send 权限 + 每天 9 点七段 cron', async () => {
     const cfg = JSON.parse(fs.readFileSync(path.join(root, 'cloud/functions/mc-daily-push/config.json'), 'utf8'))
     assert.ok(cfg.permissions.openapi.includes('subscribeMessage.send'))
     assert.equal(cfg.triggers[0].name, 'daily-reminder')
     assert.equal(cfg.triggers[0].type, 'timer')
-    assert.equal(cfg.triggers[0].config, '0 0 8 * * * *')
+    assert.equal(cfg.triggers[0].config, '0 0 9 * * * *')
   })
 
   await scenario('N17 assemble 单源投放契约：转译步骤在源码 + 产物与客户端同源可 require', async () => {

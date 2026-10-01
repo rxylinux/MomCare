@@ -170,7 +170,7 @@ mc-health { action:'mood.get', schemaVersion:1, dateKey:'2026-09-20' }
 ### 8.1 组装产物（assemble 自动处理，无需手工）
 
 - `index.js` + `config.json`（`subscribeMessage.send` 云调用权限 + 定时触发器
-  `daily-reminder`，cron `0 0 8 * * * *` = 每天 08:00，云开发七段式）
+  `daily-reminder`，cron `0 0 9 * * * *` = 每天 09:00（2026-09-30 由 8 点调整为 9 点），云开发七段式）
 - `shared/` 全套 + **`shared/dailyTipCore.js`**（assemble 从 `utils/dailyTipCore.js`
   转译投放的共用核心单源——与客户端同一份字节，改口径只动 utils 一处）
 
@@ -200,7 +200,7 @@ mc-health { action:'mood.get', schemaVersion:1, dateKey:'2026-09-20' }
    `{"action":"sendNow"}` → 运行 → 两台手机应各收到一条服务通知；
 3. 返回摘要判读：每人 `sent:true`；`skipped:"quota"`（43101）= 该人未授权或
    配额用尽——如实记录非错误；`error` 字段 = 模板字段映射问题（对照 8.3.3）；
-4. 次日 8:00 自动触发验收（函数日志 `[mc-daily-push]` 可核对）。
+4. 次日 9:00 自动触发验收（函数日志 `[mc-daily-push]` 可核对）。
 
 ### 8.5 边界（设计内，勿当故障）
 

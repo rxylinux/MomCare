@@ -3,7 +3,7 @@
 // mc-daily-push：每日提醒推送（2026-09 方案落地）。
 //
 // 两个入口：
-// - 定时触发（每天 08:00，triggers 见 config.json）：无人为调用者，直接执行推送；
+// - 定时触发（每天 09:00，triggers 见 config.json）：无人为调用者，直接执行推送；
 // - 手动试发 {action:'sendNow'}：仅限家庭成员白名单（resolveCaller），验收用——
 //   不用等到次日 8 点即可真机收到一条。
 //
