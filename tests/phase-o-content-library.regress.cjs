@@ -30,7 +30,7 @@ async function main() {
   await scenario('O1 静态库契约：280 天齐、每天 tip ∈ 当周段词条集、≤20 字、无旧库残留', async () => {
     assert.equal(DATA.length, 280)
     const byDay = new Map(DATA.map(d => [d.total_days, d]))
-    const oldSigns = ['准备宽松、有托腹功能的孕妇装', '记录末次月经第一天的日期', '爸爸任务']
+    const oldSigns = ['准备宽松、有托腹功能的孕妇装', '记录末次月经第一天的日期', '爸爸任务', '记下末次月经', '试纸两条杠']
     for (let td = 0; td <= 279; td++) {
       const e = byDay.get(td)
       assert.ok(e, `缺第 ${td} 天`)
@@ -43,7 +43,7 @@ async function main() {
 
   await scenario('O2 唯一文案规模：61 条（13 段词表去重），无跨段大重复', async () => {
     const uniq = new Set(DATA.map(d => d.tip_text))
-    assert.equal(uniq.size, 61)
+    assert.equal(uniq.size, 62)
     // 相邻段共用词条（叶酸/烟酒/末次月经）属设计内——只允许这三条跨段
     const segSets = new Map()
     for (const d of DATA) {
@@ -62,7 +62,7 @@ async function main() {
     const allPhrases = new Set()
     const cross = []
     for (const b of buckets) for (const t of b.split('|')) { if (allPhrases.has(t)) cross.push(t); allPhrases.add(t) }
-    assert.deepEqual([...new Set(cross)].sort(), ['叶酸每天 0.4mg 别断', '远离烟酒和二手烟', '记下末次月经，孕周才准'].sort(), '跨段词条仅限设计内三条')
+    assert.deepEqual([...new Set(cross)].sort(), ['叶酸每天 0.4mg 别断', '远离烟酒和二手烟'].sort(), '跨段词条仅限设计内两条（发现期文案已按用户裁定清除）')
   })
 
   await scenario('O3 生成器幂等：--out 临时产物与仓库 JSON tip 逐日一致（可重跑不漂移）', async () => {
@@ -77,7 +77,7 @@ async function main() {
 
   await scenario('O4 词表锚点：审定草稿原文在位 + 13 段结构（含补的孕1-3周段）', async () => {
     const src = fs.readFileSync(path.join(root, 'utils/dailyTipCore.js'), 'utf8')
-    for (const anchor of ['宝宝小心脏开始跳动了', 'NT 检查窗口期是 11-13 周', '糖耐检查要空腹，别忘', '数胎动：早中晚各 1 小时', '宫缩 5-6 分钟一次就出发', '快见面了，加油', '早孕试纸两条杠，恭喜']) {
+    for (const anchor of ['宝宝小心脏开始跳动了', 'NT 检查窗口期是 11-13 周', '糖耐检查要空腹，别忘', '数胎动：早中晚各 1 小时', '宫缩 5-6 分钟一次就出发', '快见面了，加油', '别提重物，避免剧烈弯腰']) {
       assert.ok(src.includes(anchor), `词表缺锚点：${anchor}`)
     }
     assert.equal((src.match(/\{ from: \d+, to: \d+, tips:/g) || []).length, 13)
