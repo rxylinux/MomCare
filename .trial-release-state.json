@@ -1,48 +1,43 @@
 {
   "version": "1.1.25",
   "desc": "R1-R4 修复：推送身份fail-closed/工具可靠保存/AI快照CAS/导出分页/发布闭包与收据",
-  "commit": "8313d01f442e697d8026068ce8b30347045422ba",
+  "commit": "44772fdc16a7d0326dcbdb4f7fb5c2f309fc38f8",
   "functions": [],
-  "releasedAt": "2026-10-01T11:19:43.419Z",
-  "baseline": "a0a9fdb99e66a6aec9fa3c0057a09c48cf2b4c67",
+  "releasedAt": "2026-10-01T11:54:16.821Z",
+  "baseline": "8313d01f442e697d8026068ce8b30347045422ba",
   "closureReasons": {
     "mc-collab": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-collab 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-daily-push": [
-      "函数文件变更：cloud/functions/mc-daily-push/index.js",
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-daily-push 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-files": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-files 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-health": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-health 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-identity": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-identity 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-private-notes": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-private-notes 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-reports": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-reports 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-restore": [
-      "函数文件变更：cloud/functions/mc-restore/index.js",
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-restore 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-schedule": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-schedule 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-shared-records": [
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-shared-records 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ],
     "mc-tools": [
-      "scripts/gen-food-safety.mjs 变更（生成器语义影响 mc-tools 伴生物）",
-      "函数文件变更：cloud/functions/mc-tools/food-safety-data.js",
-      "函数文件变更：cloud/functions/mc-tools/index.js",
-      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+      "函数 mc-tools 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
     ]
   },
   "built": [
@@ -75,7 +70,7 @@
   "deployedDigests": {},
   "deployedEnv": "rxylinux-momcare-d2eoh6t493c2168",
   "upload": {
-    "status": "failed",
+    "status": "unknown",
     "version": "1.1.25"
   },
   "triggers": {
