@@ -291,6 +291,30 @@ async function main() {
     assert.ok(iFam > -1 && iNudge > iFam && iNudge < iDemo, '健康提示位于 family 分支内、demo 分支前（三级瀑布位）')
   })
 
+  console.log('phase-l：死代码清除与占位（2026-10-01 项2）')
+  await scenario('L25 死代码清除契约：三块本地兜底与死导入不复存在（注释除外）', async () => {
+    const src = fs.readFileSync(path.join(root, 'components/home/DailyChanges.vue'), 'utf8')
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    for (const bad of ['MOCK_DATA', 'WEEKLY_CHANGES', 'FALLBACK', 'getSlideForDay', 'calcWeekInfo', 'getTrimesterName']) {
+      assert.ok(!code.includes(bad), `死代码残留：${bad}`)
+    }
+    assert.ok(code.includes('PLACEHOLDER'), '诚实占位在位')
+  })
+
+  await scenario('L26 占位行为：slidesData 空→五屏占位；dayTotal<0 屏占位；瀑布覆盖不受影响', async () => {
+    const s0 = bundleComponent('components/home/DailyChanges.vue',
+      `{ weekInfo: { week: 1, day: 0, total: 7 }, selectedDate: new Date(${TODAY.getTime()}), slidesData: [], todayTip: null }`,
+      ['slides'])
+    assert.equal(s0.slides.value[2].tip.text, '当日内容待更新', '数据缺位→诚实占位')
+    assert.equal(s0.slides.value[0].baby.text, '当日数据待更新', '孕0天前（total-2=5<7 周界内）逐屏取值正常')
+    const s1 = bundleComponent('components/home/DailyChanges.vue',
+      `{ weekInfo: { week: 0, day: 1, total: 1 }, selectedDate: new Date(${TODAY.getTime()}), slidesData: [{ total_days: 1, baby_detail: '宝宝D1', mom_detail: '妈妈D1', tip_text: '提示D1' }], todayTip: { tag: '待办', icon: '📝', text: '待办：散步' } }`,
+      ['slides'])
+    assert.equal(s1.slides.value[2].tip.text, '待办：散步', '今天屏瀑布覆盖仍生效')
+    assert.equal(s1.slides.value[2].baby.text, '宝宝D1', '有数据屏不受占位影响')
+    assert.equal(s1.slides.value[0].baby.text, '当日数据待更新', 'dayTotal=-1（孕前）→占位（原 MOCK_DATA 路径）')
+  })
+
   console.log(`\nphase-l：${passed} 通过，${failed.length} 失败`)
   if (failed.length > 0) { console.log('失败场景：', failed.join(' | ')); process.exit(1) }
 }

@@ -120,6 +120,7 @@ import {
 	savePendingUpload, getPendingUpload, clearPendingUpload
 } from '@/services/sessionService.js'
 import { uploadSingleFile } from '@/services/fileUploadService.js'
+import { summarizePushTest } from '@/utils/pushTestView.js'
 
 const runtimeState = ref(cloudRuntimeState())
 const runtimeReady = computed(() => runtimeState.value === 'ready' || runtimeState.value === 'ready-to-init')
@@ -262,19 +263,9 @@ async function handlePushTest() {
 	pushTestMsg.value = ''
 	try {
 		const res = await familyCall('mc-daily-push', { action: 'sendNow' })
-		if (res.ok) {
-			const results = (res.data && res.data.results) || []
-			const parts = results.map(r => {
-				if (r.sent) return `${r.member === 'mama' ? '妈妈' : '爸爸'}已发送`
-				if (r.skipped === 'quota') return `${r.member === 'mama' ? '妈妈' : '爸爸'}未订阅或配额用尽（点首页问候卡授权后重试）`
-				return `${r.member === 'mama' ? '妈妈' : '爸爸'}发送失败：${r.error || '未知'}`
-			})
-			pushTestWarn.value = !results.every(r => r.sent)
-			pushTestMsg.value = parts.length ? parts.join('；') : (res.message || '无返回结果')
-		} else {
-			pushTestWarn.value = true
-			pushTestMsg.value = `试发未执行：${res.message || res.code}`
-		}
+		const view = summarizePushTest(res)
+		pushTestWarn.value = view.warn
+		pushTestMsg.value = view.text
 	} catch (e) {
 		pushTestWarn.value = true
 		pushTestMsg.value = `试发异常：${(e && e.message) || e}`

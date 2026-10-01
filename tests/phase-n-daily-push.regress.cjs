@@ -37,6 +37,9 @@ const chineseOf = k => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(k); return `
 const coreFile = path.join(temp, 'dailyTipCore.cjs')
 esbuild.buildSync({ entryPoints: [path.join(root, 'utils/dailyTipCore.js')], bundle: true, platform: 'node', format: 'cjs', outfile: coreFile, logLevel: 'silent' })
 const { buildPushContent, buildEveReminder } = require(coreFile)
+const pushViewFile = path.join(temp, 'pushTestView.cjs')
+esbuild.buildSync({ entryPoints: [path.join(root, 'utils/pushTestView.js')], bundle: true, platform: 'node', format: 'cjs', outfile: pushViewFile, logLevel: 'silent' })
+const { summarizePushTest } = require(pushViewFile)
 
 // ══════ ② 云函数 DIST：函数 + shared + 转译核心（镜像 assemble 投放）══════
 const DIST = path.join(temp, 'cf', 'mc-daily-push')
@@ -459,6 +462,49 @@ async function main() {
     const cfg = fs.readFileSync(path.join(root, 'utils/pushConfig.js'), 'utf8')
     assert.ok(cfg.includes("PUSH_TEMPLATE_ID = 'PYHbV5824UtdmEG8dynlAOqYFb3HWrqEQyEnV-a8Qx0'"), '已选模板 571 的 ID 在位')
     assert.ok(cfg.includes('thing11'), '字段映射说明与模板 571 同步')
+  })
+
+  console.log('phase-n：家庭诊断页试发文案（0cce2f2 测试欠账补齐）')
+  await scenario('N31 全发送：两人 sent→并列文案、warn=false', async () => {
+    const v = summarizePushTest({ ok: true, data: { results: [{ member: 'mama', sent: true }, { member: 'papa', sent: true }] } })
+    assert.equal(v.text, '妈妈已发送；爸爸已发送')
+    assert.equal(v.warn, false)
+  })
+
+  await scenario('N32 配额跳过：一人 quota 一人 sent→警示文案、warn=true', async () => {
+    const v = summarizePushTest({ ok: true, data: { results: [{ member: 'mama', sent: false, skipped: 'quota' }, { member: 'papa', sent: true }] } })
+    assert.ok(v.text.includes('妈妈未订阅或配额用尽（点首页问候卡授权后重试）'), v.text)
+    assert.ok(v.text.includes('爸爸已发送'))
+    assert.equal(v.warn, true)
+  })
+
+  await scenario('N33 发送失败：error 码原样透出', async () => {
+    const v = summarizePushTest({ ok: true, data: { results: [{ member: 'papa', sent: false, error: '47003' }] } })
+    assert.ok(v.text.includes('爸爸发送失败：47003'), v.text)
+    assert.equal(v.warn, true)
+  })
+
+  await scenario('N34 fail-closed：!ok → 试发未执行+message 透出', async () => {
+    const v = summarizePushTest({ ok: false, code: 'push-template-missing', message: 'MC_PUSH_TEMPLATE_ID 未配置' })
+    assert.ok(v.text.includes('试发未执行：MC_PUSH_TEMPLATE_ID 未配置'), v.text)
+    assert.equal(v.warn, true)
+    const n = summarizePushTest(null)
+    assert.ok(n.text.includes('未知错误'), 'null 防御')
+  })
+
+  await scenario('N35 空结果保真：ok 但无 results → message 兜底、warn=false（沿用原语义）', async () => {
+    const v = summarizePushTest({ ok: true, data: {}, message: '' })
+    assert.equal(v.text, '无返回结果')
+    assert.equal(v.warn, false)
+  })
+
+  await scenario('N36 页面接线：family/index.vue 用纯函数+sendNow+防重入（源码断言）', async () => {
+    const src = fs.readFileSync(path.join(root, 'pages/family/index.vue'), 'utf8')
+    assert.ok(src.includes("from '@/utils/pushTestView.js'"), '引入纯函数')
+    assert.ok(src.includes('summarizePushTest(res)'), '试发结果走纯函数')
+    assert.ok(src.includes("familyCall('mc-daily-push', { action: 'sendNow' })"), 'sendNow 白名单入口')
+    assert.ok(src.includes('if (pushTesting.value) return'), '防重入护栏在')
+    assert.ok(!src.includes('r.sent) return'), '内联映射逻辑已抽离')
   })
 
   console.log(`\nphase-n：${passed} 通过，${failed.length} 失败`)
