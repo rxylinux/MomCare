@@ -148,8 +148,9 @@ const RESULT_MODEL_MAX = 64
 const RESULT_PROVIDER_MAX = 32
 const HEX64_RE = /^[0-9a-f]{64}$/
 const AI_RESULT_KEYS = ['text', 'model', 'generatedAt', 'inputDigest', 'baseRevision', 'coverage']
-const AI_COVERAGE_KEYS = ['analyzedCount', 'totalAttachments', 'analyzedFileIds', 'skippedFileIds', 'mode']
-const OCR_RESULT_KEYS = ['text', 'included', 'provider', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision']
+// F3：coverage.ocrTruncated（OCR 内容截断标志）与 ocr_result.truncated 入白名单
+const AI_COVERAGE_KEYS = ['analyzedCount', 'totalAttachments', 'analyzedFileIds', 'skippedFileIds', 'mode', 'ocrTruncated']
+const OCR_RESULT_KEYS = ['text', 'included', 'provider', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision', 'truncated']
 const VISION_RESULT_KEYS = ['included', 'pageCount', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision']
 
 // 服务端文档的非临床元数据键（不进包也不算未知字段）
@@ -242,6 +243,8 @@ export function guardReportAiFields(rec, idOf, problems) {
     if (!isIdList(cov.analyzedFileIds)) return bad('coverage.analyzedFileIds 非唯一ID列表/超限')
     if (!isIdList(cov.skippedFileIds)) return bad('coverage.skippedFileIds 非唯一ID列表/超限')
     if (!['vision', 'ocr', 'metadata'].includes(cov.mode)) return bad('coverage.mode 非法枚举')
+    if (cov.ocrTruncated !== undefined && typeof cov.ocrTruncated !== 'boolean') return bad('coverage.ocrTruncated 须布尔')
+    if (cov.ocrTruncated === true && cov.mode !== 'ocr') return bad('coverage.ocrTruncated=true 仅限 ocr 模式')
     if (cov.analyzedCount !== cov.analyzedFileIds.length) return bad('coverage.analyzedCount ≠ analyzedFileIds 长度')
     if (cov.analyzedCount + cov.skippedFileIds.length !== cov.totalAttachments) return bad('coverage 计数矛盾（分析+未分析 ≠ 总附件数）')
     const overlap = cov.analyzedFileIds.find(x => cov.skippedFileIds.includes(x))
@@ -258,6 +261,7 @@ export function guardReportAiFields(rec, idOf, problems) {
     if (ocr.pageFileIds !== undefined && !isIdList(ocr.pageFileIds)) return bad('ocr_result.pageFileIds 非唯一ID列表/超限')
     if (ocr.inputDigest !== undefined && !isHex64(ocr.inputDigest)) return bad('ocr_result.inputDigest 非 64hex')
     if (ocr.baseRevision !== undefined && !(Number.isInteger(ocr.baseRevision) && ocr.baseRevision >= 0)) return bad('ocr_result.baseRevision 非非负整数')
+    if (ocr.truncated !== undefined && typeof ocr.truncated !== 'boolean') return bad('ocr_result.truncated 须布尔')
     guardProvenancePair(ocr, 'ocr_result', bad)
   })
 

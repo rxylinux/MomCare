@@ -65,6 +65,11 @@
 		<!-- 历史时间线 -->
 		<view class="history-card">
 			<text class="history-title">估重历史</text>
+			<!-- F2：拉取失败可见状态 + 重试入口（不再静默吞掉） -->
+			<view v-if="efwLoadError" class="history-load-error">
+				<text class="history-load-error-text">{{ efwLoadError }}</text>
+				<view class="history-load-retry" @tap="onRetryPull"><text class="history-load-retry-text">重试</text></view>
+			</view>
 			<view v-if="efwRecords.length === 0" class="history-empty"><text class="history-empty-text">还没有保存的估重记录</text></view>
 			<view v-for="r in efwRecords" :key="r.recordId" class="history-row">
 				<view class="history-main">
@@ -140,8 +145,19 @@ function onDelete(r) {
 		success: res => {
 			if (!res || !res.confirm) return
 			toolsStore.deleteEfwRecord(r.recordId).then(res2 => {
-				if (res2.ok) uni.showToast({ title: '已删除', icon: 'none' })
-				else uni.showToast({ title: res2.message || '删除失败', icon: 'none' })
+				// F2：删除事实与刷新结果分开反馈——云端删除成功即成功，刷新失败不误报删除失败
+				if (res2.ok && res2.deleted) {
+					if (res2.refresh && res2.refresh.ok === false) {
+						uni.showToast({ title: '已删除（列表刷新失败，可点重试）', icon: 'none', duration: 3000 })
+						efwLoadError.value = res2.refresh.message || '列表刷新失败'
+					} else {
+						uni.showToast({ title: '已删除', icon: 'none' })
+					}
+				} else if (res2.ok === false && res2.deleted === false) {
+					uni.showToast({ title: res2.message || '删除失败', icon: 'none', duration: 2500 })
+				} else {
+					uni.showToast({ title: '删除结果未确认，请重试或刷新列表', icon: 'none', duration: 3000 })
+				}
 			})
 		}
 	})
@@ -149,10 +165,23 @@ function onDelete(r) {
 
 const efwRecords = computed(() => toolsStore.efwRecords)
 
+// F2：拉取失败可见状态（onShow/重试共用；成功即清除）
+const efwLoadError = ref('')
+async function pullWithFeedback() {
+	const r = await toolsStore.pullEfwRecords()
+	efwLoadError.value = r.ok ? '' : (r.message || '估重历史加载失败')
+	return r
+}
+function onRetryPull() {
+	pullWithFeedback().then(r => {
+		if (!r.ok) uni.showToast({ title: '仍失败，请稍后再试', icon: 'none' })
+	})
+}
+
 onShow(() => {
 	const s = getSessionState()
 	if (s.status === 'confirmed' && s.member) {
-		toolsStore.pullEfwRecords().catch(() => {})
+		pullWithFeedback().catch(() => { efwLoadError.value = '估重历史加载失败' })
 	}
 })
 </script>
@@ -323,6 +352,19 @@ onShow(() => {
 	font-weight: 600;
 	color: #11222e;
 }
+/* F2：拉取失败/重试状态 */
+.history-load-error {
+	margin-top: 12rpx;
+	padding: 16rpx 20rpx;
+	border-radius: 12rpx;
+	background: #fdf1f0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.history-load-error-text { flex: 1; font-size: 24rpx; color: #c0392b; line-height: 1.5; }
+.history-load-retry { padding: 8rpx 24rpx; border-radius: 999rpx; background: #c0392b; }
+.history-load-retry-text { font-size: 24rpx; color: #ffffff; }
 .history-empty {
 	padding: 32rpx 0;
 	display: flex;

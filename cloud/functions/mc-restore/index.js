@@ -227,8 +227,8 @@ const BAG_FIELDS = ['name', 'category', 'quantity', 'location', 'assignee', 'pre
 const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus', 'hospital', 'weekOfPregnancy', 'ai_result', 'ocr_result', 'vision_result']
 const REPORT_NESTED_KEY_WHITELIST = {
   ai_result: ['text', 'model', 'generatedAt', 'inputDigest', 'baseRevision', 'coverage'],
-  ai_result_coverage: ['analyzedCount', 'totalAttachments', 'analyzedFileIds', 'skippedFileIds', 'mode'],
-  ocr_result: ['text', 'included', 'provider', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision'],
+  ai_result_coverage: ['analyzedCount', 'totalAttachments', 'analyzedFileIds', 'skippedFileIds', 'mode', 'ocrTruncated'],
+  ocr_result: ['text', 'included', 'provider', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision', 'truncated'],
   vision_result: ['included', 'pageCount', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision']
 }
 const RECORD_TOP_ALLOWED = {

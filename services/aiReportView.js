@@ -16,6 +16,10 @@
 //   OCR 不当成本次内容。旧格式对（双方均无 digest）按同事务写入的历史行为展示。
 export const AI_SUGGESTION_LINE = '以上内容为 AI 生成的一般性说明，不构成医疗诊断；请以原始检验单与主治医生诊断为准'
 
+// F3：OCR 截断后缀——与 cloud/functions/mc-tools 的 OCR_TRUNCATED_SUFFIX 同串
+// （云函数与客户端无共享模块通道，两侧常量需人工同步；语义变更须两侧同改）。
+const OCR_TRUNCATED_SUFFIX = '…（OCR 文本超长已截断）'
+
 export function familyAiView(rec) {
   const empty = { ai_status: 'pending', ai_result: null, ocr_text: '' }
   if (!rec || rec.deleted) return empty
@@ -26,18 +30,23 @@ export function familyAiView(rec) {
   const rev = Number.isInteger(rec && rec.revision) ? rec.revision : null
   const ai_stale = base !== null && rev !== null ? rev > base + 1 : false
   let ai_coverage
+  // F3：OCR 截断证据——coverage.ocrTruncated（新结果）或 ocr_result.text 的截断后缀（旧结果按已知证据）。
+  // 有截断证据时不得声称完整覆盖（complete 强制 false），页面据此披露"仅截断前内容已分析"。
+  const ocr = rec.ocr_result
+  const ocrTruncatedEvidence = Boolean(ocr && typeof ocr.text === 'string' && ocr.text.endsWith(OCR_TRUNCATED_SUFFIX))
   if (raw && raw.coverage && Number.isInteger(raw.coverage.totalAttachments)) {
     const analyzed = Number.isInteger(raw.coverage.analyzedCount) ? raw.coverage.analyzedCount : 0
-    ai_coverage = { analyzed, total: raw.coverage.totalAttachments, complete: analyzed >= raw.coverage.totalAttachments, unknown: false, mode: raw.coverage.mode || null }
+    const ocrTruncated = raw.coverage.ocrTruncated === true || (raw.coverage.mode === 'ocr' && ocrTruncatedEvidence)
+    ai_coverage = { analyzed, total: raw.coverage.totalAttachments, complete: analyzed >= raw.coverage.totalAttachments && !ocrTruncated, unknown: false, mode: raw.coverage.mode || null, ocrTruncated }
   } else {
     const fallbackTotal = Array.isArray(rec.attachments) ? rec.attachments.length : null
-    ai_coverage = { analyzed: null, total: fallbackTotal, complete: false, unknown: true, mode: null }
+    ai_coverage = { analyzed: null, total: fallbackTotal, complete: false, unknown: true, mode: null, ocrTruncated: ocrTruncatedEvidence }
   }
   // 提取内容溯源（R2 审核 2 + 二审）：可证明同输入（双方 inputDigest 一致）才作为本次
   // "原文提取"展示。无 digest 的历史对不可证明同源——R2 前生产在 vision/metadata 成功时
   // 保留更旧 OCR（同事务重写不发生），"双方无摘要=同来源"不成立；未知来源不得标为本次
   // 原文，改走独立"历史提取（来源未确认）"通道（保留历史字段，不清除绕过）。
-  const ocr = rec.ocr_result
+  // （F3：ocr 已在上方 coverage 段声明——此处沿用同一绑定）
   const ocrProven = Boolean(ocr && typeof ocr.text === 'string' && raw.inputDigest !== undefined && ocr.inputDigest === raw.inputDigest)
   const ocrHistory = !ocrProven && ocr && typeof ocr.text === 'string' && ocr.text.trim() !== ''
     ? { text: ocr.text, unverified: true }

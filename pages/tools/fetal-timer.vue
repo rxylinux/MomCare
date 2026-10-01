@@ -10,6 +10,16 @@
 			<text class="unsaved-banner-text">本地保存失败：当前记录仅保留在内存中，重启会丢失。请清理手机存储空间后继续记录。</text>
 		</view>
 
+		<!-- F1：旧版计时记录待确认入口（未确认前不展示正文/不上传/不自动归属） -->
+		<view v-if="legacyPending && legacyPending.total > 0" class="legacy-banner">
+			<text class="legacy-banner-text">{{ legacySummaryText }}</text>
+			<view class="legacy-banner-row">
+				<view class="legacy-banner-btn primary" @tap="onLegacyAdopt"><text class="legacy-banner-btn-text">确认归属并迁入</text></view>
+				<view class="legacy-banner-btn" @tap="onLegacyExport"><text class="legacy-banner-btn-text">导出保留</text></view>
+			</view>
+			<text v-if="legacyResultText" class="legacy-banner-result">{{ legacyResultText }}</text>
+		</view>
+
 		<!-- 恢复异常持久披露（R1 审核6/第二轮6 + R3 审核2：如实区分已备份/未备份） -->
 		<view v-if="restoreWarnings.length > 0" class="restore-banner">
 			<text class="restore-banner-text">{{ restoreWarningText }}</text>
@@ -126,6 +136,50 @@ function onAckRestore() {
 	toolsStore.acknowledgeRestoreWarnings()
 	uni.showToast({ title: '已确认：自动同步恢复，异常提示保留至数据恢复', icon: 'none' })
 }
+// ── F1：旧版计时记录找回入口（检测 → 显式确认归属 / 原始字节导出保留）──
+const legacyPending = computed(() => toolsStore.legacyPending)
+const legacySummaryText = computed(() => toolsStore.legacySummaryText)
+const legacyResultText = ref('')
+async function onLegacyAdopt() {
+	// 确认提示：旧记录无身份信息，无法自动证明所有者；显式确认后按当前完整作用域迁入
+	// （有服务端 ID 的记录仍会先验证云端归属——确认本身不直接赋予操作权限）
+	uni.showModal({
+		title: '确认旧记录归属？',
+		content: '旧版记录不含身份信息，无法自动证明属于当前成员。确认后将以当前成员身份迁入（已有云端 ID 的记录会先核验云端归属；冲突/无法核验的将保留待处理，不会静默丢弃）。',
+		confirmText: '确认迁入',
+		cancelText: '取消',
+		success: async res => {
+			if (!res || !res.confirm) return
+			const r = await toolsStore.confirmLegacyAdoption()
+			if (r.ok && r.adopted > 0 && (!r.conflicts || r.conflicts.length === 0) && (!r.rejected || r.rejected.length === 0) && (!r.unverifiable || r.unverifiable.length === 0)) {
+				legacyResultText.value = `已迁入 ${r.adopted} 条旧记录（原始字节已备份保留）`
+				uni.showToast({ title: `已迁入 ${r.adopted} 条旧记录`, icon: 'none' })
+			} else if (r.ok) {
+				const bits = []
+				if (r.adopted > 0) bits.push(`已迁入 ${r.adopted} 条`)
+				if (r.conflicts && r.conflicts.length > 0) bits.push(`冲突 ${r.conflicts.length} 项（当前已有进行中记录，旧数据保留未覆盖，可导出）`)
+				if (r.rejected && r.rejected.length > 0) bits.push(`归属不符 ${r.rejected.length} 项（云端记录属其他成员，保留待处理）`)
+				if (r.unverifiable && r.unverifiable.length > 0) bits.push(`无法核验 ${r.unverifiable.length} 项（保留待处理，不发写入）`)
+				legacyResultText.value = bits.join('；') || '没有可迁入的旧记录'
+				uni.showToast({ title: bits[0] || '旧记录待处理', icon: 'none', duration: 3000 })
+			} else {
+				legacyResultText.value = r.message || '迁移未完成（旧数据保持原样）'
+				uni.showToast({ title: r.message || '迁移未完成，旧数据保持原样', icon: 'none', duration: 3000 })
+			}
+		}
+	})
+}
+function onLegacyExport() {
+	const r = toolsStore.exportLegacyRaw()
+	if (r.ok && r.exported.length > 0) {
+		legacyResultText.value = `已导出保留 ${r.exported.length} 个旧键的原始字节（本地备份键）`
+		uni.showToast({ title: `已导出保留 ${r.exported.length} 项原始数据`, icon: 'none' })
+	} else {
+		legacyResultText.value = r.failed.length > 0 ? `导出失败 ${r.failed.length} 项（存储异常，旧数据保持原样）` : '没有可导出的旧记录'
+		uni.showToast({ title: r.failed.length > 0 ? '导出失败，旧数据保持原样' : '没有可导出的旧记录', icon: 'none' })
+	}
+}
+
 
 const elapsedMs = computed(() => {
 	void nowTick.value
@@ -409,6 +463,21 @@ onShow(() => {
 	color: #c0392b;
 	line-height: 1.6;
 }
+/* F1：旧版记录待确认入口 */
+.legacy-banner {
+	margin: 16rpx 24rpx 0;
+	padding: 20rpx 24rpx;
+	border-radius: 14rpx;
+	background: #f4f0e4;
+	border: 1rpx solid #e3d9bd;
+}
+.legacy-banner-text { display: block; font-size: 24rpx; color: #6b5d33; line-height: 1.6; }
+.legacy-banner-row { margin-top: 14rpx; display: flex; flex-direction: row; gap: 12rpx; }
+.legacy-banner-btn { padding: 10rpx 22rpx; border-radius: 999rpx; background: #ffffff; border: 1rpx solid #d8c99a; }
+.legacy-banner-btn.primary { background: #8a763a; border-color: #8a763a; }
+.legacy-banner-btn-text { font-size: 24rpx; color: #6b5d33; }
+.legacy-banner-btn.primary .legacy-banner-btn-text { color: #ffffff; }
+.legacy-banner-result { display: block; margin-top: 10rpx; font-size: 22rpx; color: #8a7440; line-height: 1.5; }
 .restore-banner {
 	margin: 20rpx 32rpx 0;
 	padding: 16rpx 24rpx;

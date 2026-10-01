@@ -49,8 +49,9 @@ import foodSafetyJson from '@/static/data/food-safety.json'
 
 export const FOOD_SAFETY_ENTRIES = Array.isArray(foodSafetyJson) ? foodSafetyJson : []
 
-// R1 前旧固定键（无身份作用域）——保留隔离：新代码不读、不写、不删除、不迁移认领（A08）。
-// 真实用户旧会话数据仍留在这些键下，等待用户显式决策；不得自动并入任何成员。
+// R1 前旧固定键（无身份作用域）——隔离保留（A08：不自动并入任何成员），但自 F1 起
+// 提供"检测存在 → 待确认入口 → 显式归属确认（有云端 ID 先验归属）/原始字节导出保留
+// → 幂等迁入当前作用域"的找回通路；未确认前不展示正文、不上传、不迁移。
 const LEGACY_KEYS = [
   'momcare_fetal_active_session',
   'momcare_active_contraction',
@@ -58,7 +59,14 @@ const LEGACY_KEYS = [
   'momcare_fetal_finish_queue',
   'momcare_contra_stop_queue'
 ]
-void LEGACY_KEYS
+// 旧键 → 语义类别（fetal active / fetal queue / contra active / contra queue / fetal history）
+const LEGACY_KEY_KIND = {
+  momcare_fetal_active_session: 'fetal-active',
+  momcare_fetal_sessions_history: 'fetal-history',
+  momcare_fetal_finish_queue: 'fetal-queue',
+  momcare_active_contraction: 'contra-active',
+  momcare_contra_stop_queue: 'contra-queue'
+}
 
 const TOOLS_SCHEMA = 't1'
 const FETAL_ACTIVE_SUFFIX = 'fetal_active'
@@ -595,9 +603,237 @@ export const useToolsStore = defineStore('tools', () => {
   // orphan-draft-restored 是 RAM 恢复（无耐久备份动作），不参与本闸。
   const INTEGRITY_WARNING_STATUSES = ['error', 'corrupt', 'corrupt-frozen', 'invalid-shape', 'invalid-shape-unbacked', 'scope-foreign', 'scope-foreign-unbacked']
   const RECOVERY_BLOCKED_MESSAGE = '本地记录缓存存在无法读取或校验异常的数据，自动同步已暂停——请在工具页查看恢复提示并确认后继续。'
-  const recoveryBlocked = computed(() => restoreWarnings.value.some(w => INTEGRITY_WARNING_STATUSES.includes(w.status) && !w.ack))
+  // F2（2026-10-01 功能修复）：恢复闸按数据域约束——胎动键异常只阻断胎动域、宫缩键异常
+  // 只阻断宫缩域；EFW 历史为纯云端域，不依赖任何计时缓存完整性（一个域异常不阻止无关域恢复）。
+  const FETAL_DOMAIN_SUFFIXES = [FETAL_ACTIVE_SUFFIX, FETAL_HISTORY_SUFFIX, FETAL_QUEUE_SUFFIX]
+  const CONTRA_DOMAIN_SUFFIXES = [CONTRA_ACTIVE_SUFFIX, CONTRA_HISTORY_SUFFIX, CONTRA_QUEUE_SUFFIX]
+  const domainIntegrityBlocked = suffixes => restoreWarnings.value.some(w => suffixes.includes(w.key) && INTEGRITY_WARNING_STATUSES.includes(w.status) && !w.ack)
+  const fetalRecoveryBlocked = computed(() => domainIntegrityBlocked(FETAL_DOMAIN_SUFFIXES))
+  const contraRecoveryBlocked = computed(() => domainIntegrityBlocked(CONTRA_DOMAIN_SUFFIXES))
+  const recoveryBlocked = computed(() => fetalRecoveryBlocked.value || contraRecoveryBlocked.value)
   function acknowledgeRestoreWarnings() {
     for (const w of restoreWarnings.value) w.ack = true
+  }
+
+  // ── F1：旧版无作用域计时数据的安全找回（2026-10-01 功能修复）──
+  // 状态只含"存在性与计数"，不含正文（页面在确认前不展示旧记录内容，不上传，不自动归属）。
+  const legacyPending = ref(null)
+  function scanLegacyKeys() {
+    const keys = []
+    const counts = { 'fetal-active': 0, 'fetal-history': 0, 'fetal-queue': 0, 'contra-active': 0, 'contra-queue': 0 }
+    const readErrors = []
+    for (const key of LEGACY_KEYS) {
+      let st
+      try {
+        const raw = uni.getStorageSync(key)
+        if (raw === '' || raw === null || raw === undefined) continue
+        st = { key, kind: LEGACY_KEY_KIND[key], status: 'present', bytes: String(raw).length }
+      } catch (e) {
+        readErrors.push(key)
+        continue
+      }
+      keys.push(st)
+    }
+    // 计数需解析内容（仅统计条目数，不外露正文）
+    const parseQuiet = key => {
+      try { const raw = uni.getStorageSync(key); if (!raw) return null; return { value: JSON.parse(raw), raw } } catch (e) { return null }
+    }
+    const parsed = {}
+    for (const k of keys) {
+      const p = parseQuiet(k.key)
+      parsed[k.key] = p
+      if (k.kind === 'fetal-history' || k.kind === 'fetal-queue' || k.kind === 'contra-queue') {
+        counts[k.kind] = p && Array.isArray(p.value) ? p.value.length : (p ? 1 : 0)
+      } else if (k.status === 'present') {
+        counts[k.kind] = p ? 1 : (readErrors.push(k.key), 0)
+        if (!p) { k.status = 'unparseable'; readErrors.push(k.key) }
+      }
+    }
+    const total = keys.length
+    legacyPending.value = { keys, counts, readErrors, total, parsedRef: parsed }
+    return legacyPending.value
+  }
+  const legacySummaryText = computed(() => {
+    const p = legacyPending.value
+    if (!p || p.total === 0) return ''
+    const parts = []
+    if (p.counts['fetal-active'] > 0) parts.push(`胎动进行中 ${p.counts['fetal-active']}`)
+    if (p.counts['fetal-queue'] > 0) parts.push(`胎动待完成 ${p.counts['fetal-queue']}`)
+    if (p.counts['fetal-history'] > 0) parts.push(`胎动历史 ${p.counts['fetal-history']}`)
+    if (p.counts['contra-active'] > 0) parts.push(`宫缩进行中 ${p.counts['contra-active']}`)
+    if (p.counts['contra-queue'] > 0) parts.push(`宫缩待同步 ${p.counts['contra-queue']}`)
+    const errNote = p.readErrors.length > 0 ? `；${p.readErrors.length} 项读取异常（无法自动处理，可导出保留）` : ''
+    return `检测到旧版本计时记录：${parts.join('、')}${errNote}。旧记录无身份信息、无法自动证明归属——未确认前不展示、不上传、不并入当前成员。`
+  })
+  // 原始字节导出/保留通路：逐键写 `__legacy_keep_` 副本（不做任何删除/改写）
+  function exportLegacyRaw() {
+    const exported = []
+    const failed = []
+    const ts = Date.now()
+    for (const key of LEGACY_KEYS) {
+      let raw
+      try { raw = uni.getStorageSync(key) } catch (e) { failed.push(key); continue }
+      if (raw === '' || raw === null || raw === undefined) continue
+      try { uni.setStorageSync(`${key}__legacy_keep_${ts}`, raw); exported.push(key) } catch (e) { failed.push(key) }
+    }
+    return { ok: failed.length === 0, exported, failed }
+  }
+  // 云端归属验证：有服务端 ID 的旧记录，续跑前查真实云端记录的归属（memberId）与状态——
+  // 点击确认不直接赋予操作权限；查不到/查询失败 → 保留待处理，不发 mutation。
+  async function verifyLegacyCloudOwnership(scope, fetalWithId, contraWithId) {
+    const verdict = { fetalOwnerOk: new Set(), contraOwnerOk: new Set(), rejected: [], unverifiable: [] }
+    if (fetalWithId.length > 0) {
+      let res
+      try { res = await familyCall(TOOLS_FN, { action: 'fetal.list', limit: 100 }) } catch (e) { res = { ok: false, code: 'cloud-call-failed' } }
+      if (!res.ok) {
+        for (const f of fetalWithId) verdict.unverifiable.push({ kind: 'fetal', localRef: f.localRef, sessionId: f.sessionId, reason: res.code })
+      } else {
+        const byId = new Map((res.data.sessions || []).map(x => [x.sessionId, x]))
+        for (const f of fetalWithId) {
+          const doc = byId.get(f.sessionId)
+          if (!doc) verdict.unverifiable.push({ kind: 'fetal', localRef: f.localRef, sessionId: f.sessionId, reason: 'not-found' })
+          else if (doc.memberId !== scope.memberId) verdict.rejected.push({ kind: 'fetal', localRef: f.localRef, sessionId: f.sessionId, owner: doc.memberId })
+          else verdict.fetalOwnerOk.add(f.localRef)
+        }
+      }
+    }
+    if (contraWithId.length > 0) {
+      let res
+      try { res = await familyCall(TOOLS_FN, { action: 'contraction.list', limit: 100, includeDiscarded: true }) } catch (e) { res = { ok: false, code: 'cloud-call-failed' } }
+      if (!res.ok) {
+        for (const c of contraWithId) verdict.unverifiable.push({ kind: 'contra', localRef: c.localRef, recordId: c.recordId, reason: res.code })
+      } else {
+        const byId = new Map((res.data.records || []).map(x => [x.recordId, x]))
+        for (const c of contraWithId) {
+          const doc = byId.get(c.recordId)
+          if (!doc) verdict.unverifiable.push({ kind: 'contra', localRef: c.localRef, recordId: c.recordId, reason: 'not-found' })
+          else if (doc.memberId !== scope.memberId) verdict.rejected.push({ kind: 'contra', localRef: c.localRef, recordId: c.recordId, owner: doc.memberId })
+          else verdict.contraOwnerOk.add(c.localRef)
+        }
+      }
+    }
+    return verdict
+  }
+  // 显式归属确认 + 幂等迁移。返回 {ok, adopted, conflicts, rejected, unverifiable, readFailures}。
+  // 迁移保全 localRef/操作 ID/点击顺序/finish·stop 时间与显式 null；目标耐久写入并读回验证
+  // 成功前不删除/清空/覆写任何旧键字节（删除前必有 __legacy_keep_ 原始字节备份）。
+  async function confirmLegacyAdoption() {
+    const scope = currentScope()
+    if (!scope) return { ok: false, code: 'scope-incomplete', message: '身份作用域不完整，无法迁入' }
+    if (recoveryBlocked.value) return { ok: false, code: 'recovery-blocked', message: RECOVERY_BLOCKED_MESSAGE }
+    const scan = scanLegacyKeys()
+    if (scan.total === 0) return { ok: true, adopted: 0, conflicts: [], rejected: [], unverifiable: [] }
+    const parsed = scan.parsedRef
+    // ① 原始字节备份（任何处置之前；失败则中止迁移，旧字节保持原样）
+    const backup = exportLegacyRaw()
+    if (!backup.ok) {
+      return { ok: false, code: 'legacy-backup-failed', message: '旧记录原始字节备份失败——为避免数据丢失，本次不迁移（旧数据保持原样，可重试）', detail: backup.failed }
+    }
+    // ② 分类解析（unparseable/corrupt 的键保留原样，不迁移不删除）
+    const fetalActive = (parsed['momcare_fetal_active_session'] && parsed['momcare_fetal_active_session'].value && !Array.isArray(parsed['momcare_fetal_active_session'].value)) ? parsed['momcare_fetal_active_session'].value : null
+    const fetalQueueArr = Array.isArray(parsed['momcare_fetal_finish_queue'] && parsed['momcare_fetal_finish_queue'].value) ? parsed['momcare_fetal_finish_queue'].value.filter(x => x && typeof x === 'object') : []
+    const contraActive = (parsed['momcare_active_contraction'] && parsed['momcare_active_contraction'].value && !Array.isArray(parsed['momcare_active_contraction'].value)) ? parsed['momcare_active_contraction'].value : null
+    const contraQueueArr = Array.isArray(parsed['momcare_contra_stop_queue'] && parsed['momcare_contra_stop_queue'].value) ? parsed['momcare_contra_stop_queue'].value.filter(x => x && typeof x === 'object') : []
+    const fetalHistory = Array.isArray(parsed['momcare_fetal_sessions_history'] && parsed['momcare_fetal_sessions_history'].value) ? parsed['momcare_fetal_sessions_history'].value : []
+    // ③ 云端归属验证（有服务端 ID 的记录）
+    const fetalAll = [fetalActive, ...fetalQueueArr].filter(Boolean)
+    const contraAll = [contraActive, ...contraQueueArr].filter(Boolean)
+    const fetalWithId = fetalAll.filter(x => typeof x.sessionId === 'string' && x.sessionId)
+    const contraWithId = contraAll.filter(x => typeof x.recordId === 'string' && x.recordId)
+    const verdict = await verifyLegacyCloudOwnership(scope, fetalWithId, contraWithId)
+    const rejected = verdict.rejected
+    const unverifiable = verdict.unverifiable
+    const fetalOk = rec => !(rec && typeof rec.sessionId === 'string' && rec.sessionId) || verdict.fetalOwnerOk.has(rec.localRef)
+    const contraOk = rec => !(rec && typeof rec.recordId === 'string' && rec.recordId) || verdict.contraOwnerOk.has(rec.localRef)
+    const takeFetal = fetalActive && fetalOk(fetalActive) ? fetalActive : null
+    const takeContra = contraActive && contraOk(contraActive) ? contraActive : null
+    const fetalQueueTake = fetalQueueArr.filter(x => fetalOk(x))
+    const contraQueueTake = contraQueueArr.filter(x => contraOk(x))
+    // ④ 新旧冲突检查：目标作用域已有不同 localRef 的活跃会话/记录 → 不覆盖，保留旧数据待用户处理
+    const conflicts = []
+    if (takeFetal && currentFetalSession.value && currentFetalSession.value.localRef !== takeFetal.localRef) {
+      conflicts.push({ kind: 'fetal-active', legacyLocalRef: takeFetal.localRef, currentLocalRef: currentFetalSession.value.localRef })
+    }
+    if (takeContra && activeContraction.value && activeContraction.value.localRef !== takeContra.localRef) {
+      conflicts.push({ kind: 'contra-active', legacyLocalRef: takeContra.localRef, currentLocalRef: activeContraction.value.localRef })
+    }
+    // ⑤ 幂等迁移（作用域盖章；去重键 startOpId / stopOp.opId / localRef；显式 null 原样保留）
+    const stampScope = x => ({ ...x, scope })
+    let adopted = 0
+    if (conflicts.length === 0) {
+      if (takeFetal && !currentFetalSession.value) {
+        const t = stampScope(takeFetal)
+        if (validFetalSessionShape(t)) { currentFetalSession.value = t; adopted++ }
+        else unverifiable.push({ kind: 'fetal', localRef: takeFetal.localRef, reason: 'invalid-shape' })
+      } else if (takeFetal && currentFetalSession.value && currentFetalSession.value.localRef === takeFetal.localRef) {
+        adopted++ // 幂等：已迁入过
+      }
+      if (takeContra && !activeContraction.value) {
+        const t = stampScope(takeContra)
+        if (validContraRecordShape(t)) { activeContraction.value = t; adopted++ }
+        else unverifiable.push({ kind: 'contra', localRef: takeContra.localRef, reason: 'invalid-shape' })
+      } else if (takeContra && activeContraction.value && activeContraction.value.localRef === takeContra.localRef) {
+        adopted++
+      }
+      for (const q of fetalQueueTake) {
+        if (fetalFinishQueue.value.some(x => x && x.startOpId === q.startOpId)) continue // 幂等
+        fetalFinishQueue.value = [...fetalFinishQueue.value, stampScope(q)]
+        adopted++
+      }
+      for (const q of contraQueueTake) {
+        const stopId = q.stopOp && q.stopOp.opId
+        if (contraStopQueue.value.some(x => x && ((stopId && x.stopOp && x.stopOp.opId === stopId) || x.startOpId === q.startOpId))) continue
+        contraStopQueue.value = [...contraStopQueue.value, stampScope(q)]
+        adopted++
+      }
+      // 旧胎动历史并入当前历史头部（不覆盖；同 startTime+localRef 幂等跳过）
+      for (const h of fetalHistory) {
+        if (!h || typeof h !== 'object') continue
+        if (fetalSessions.value.some(x => x && x.localRef && x.localRef === h.localRef)) continue
+        fetalSessions.value = [...fetalSessions.value, h]
+      }
+    }
+    // ⑥ 落盘 + 读回验证（任一失败 → 不删除旧键，返回部分成功事实，重试幂等）
+    const pF = persistFetal(scope)
+    const pC = persistContra(scope)
+    const readBack = suffix => {
+      try { const raw = uni.getStorageSync(scopedKey(scope, suffix)); return raw } catch (e) { return null }
+    }
+    const verifyOk = (() => {
+      if (takeFetal && currentFetalSession.value && currentFetalSession.value.localRef === takeFetal.localRef) {
+        const rb = readBack(FETAL_ACTIVE_SUFFIX)
+        if (!rb) return false
+      }
+      if (takeContra && activeContraction.value && activeContraction.value.localRef === takeContra.localRef) {
+        const rb = readBack(CONTRA_ACTIVE_SUFFIX)
+        if (!rb) return false
+      }
+      return true
+    })()
+    let durable = pF.ok && pC.ok && verifyOk
+    // ⑦ 全部迁移项耐久成功 → 删除旧键（备份已在手）；否则旧键全部保留
+    const removedKeys = []
+    if (durable && conflicts.length === 0 && rejected.length === 0 && unverifiable.length === 0) {
+      for (const key of LEGACY_KEYS) {
+        try {
+          const raw = uni.getStorageSync(key)
+          if (raw === '' || raw === null || raw === undefined) continue
+          uni.removeStorageSync(key)
+          removedKeys.push(key)
+        } catch (e) { /* 删除失败：键保留，幂等重试会再见 */ }
+      }
+    } else if (durable && (rejected.length > 0 || unverifiable.length > 0 || conflicts.length > 0)) {
+      // 部分迁入成功：仅删除"已被完整迁入且无争议"的来源键——保守起见：active 键仅当无冲突且其目标在盘；
+      // 队列键仅当全部条目均已迁入（或按条目保留无法表达）——为最小安全面，这里只删 active 类
+      if (takeFetal && !conflicts.some(c => c.kind === 'fetal-active') && readBack(FETAL_ACTIVE_SUFFIX)) {
+        try { uni.removeStorageSync('momcare_fetal_active_session'); removedKeys.push('momcare_fetal_active_session') } catch (e) { }
+      }
+      if (takeContra && !conflicts.some(c => c.kind === 'contra-active') && readBack(CONTRA_ACTIVE_SUFFIX)) {
+        try { uni.removeStorageSync('momcare_active_contraction'); removedKeys.push('momcare_active_contraction') } catch (e) { }
+      }
+    }
+    scanLegacyKeys()
+    return { ok: true, adopted, conflicts, rejected, unverifiable, removedKeys, backupKeys: backup.exported, fetalPersist: pF.ok, contraPersist: pC.ok }
   }
 
   // ── RAM 孤儿草稿区（审核第 8 条）──
@@ -630,6 +866,9 @@ export const useToolsStore = defineStore('tools', () => {
     contraPersistFailed.value = false
     restoreWarnings.value = []
   }
+  // F1：store 创建时扫描旧键存在性（只读；不解析正文入内存——正文仅在显式确认流程中取用）
+  scanLegacyKeys()
+
   const sessionVersionForTools = subscribeSession()
   let lastWatchedMemberId = null
   let lastWatchedFamilyId = null
@@ -977,7 +1216,7 @@ export const useToolsStore = defineStore('tools', () => {
 
   async function pullFetalSessions() {
     if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
-    if (recoveryBlocked.value) return { ok: false, code: 'recovery-blocked', message: RECOVERY_BLOCKED_MESSAGE }
+    if (fetalRecoveryBlocked.value) return { ok: false, code: 'recovery-blocked', domain: 'fetal', message: RECOVERY_BLOCKED_MESSAGE }
     const sessionAtStart = captureSession()
     const scope = currentScope()
     const sameIdentity = () => isSameSession(sessionAtStart) && scopeEquals(currentScope(), scope)
@@ -1200,7 +1439,7 @@ export const useToolsStore = defineStore('tools', () => {
 
   async function pullContractions({ sinceMs } = {}) {
     if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
-    if (recoveryBlocked.value) return { ok: false, code: 'recovery-blocked', message: RECOVERY_BLOCKED_MESSAGE }
+    if (contraRecoveryBlocked.value) return { ok: false, code: 'recovery-blocked', domain: 'contraction', message: RECOVERY_BLOCKED_MESSAGE }
     const sessionAtStart = captureSession()
     const scope = currentScope()
     const sameScope = () => isSameSession(sessionAtStart) && scopeEquals(currentScope(), scope)
@@ -1270,15 +1509,19 @@ export const useToolsStore = defineStore('tools', () => {
   // 任何数据（活跃记录/队列/持久化）；persist 带 capturedScope 守卫，不写新作用域。
   // 恢复闸（R2 审核 6）：存在未确认的完整性警告时不做任何自动同步。
   async function retryPending() {
-    if (recoveryBlocked.value) {
-      return [{ ok: false, code: 'recovery-blocked', message: RECOVERY_BLOCKED_MESSAGE }]
-    }
+    // F2：按域放行——被阻断域如实返回 recovery-blocked（附 domain），允许的域独立继续；
+    // code 字符串保持既有 'recovery-blocked'（旧断言不破坏）。
+    const fetalBlocked = fetalRecoveryBlocked.value
+    const contraBlocked = contraRecoveryBlocked.value
+    const results = []
+    if (fetalBlocked) results.push({ ok: false, code: 'recovery-blocked', domain: 'fetal', message: RECOVERY_BLOCKED_MESSAGE })
+    if (contraBlocked) results.push({ ok: false, code: 'recovery-blocked', domain: 'contraction', message: RECOVERY_BLOCKED_MESSAGE })
+    if (fetalBlocked && contraBlocked) return results
     const captured = captureSession()
     const capturedScope = currentScope()
     const sameIdentity = () => isSameSession(captured) && scopeEquals(currentScope(), capturedScope)
-    const results = []
-    const active = currentFetalSession.value
-    const rec = activeContraction.value
+    const active = fetalBlocked ? null : currentFetalSession.value
+    const rec = contraBlocked ? null : activeContraction.value
     if (active) {
       const r = await flushFetalPending(active)
       if (!sameIdentity()) { results.push(r); return results }
@@ -1299,11 +1542,11 @@ export const useToolsStore = defineStore('tools', () => {
       }
     }
     if (!sameIdentity()) return results
-    // 刷新队列落盘状态（offline-pending 语义前提：队列确实在盘）
-    noteFetalPersist(persistFetal(capturedScope))
+    // 刷新队列落盘状态（offline-pending 语义前提：队列确实在盘）；被阻断域跳过其全部段落
+    if (!fetalBlocked) noteFetalPersist(persistFetal(capturedScope))
     // 断网终态队列：finish/discard 携日志重放（opId 稳定——服务端幂等不双写）。
     // flush 内部以"记录 scope == 当前会话"为前置——异成员队列项如实 scope-mismatch 停止。
-    while (fetalFinishQueue.value.length > 0) {
+    while (!fetalBlocked && fetalFinishQueue.value.length > 0) {
       if (!sameIdentity()) return results
       const queued = fetalFinishQueue.value[0]
       const r = await flushFetalPending(queued)
@@ -1316,8 +1559,8 @@ export const useToolsStore = defineStore('tools', () => {
       if (!sameIdentity()) return results
     }
     if (!sameIdentity()) return results
-    noteContraPersist(persistContra(capturedScope))
-    while (contraStopQueue.value.length > 0) {
+    if (!contraBlocked) noteContraPersist(persistContra(capturedScope))
+    while (!contraBlocked && contraStopQueue.value.length > 0) {
       if (!sameIdentity()) return results
       const queued = contraStopQueue.value[0]
       const r = await flushContraPending(queued)
@@ -1471,19 +1714,30 @@ export const useToolsStore = defineStore('tools', () => {
     if (!recordId) return { ok: false, code: 'invalid-params' }
     const rec = efwRecords.value.find(x => x && x.recordId === recordId)
     const expected = rec && Number.isInteger(rec.revision) ? rec.revision : 1
+    const sessionAtStart = captureSession()
     let r
     try {
       r = await familyCall(TOOLS_FN, { action: 'efw.delete', recordId, expectedRevision: expected, operationId: newOpId('efwd') })
     } catch (e) {
       r = { ok: false, code: 'cloud-call-failed' }
     }
-    if (!r.ok) return { ok: false, code: r.code, message: r.message }
-    return pullEfwRecords()
+    // F2：删除事实与刷新结果分离反馈——云端删除成功就是成功，随后刷新失败不得误报"删除失败"。
+    if (!r.ok) return { ok: false, code: r.code, message: r.message, deleted: false }
+    // 立即移除已确认删除的本地行（防同键再次误删/旧活行残留）；会话已切换则不动新身份视图
+    if (isSameSession(sessionAtStart)) {
+      efwRecords.value = efwRecords.value.filter(x => !(x && x.recordId === recordId))
+    }
+    // 刷新独立进行：失败如实带回 refresh 字段（页面据此提示"已删除（列表刷新失败）"）
+    const refresh = await pullEfwRecords()
+    return {
+      ok: true, deleted: true,
+      refresh: { ok: refresh.ok === true, code: refresh.ok === true ? null : (refresh.code || 'refresh-failed'), message: refresh.ok === true ? null : (refresh.message || null) }
+    }
   }
 
   async function pullEfwRecords() {
+    // F2：EFW 历史为纯云端域——不设计时缓存恢复闸（胎动/宫缩缓存异常不阻断估重读取）。
     if (!sessionReady()) return { ok: false, code: 'unauthenticated-session' }
-    if (recoveryBlocked.value) return { ok: false, code: 'recovery-blocked', message: RECOVERY_BLOCKED_MESSAGE }
     const sessionAtStart = captureSession()
     const list = []
     let cursor = null
@@ -1545,7 +1799,8 @@ export const useToolsStore = defineStore('tools', () => {
   return {
     currentFetalSession, fetalSessions, activeContraction, contractionRecords,
     fetalFinishQueue, contraStopQueue,
-    fetalUnsaved, contraUnsaved, restoreWarnings, recoveryBlocked, acknowledgeRestoreWarnings, orphanDraftSummary,
+    fetalUnsaved, contraUnsaved, restoreWarnings, recoveryBlocked, fetalRecoveryBlocked, contraRecoveryBlocked, acknowledgeRestoreWarnings, orphanDraftSummary,
+    legacyPending, legacySummaryText, confirmLegacyAdoption, exportLegacyRaw,
     recentContractions, unfinishedContractions, lastHourFinished, avgDurationSec, avgIntervalSec, is511Pattern, disclaimer,
     hospitalName, doctorName, hospitalPhone,
     efwRecords,

@@ -450,7 +450,7 @@ async function main() {
     // 客户端读侧：不称完整
     const view = loadView()
     const v = view.familyAiView({ ...doc, attachments: [{ fileId: 'f1' }, { fileId: 'f2' }, { fileId: 'f3' }, { fileId: 'f4' }, { fileId: 'f5' }] })
-    assert.deepEqual(v.ai_coverage, { analyzed: 3, total: 5, complete: false, unknown: false, mode: 'vision' }, '读侧覆盖形状（含 mode）')
+    assert.deepEqual(v.ai_coverage, { analyzed: 3, total: 5, complete: false, unknown: false, mode: 'vision', ocrTruncated: false }, '读侧覆盖形状（含 mode；F3 新增 ocrTruncated 字段——视觉/非截断恒 false）')
     // 真实详情页：披露文案
     const page = loadDetailPage()
     page.report.value = page.famReportToLegacy({ id: 'rpt_a16', ...doc })

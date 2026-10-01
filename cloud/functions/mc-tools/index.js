@@ -320,6 +320,34 @@ function boundOcrText(raw) {
   return chars.slice(0, OCR_TEXT_MAX).join('') + OCR_TRUNCATED_SUFFIX
 }
 
+// ── F3（2026-10-01 功能修复）：OCR 内容级覆盖 ──
+// 拼接全文超 OCR_TEXT_MAX 被 boundOcrText 截断时，只有"全文完整进入截断文本"的页
+// 才计入 analyzed（部分进入或完全未进入的页计入 skipped）；不得以"完成 OCR 的页数"
+// 冒充"实际进入模型的内容"（coverage 层面杜绝截断下声称全部附件已分析）。
+function ocrModelCoverage(pageTexts, pageFileIds) {
+  const lens = pageTexts.map(t => Array.from(String(t || '')).length)
+  const joinedLen = lens.reduce((a, b) => a + b, 0) + Math.max(0, pageTexts.length - 1) // join('\n') 分隔符
+  const truncated = joinedLen > OCR_TEXT_MAX
+  const modelPageFileIds = []
+  if (!truncated) {
+    for (let i = 0; i < pageFileIds.length; i++) modelPageFileIds.push(pageFileIds[i])
+  } else {
+    let acc = 0
+    for (let i = 0; i < pageTexts.length; i++) {
+      const need = lens[i] + (i > 0 ? 1 : 0)
+      if (acc + need <= OCR_TEXT_MAX) modelPageFileIds.push(pageFileIds[i])
+      acc += need
+    }
+  }
+  return { text: boundOcrText(pageTexts.join('\n')), truncated, modelPageFileIds }
+}
+// 缓存复用/历史结果的截断证据：持久化文本带截断后缀即证内容被截（逐页覆盖不可考——
+// 不能把全部 pageFileIds 当作全部进入模型的证明，只能保守不计 analyzed）。
+function ocrTruncatedEvidence(text) {
+  return typeof text === 'string' && text.endsWith(OCR_TRUNCATED_SUFFIX)
+}
+
+
 // 附件登记核对（OCR 与视觉直读共用；登记校验与 mc-reports report.getReadUrls 同规则）：
 // 页数封顶截取 + 本家庭 + status=registered + formalFileID 非空；任一不符抛 invalid-attachment。
 async function validateAttachmentPages(db, fid, attachments, maxPages) {
@@ -338,6 +366,7 @@ async function validateAttachmentPages(db, fid, attachments, maxPages) {
 }
 
 // 逐页 OCR。任一页失败 → 抛错（整次解读失败——多页报告缺页解读会误导，宁失败不部分成功）。
+// F3：返回内容级覆盖（truncated / modelPageFileIds——全文完整进入截断文本的页）。
 async function extractOcrForReport(db, fid, attachments, provider) {
   const { pageFileIds, formalFileIDs } = await validateAttachmentPages(db, fid, attachments, OCR_MAX_PAGES)
   const pageTexts = []
@@ -355,7 +384,8 @@ async function extractOcrForReport(db, fid, attachments, provider) {
     }
     pageTexts.push(String(text))
   }
-  return { text: boundOcrText(pageTexts.join('\n')), pageFileIds, pageCount: formalFileIDs.length }
+  const cov = ocrModelCoverage(pageTexts, pageFileIds)
+  return { text: cov.text, truncated: cov.truncated, modelPageFileIds: cov.modelPageFileIds, pageFileIds, pageCount: formalFileIDs.length }
 }
 
 // 缓存复用：报告已存 ocr_result 且附件集合（页序）与提供方一致时复用——不重复识别/计费
@@ -1264,6 +1294,9 @@ if (action === 'efw.list') {
     let ocrPageFileIds = []
     let ocrProviderKind = ''
     let ocrGeneratedAt = 0
+    // F3：内容级覆盖——实际全文进入模型的页集合与截断标志（缓存复用按持久化截断后缀证据）
+    let ocrModelFileIds = []
+    let ocrTruncated = false
     if (ocrOp) {
       const cached = reusableOcr(report, ocrOp, attachments)
       if (cached) {
@@ -1272,6 +1305,9 @@ if (action === 'efw.list') {
         ocrPageFileIds = Array.isArray(cached.pageFileIds) ? cached.pageFileIds : []
         ocrProviderKind = cached.provider
         ocrGeneratedAt = cached.generatedAt || 0
+        ocrTruncated = ocrTruncatedEvidence(cached.text)
+        // 缓存无逐页文本：截断时逐页覆盖不可考——保守不计 analyzed（不得以页数冒充内容进入）
+        ocrModelFileIds = ocrTruncated ? [] : ocrPageFileIds.slice()
       } else {
         let extracted
         try {
@@ -1283,6 +1319,8 @@ if (action === 'efw.list') {
         ocrIncluded = true
         ocrText = extracted.text
         ocrPageFileIds = extracted.pageFileIds
+        ocrModelFileIds = extracted.modelPageFileIds
+        ocrTruncated = extracted.truncated === true
         ocrProviderKind = ocrOp.kind
       }
     }
@@ -1332,14 +1370,17 @@ if (action === 'efw.list') {
     // 元数据模式=0）与未分析附件清单——结果与页面据此披露"已分析 x/y"，
     // 未覆盖/未知覆盖不得显示为完整分析。mode 标注本次分析形态（R2 审核 3：
     // 元数据模式未覆盖的原因是"未读取附件"，不是页数上限——页面按 mode 如实表述）。
-    const analyzedFileIds = (visionImages ? visionPageFileIds : (ocrIncluded ? ocrPageFileIds : [])).map(String)
+    // F3：OCR 模式下 analyzedFileIds = 全文完整进入模型的页（截断波及的页计入 skipped）；
+    // ocrTruncated 标志持久化，读侧据此绝不声称"已分析全部附件"。
+    const analyzedFileIds = (visionImages ? visionPageFileIds : (ocrIncluded ? ocrModelFileIds : [])).map(String)
     const coverageMode = visionImages ? 'vision' : (ocrIncluded ? 'ocr' : 'metadata')
     const coverage = {
       analyzedCount: analyzedFileIds.length,
       totalAttachments: atts,
       analyzedFileIds,
       skippedFileIds: attachments.map(a => String((a && a.fileId) || '')).filter(id => !analyzedFileIds.includes(id)),
-      mode: coverageMode
+      mode: coverageMode,
+      ...(coverageMode === 'ocr' && ocrTruncated ? { ocrTruncated: true } : {})
     }
     // 回写 mc_reports.ai_result（事务 CAS——revision 推进，迟到旧写冲突拒）
     // R2：CAS 锚定 = 发起快照（baseRevision + 输入摘要）——在途编辑使旧结果失效
@@ -1360,7 +1401,8 @@ if (action === 'efw.list') {
         // ocr_result 仅在实际提取（或复用）时写入；元数据模式不动旧值。
         // inputDigest/baseRevision 溯源本次输入快照（R2 审核 2）：读侧据此判断提取内容
         // 是否属于当前结果——跨输入（改附件后）残留的旧 OCR 不得当成本次"原文提取"。
-        merged.ocr_result = { text: ocrText, included: true, provider: ocrProviderKind, generatedAt: ocrGeneratedAt || now, pageFileIds: ocrPageFileIds, inputDigest, baseRevision }
+        // F3：truncated 截断标志随提取结果持久化（读侧/导出消费；不含任何供应商内部状态）
+        merged.ocr_result = { text: ocrText, included: true, provider: ocrProviderKind, generatedAt: ocrGeneratedAt || now, pageFileIds: ocrPageFileIds, inputDigest, baseRevision, truncated: ocrTruncated === true }
       }
       if (visionImages) {
         // vision_result 仅在视觉直读时写入（与 ocr_result 互斥——视觉模式整体跳过 OCR）；

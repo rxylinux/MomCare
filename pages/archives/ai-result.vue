@@ -156,6 +156,12 @@ const aiCoverageNote = computed(() => {
       : '历史版本解读：覆盖范围未知'
   }
   if (cov.total === 0) return '' // 无附件的元数据解读——无覆盖歧义
+  if (cov.ocrTruncated) {
+    // F3：OCR 内容被截断——绝不声称"已分析全部附件"；如实区分识别页数与实际进入模型的内容
+    return cov.analyzed === cov.total
+      ? 'OCR 内容超出单次上限被截断：仅截断前内容已分析，截断部分（可能含后页指标）未分析'
+      : `已分析 ${cov.analyzed}/${cov.total} 个附件（OCR 内容截断——仅截断前内容进入分析，截断部分未分析）`
+  }
   if (cov.complete) return `已分析全部 ${cov.total} 个附件`
   if (cov.mode === 'metadata') return `本次仅分析报告元数据：未读取任何附件（共 ${cov.total} 个）`
   return `已分析 ${cov.analyzed}/${cov.total} 个附件（${cov.total - cov.analyzed} 个未分析——单次页数上限）`
