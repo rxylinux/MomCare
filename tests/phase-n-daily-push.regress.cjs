@@ -31,11 +31,12 @@ const NOW = new Date()
 function dayOffset(n) { const d = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()); d.setDate(d.getDate() + n); return d }
 const pad = n => String(n).padStart(2, '0')
 const keyOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const chineseOf = k => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(k); return `${m[1]}年${Number(m[2])}月${Number(m[3])}日` }
 
 // ══════ ① 共用核心 bundle（与 phase-l 同手法）══════
 const coreFile = path.join(temp, 'dailyTipCore.cjs')
 esbuild.buildSync({ entryPoints: [path.join(root, 'utils/dailyTipCore.js')], bundle: true, platform: 'node', format: 'cjs', outfile: coreFile, logLevel: 'silent' })
-const { buildPushContent } = require(coreFile)
+const { buildPushContent, buildEveReminder } = require(coreFile)
 
 // ══════ ② 云函数 DIST：函数 + shared + 转译核心（镜像 assemble 投放）══════
 const DIST = path.join(temp, 'cf', 'mc-daily-push')
@@ -197,6 +198,19 @@ async function main() {
     assert.equal(buildPushContent(), null)
   })
 
+  await scenario('N7 前夜提醒内容：明天产检→提醒文案，其余一律 null', async () => {
+    const t = keyOf(TODAY())
+    const a = buildEveReminder({ today: t, lmp: LMP, nextCheckupDate: keyOf(dayOffset(1)) })
+    assert.ok(a.main.includes('明天产检'), a.main)
+    assert.ok(a.main.includes('孕4周+5'), a.main)
+    assert.ok(a.main.length <= 20, `超长(${a.main.length})：${a.main}`)
+    assert.equal(a.event, 'eve', '单字段取舍直接用主行')
+    assert.equal(buildEveReminder({ today: t, lmp: LMP, nextCheckupDate: t }), null, '当天≠前夜')
+    assert.equal(buildEveReminder({ today: t, lmp: LMP, nextCheckupDate: keyOf(dayOffset(2)) }), null, '后天不提醒')
+    assert.equal(buildEveReminder({ today: t, lmp: LMP, nextCheckupDate: null }), null, '无产检')
+    assert.equal(buildEveReminder({ today: t, lmp: '', nextCheckupDate: keyOf(dayOffset(1)) }), null, '缺 lmp')
+  })
+
   console.log('phase-n ②：mc-daily-push 云函数（mock cloud 注入）')
 
   await scenario('N10 定时入口：双人各发一条，字段映射/落地页/体验版态断言', async () => {
@@ -290,8 +304,8 @@ async function main() {
     const fn = requireHandler(); fn.__setCloud(cloud)
     const res = await fn.main({ Type: 'Timer' })
     assert.equal(res.ok, true)
-    // 墓碑过期项被滤掉、最早未来=3天 → 倒计时而非"已过"
-    assert.ok(res.data.week >= 0)
+    // 墓碑过期项被滤掉、最早未来=3天 → 倒计时而非"已过"；日期字段=今天
+    assert.equal(res.data.dateKey, keyOf(TODAY()))
     const fn2 = requireHandler()
     fn2.__setCloud(makeMockCloud({ lmpKey: LMP, checkupRows: [
       { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(-2)), status: 'pending' }
@@ -300,12 +314,53 @@ async function main() {
     assert.equal(res2.ok, true)
   })
 
-  await scenario('N16 config.json 形状：subscribeMessage.send 权限 + 每天 9 点七段 cron', async () => {
+  await scenario('N16 config.json 形状：send 权限 + 双触发器（9 点日常 + 21:30 前夜）', async () => {
     const cfg = JSON.parse(fs.readFileSync(path.join(root, 'cloud/functions/mc-daily-push/config.json'), 'utf8'))
     assert.ok(cfg.permissions.openapi.includes('subscribeMessage.send'))
-    assert.equal(cfg.triggers[0].name, 'daily-reminder')
-    assert.equal(cfg.triggers[0].type, 'timer')
-    assert.equal(cfg.triggers[0].config, '0 0 9 * * * *')
+    const byName = Object.fromEntries(cfg.triggers.map(t => [t.name, t]))
+    assert.equal(byName['daily-reminder'].config, '0 0 9 * * * *')
+    assert.equal(byName['checkup-eve-reminder'].config, '0 30 21 * * * *')
+    assert.equal(cfg.triggers.every(t => t.type === 'timer'), true)
+  })
+
+  await scenario('N18 前夜触发：明天有 pending 产检→双人发"明天产检"且日期=产检当日', async () => {
+    withEnv()
+    const tomorrow = keyOf(dayOffset(1))
+    const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
+      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: tomorrow, status: 'pending' }
+    ] })
+    const fn = requireHandler(); fn.__setCloud(cloud)
+    const res = await fn.main({ Type: 'Timer', TriggerName: 'checkup-eve-reminder' })
+    assert.equal(res.ok, true)
+    assert.equal(sends.length, 2)
+    assert.ok(sends[0].data.thing11.value.includes('明天产检'), sends[0].data.thing11.value)
+    assert.equal(sends[0].data.date4.value, chineseOf(tomorrow), '前夜提醒日期=产检当日')
+  })
+
+  await scenario('N19 前夜触发安静退出：明天无产检→零发送 skipped 如实', async () => {
+    withEnv()
+    const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
+      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(7)), status: 'pending' }
+    ] })
+    const fn = requireHandler(); fn.__setCloud(cloud)
+    const res = await fn.main({ Type: 'Timer', TriggerName: 'checkup-eve-reminder' })
+    assert.equal(res.ok, true)
+    assert.equal(res.data.skipped, 'no-checkup-tomorrow')
+    assert.equal(sends.length, 0, '没产检绝不 nightly 骚扰')
+  })
+
+  await scenario('N19b sendNow 前夜试发：kind=eve 白名单可用（验收不打烊到 21:30）', async () => {
+    withEnv()
+    const tomorrow = keyOf(dayOffset(1))
+    const { cloud, sends } = makeMockCloud({
+      callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP,
+      checkupRows: [{ familyId: TEST_ENV.MC_FAMILY_ID, dateKey: tomorrow, status: 'pending' }]
+    })
+    const fn = requireHandler(); fn.__setCloud(cloud)
+    const res = await fn.main({ action: 'sendNow', kind: 'eve' })
+    assert.equal(res.ok, true)
+    assert.equal(sends.length, 2)
+    assert.ok(sends[0].data.thing11.value.includes('明天产检'))
   })
 
   await scenario('N17 assemble 单源投放契约：转译步骤在源码 + 产物与客户端同源可 require', async () => {

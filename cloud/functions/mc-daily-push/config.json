@@ -10,6 +10,11 @@
       "name": "daily-reminder",
       "type": "timer",
       "config": "0 0 9 * * * *"
+    },
+    {
+      "name": "checkup-eve-reminder",
+      "type": "timer",
+      "config": "0 30 21 * * * *"
     }
   ]
 }

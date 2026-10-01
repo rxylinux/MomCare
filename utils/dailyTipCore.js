@@ -130,3 +130,19 @@ export function buildPushContent(input) {
 	// 据此取舍：有事件用主行，平时用提示行
 	return { main: clampText(main, 20), note: clampText(note, 20), event, week, days, month }
 }
+
+// 产检前夜提醒（mc-daily-push 21:30 触发器消费）：最近一条 pending 产检恰为
+// "明天"时返回提醒内容，其余情况一律 null（前夜触发器安静退出，不 nightly 骚扰）。
+// 日期字段建议填产检当日（调用方取 nextCheckupDate）。
+export function buildEveReminder(input) {
+	const todayOrd = dayOrdinal(input && input.today)
+	const lmpOrd = dayOrdinal(input && input.lmp)
+	const cuOrd = dayOrdinal(input && input.nextCheckupDate)
+	if (todayOrd === null || lmpOrd === null || cuOrd === null) return null
+	if (cuOrd !== todayOrd + 1) return null
+	const days = todayOrd - lmpOrd
+	if (days < 0) return null
+	const label = `孕${Math.floor(days / 7)}周+${days % 7}`
+	// event:'eve' 与 buildPushContent 同构——发送侧"有事件用主行"的取舍直接命中
+	return { main: clampText(`${label} · 明天产检，证件备好`, 20), event: 'eve' }
+}

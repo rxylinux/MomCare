@@ -2,10 +2,12 @@
 
 // mc-daily-push：每日提醒推送（2026-09 方案落地）。
 //
-// 两个入口：
-// - 定时触发（每天 09:00，triggers 见 config.json）：无人为调用者，直接执行推送；
-// - 手动试发 {action:'sendNow'}：仅限家庭成员白名单（resolveCaller），验收用——
-//   不用等到次日 8 点即可真机收到一条。
+// 入口三种：
+// - 定时 daily-reminder（每天 09:00，triggers 见 config.json）：无人为调用者，日常推送；
+// - 定时 checkup-eve-reminder（每天 21:30）：产检前夜提醒——最近 pending 产检恰为
+//   "明天"才发一条"明天产检"，否则安静退出（不 nightly 骚扰）；
+// - 手动试发 {action:'sendNow'}（可带 kind:'eve' 试前夜文案）：仅限家庭成员白名单
+//   （resolveCaller），验收用——不用等到触发时刻即可真机收到一条。
 //
 // 数据与内容：
 // - 孕周/文案全部来自共用核心单源 shared/dailyTipCore（assemble 从 utils/dailyTipCore.js
@@ -83,27 +85,30 @@ function todayKey() {
 }
 
 // 模板 571 date4 为 date 类型——微信订阅消息 date 字段用中文日期格式（YYYY年M月D日）
-function chineseDate() {
-  const d = new Date()
+// 入参 dateKey='YYYY-MM-DD'（日常推送=今天；前夜提醒=产检当日）
+function chineseDate(dateKey) {
+  let d = new Date()
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateKey || ''))
+  if (m) d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-function buildMessageData(content) {
+function buildMessageData(content, dateKey) {
   const text = content.event ? content.main : content.note
   const data = {}
   data[FIELD_CONTENT] = { value: text }
-  data[FIELD_DATE] = { value: chineseDate() }
+  data[FIELD_DATE] = { value: chineseDate(dateKey) }
   return data
 }
 
-async function sendToMember(member, templateId, content) {
+async function sendToMember(member, templateId, content, dateKey) {
   try {
     await cloud.openapi.subscribeMessage.send({
       touser: member.openid,
       templateId,
       page: 'pages/index/index',
       miniprogramState: MINIPROGRAM_STATE,
-      data: buildMessageData(content)
+      data: buildMessageData(content, dateKey)
     })
     return { member: member.memberId, sent: true }
   } catch (e) {
@@ -136,36 +141,58 @@ exports.main = async function main(event) {
   if (!templateId) {
     return fail('push-template-missing', 'MC_PUSH_TEMPLATE_ID 未配置——控制台选定模板后配置再试')
   }
-  if (!core || typeof core.buildPushContent !== 'function') {
-    return fail('core-missing', 'shared/dailyTipCore 缺失——重新运行 assemble 组装并部署')
+  if (!core || typeof core.buildPushContent !== 'function' || typeof core.buildEveReminder !== 'function') {
+    return fail('core-missing', 'shared/dailyTipCore 缺失（或不完整）——重新运行 assemble 组装并部署')
   }
+
+  // 前夜 or 日常：定时按 TriggerName 区分；sendNow 用 kind:'eve' 试前夜文案
+  const isEve = Boolean(event && (event.TriggerName === 'checkup-eve-reminder' || event.kind === 'eve'))
+  const kind = isTimer ? (isEve ? 'timer-eve' : 'timer') : (isEve ? 'sendNow-eve' : 'sendNow')
 
   ensureCloud()
   const db = cloud.database()
   const pregnancy = await getDocMaybe(db, PREGNANCY, `${config.familyId}:pregnancy`)
   const lmp = (pregnancy && pregnancy.fields && pregnancy.fields.lmpDate) || ''
+  if (!lmp) {
+    return fail('no-pregnancy-profile', '家庭档案缺末次月经（mc_pregnancy.lmpDate）——推送需要孕期资料')
+  }
   const nextCheckup = await earliestPendingCheckup(db, config.familyId)
 
-  const content = core.buildPushContent({
-    today: todayKey(),
-    lmp,
-    nextCheckupDate: nextCheckup ? nextCheckup.dateKey : null
-  })
-  if (!content) {
-    return fail('no-pregnancy-profile', '家庭档案缺末次月经（mc_pregnancy.lmpDate）——推送需要孕期资料')
+  let content, dateKey
+  if (isEve) {
+    content = core.buildEveReminder({
+      today: todayKey(),
+      lmp,
+      nextCheckupDate: nextCheckup ? nextCheckup.dateKey : null
+    })
+    if (!content) {
+      // 明天没有 pending 产检——前夜触发器安静退出（设计内，非错误）
+      console.log('[mc-daily-push]', JSON.stringify({ kind, skipped: 'no-checkup-tomorrow' }))
+      return ok({ skipped: 'no-checkup-tomorrow', results: [] })
+    }
+    dateKey = nextCheckup.dateKey
+  } else {
+    content = core.buildPushContent({
+      today: todayKey(),
+      lmp,
+      nextCheckupDate: nextCheckup ? nextCheckup.dateKey : null
+    })
+    if (!content) {
+      return fail('no-pregnancy-profile', '推送内容构建失败——孕期资料异常')
+    }
+    dateKey = todayKey()
   }
 
   const results = []
   for (const member of config.members) {
-    results.push(await sendToMember(member, templateId, content))
+    results.push(await sendToMember(member, templateId, content, dateKey))
   }
 
   // 日志只留定位字段：入口类型/孕周/每成员结果——不落 lmp/文案私人内容
   console.log('[mc-daily-push]', JSON.stringify({
-    kind: isTimer ? 'timer' : 'sendNow',
-    week: content.week,
+    kind,
     results: results.map(r => ({ member: r.member, sent: r.sent, skipped: r.skipped || null }))
   }))
 
-  return ok({ results, week: content.week })
+  return ok({ results, dateKey })
 }
