@@ -58,10 +58,14 @@ const FUNCTIONS = FUNCTIONS_ALL ? [] : FUNCTIONS_RAW
 function die(msg) { console.error(`\n✖ ${msg}`); process.exit(1) }
 function step(name) { console.log(`\n── ${name} ──`) }
 
-// ── CLI 输出契约（R4二2，依据 Codex 只读本机 CLI 源码证据）──
-// upload：成功路径输出 "upload success"；函数部署：console.table 表行（函数名 + success 列）。
+// ── CLI 输出契约（R4二2，依据 Codex 只读本机 CLI 源码证据；2026-10-01 部署阶段扩展）──
+// upload：asar 静态证据的成功路径输出 "upload success"；**真实 CLI（2.02.2609231）实测**
+// 成功输出为独立一行 "✔ upload"（证据：release-trial-1.1.25-attempt2.log——exit 0、
+// 无业务错误字样、微信侧完成上传）。两者都认；其余仍 unknown（不猜成功）。
+// 函数部署：console.table 表行（函数名 + success 列）。
 function cliUploadConfirmed(text) {
-  return /upload\s+success/i.test(text)
+  if (/upload\s+success/i.test(text)) return true
+  return /(?:^|\n)[✔✓√]\s*upload\s*(?:\n|$)/.test(text)
 }
 // R4三2：精确目标表行判定——(1) 行内含**完整函数名词元**（表格分隔符/空白/行首尾为界，
 // 不匹配同名前缀：mc-tools-extra 不算 mc-tools）；(2) 该行 success 列值；邻行不作证据；
