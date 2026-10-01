@@ -82,16 +82,14 @@ async function main() {
     assert.equal(c.guideData.value, null, '未就绪无兜底内容')
   })
 
-  await scenario('M3 本地兜底诚实边界：cloudData 缺失时 29 周→null（不再孕30冒充）、30 周→命中本地', async () => {
+  await scenario('M3 数据缺失诚实边界（2026-10-01 #3 本地兜底已删）：cloudData 强制 null → 任意周皆空态', async () => {
     const p = bundlePage(EXPORTS)
-    p.__lifecycle.onLoad({ week: '29' })
-    await settle()
-    p.cloudData.value = null // 强制走本地兜底分支
-    assert.equal(p.guideData.value, null, '29 周在本地覆盖(30-40)之外→诚实空')
-    p.currentWeek.value = 30
-    await settle()
-    p.cloudData.value = null
-    assert.ok(p.guideData.value && p.guideData.value.babyWeight, '30 周命中本地兜底')
+    for (const w of [29, 30, 36, 40]) {
+      p.__lifecycle.onLoad({ week: String(w) })
+      await settle()
+      p.cloudData.value = null // 静态库随包恒在，此处为防御分支——本地副本已删，一律诚实空
+      assert.equal(p.guideData.value, null, `${w} 周无数据→空态（不再有本地兜底冒充）`)
+    }
   })
 
   await scenario('M4 切周联动：selectWeek(7) → scrollTarget 清空再定位 week-7', async () => {
@@ -114,6 +112,12 @@ async function main() {
     assert.ok(src.includes('v-if="guideData"'), '内容区空值守卫')
     assert.ok(src.includes('暂未收录'), '诚实空态分支')
     assert.ok(!src.includes('useHealthStore'), '死导入已清')
+    // 2026-10-01 #3/#4 追加：本地兜底副本与假状态栏永不复活（注释记载除外）
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    for (const bad of ['GUIDE_DATA', '9:41', 'status-bar', 'sb-time', 'sb-icons']) {
+      assert.ok(!code.includes(bad), `死代码残留：${bad}`)
+    }
+    assert.ok(src.includes('数据加载异常——返回重进即可恢复'), '空态新文案在位')
   })
 
   console.log(`\nphase-m：${passed} 通过，${failed.length} 失败`)
