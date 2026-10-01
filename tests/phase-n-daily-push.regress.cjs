@@ -136,16 +136,18 @@ async function main() {
   console.log('phase-n ①：buildPushContent 纯函数（共用核心单源）')
   const LMP = keyOf(dayOffset(-33)) // 孕4周+5
 
-  await scenario('N1 主行三态+event 标记：当天/3天倒计时/无产检', async () => {
+  await scenario('N1 主行+event：当天产检；2~7天倒计时已按用户裁定移除（回落普通日）', async () => {
     const a = buildPushContent({ today: keyOf(TODAY()), lmp: LMP, nextCheckupDate: keyOf(TODAY()) })
     assert.ok(a.main.includes('今天产检'), a.main)
     assert.equal(a.event, 'today')
     const b = buildPushContent({ today: keyOf(TODAY()), lmp: LMP, nextCheckupDate: keyOf(dayOffset(3)) })
-    assert.ok(b.main.includes('孕4周+5') && b.main.includes('距产检3天'), b.main)
-    assert.equal(b.event, 'countdown')
+    assert.equal(b.main, '孕4周+5', '未来产检不再倒计时——只剩周标签')
+    assert.equal(b.event, null, '普通日：单字段模板据此切换提示行')
+    const t = buildPushContent({ today: keyOf(TODAY()), lmp: LMP, nextCheckupDate: keyOf(dayOffset(1)) })
+    assert.equal(t.event, null, '明天产检也不在早推送倒计时（前夜 21:30 触发器负责）')
     const c = buildPushContent({ today: keyOf(TODAY()), lmp: LMP, nextCheckupDate: null })
     assert.equal(c.main, '孕4周+5')
-    assert.equal(c.event, null, '无事件——单字段模板据此切换提示行')
+    assert.equal(c.event, null)
   })
 
   await scenario('N2 产检过期边界：2天→已过提醒(event=overdue)、20天→忽略', async () => {
@@ -216,7 +218,7 @@ async function main() {
   await scenario('N10 定时入口：双人各发一条，字段映射/落地页/体验版态断言', async () => {
     withEnv()
     const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(3)), status: 'pending' },
+      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(TODAY()), status: 'pending' },
       { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(20)), status: 'pending' }
     ] })
     const fn = requireHandler()
@@ -230,11 +232,25 @@ async function main() {
     assert.equal(s0.page, 'pages/index/index')
     assert.equal(s0.miniprogramState, 'trial')
     // 模板 571「日程提醒」：唯一内容字段 thing11 + date4（中文日期）
-    assert.ok(s0.data.thing11.value.includes('距产检3天'), s0.data.thing11.value)
+    assert.ok(s0.data.thing11.value.includes('今天产检'), s0.data.thing11.value)
     assert.equal(s0.data.thing11.value.length <= 20, true, 'thing11 ≤20 字')
     assert.ok(/^\d{4}年\d{1,2}月\d{1,2}日$/.test(s0.data.date4.value), `date4 中文日期：${s0.data.date4.value}`)
     assert.equal(s0.data.thing1, undefined, '不再发 thing1（模板无此字段）')
     assert.deepEqual(res.data.results.map(r => r.sent), [true, true])
+  })
+
+  await scenario('N10b 倒计时移除落地：产检在 3 天后 → 推提示行，不含"距产检"', async () => {
+    withEnv()
+    const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
+      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(3)), status: 'pending' }
+    ] })
+    const fn = requireHandler(); fn.__setCloud(cloud)
+    const res = await fn.main({ Type: 'Timer' })
+    assert.equal(res.ok, true)
+    assert.equal(sends.length, 2)
+    const text = sends[0].data.thing11.value
+    assert.ok(!text.includes('距产检'), `不应再有倒计时：${text}`)
+    assert.ok(text.length > 0 && text.length <= 20, `提示行在位且 ≤20：${text}`)
   })
 
   await scenario('N11 43101 配额制常态：一人 skipped:quota，另一人照发不挡', async () => {

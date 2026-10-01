@@ -89,15 +89,40 @@ function monthOf(input) {
 	return m ? Number(m[2]) : null
 }
 
+// ── 内容库 v2（2026-10-01 用户审定 docs/content-library-draft.md）──
+// 12 个周段 × 5 条（草稿原文照录）；孕 1~3 周为草稿未覆盖段，实施时补 4 条
+// 同风格词条（可随时改）。首页静态库（pregnancy-daily.json tip 列）由
+// scripts/gen-daily-content.mjs 从本表生成——单一作者源，两端不漂移。
+const STAGE_TIPS = [
+	{ from: 1, to: 3, tips: ['记下末次月经，孕周才准', '叶酸每天 0.4mg 别断', '远离烟酒和二手烟', '早孕试纸两条杠，恭喜'] },
+	{ from: 4, to: 6, tips: ['宝宝小心脏开始跳动了', '孕吐来了就少食多餐', '叶酸每天 0.4mg 别断', '疲惫嗜睡是正常反应', '记下末次月经，孕周才准'] },
+	{ from: 7, to: 10, tips: ['宝宝五官四肢成形中', '远离烟酒和二手烟', '生姜水可能缓解恶心', '换宽松衣物，乳房在胀', '恶心重时小口喝温水'] },
+	{ from: 11, to: 13, tips: ['NT 检查窗口期是 11-13 周', '该建档了，证件带齐', '孕吐退潮，食欲回归', '口腔问题趁现在处理', '和亲友分享好消息吧'] },
+	{ from: 14, to: 17, tips: ['舒适期来了，出门走走', '开始显怀，拍张照留念', '每天牛奶 300~500ml', '唐筛/无创的时间窗到了', '凯格尔运动可以开始'] },
+	{ from: 18, to: 21, tips: ['第一次胎动像小鱼吐泡', '记下第一次胎动日期', '侧卧时枕头垫住肚子', 'DHA：每周 2~3 次深海鱼', '大排畸 B 超该预约了'] },
+	{ from: 22, to: 24, tips: ['糖耐检查要空腹，别忘', '腿抽筋就睡前拉伸小腿', '甜食收一收，血糖要稳', '每周涨 0.5kg 内为宜', '胎动规律了，感受节奏'] },
+	{ from: 25, to: 27, tips: ['睡不好？孕妇枕上场', '假性宫缩偶发是正常', '想好宝宝小名了吗', '待产包清单可以起草', '铁需求高峰，瘦红肉加量'] },
+	{ from: 28, to: 30, tips: ['孕晚期了，产检加密', '数胎动：早中晚各 1 小时', '胎动明显减少要告诉医生', '气短就左侧卧歇歇', '开始准备哺乳用品'] },
+	{ from: 31, to: 33, tips: ['假宫缩变多，学会分辨', '宝宝长肉快，蛋白跟上', '骨盆痛就换低跟鞋', '确认去医院的路线', '母乳知识提前看看'] },
+	{ from: 34, to: 36, tips: ['产检改成每周一次', '多数宝宝已经头朝下', '入盆后呼吸轻松些', '证件资料集中一个包', '学一学拉玛泽呼吸'] },
+	{ from: 37, to: 38, tips: ['足月了，随时可能发动', '宫缩 5-6 分钟一次就出发', '见红别慌，先观察量', '破水立刻平躺去医院', '手机充满电，随时待命'] },
+	{ from: 39, to: 40, tips: ['预产期到别急，留量给 41 周', '三信号：宫缩/破水/见红', '适度散步，有助顺产', '待产包装车了吗', '快见面了，加油'] }
+]
+
+export function stageTipsForWeek(week) {
+	if (week < 1) return STAGE_TIPS[0].tips
+	const seg = STAGE_TIPS.find(s => week >= s.from && week <= s.to)
+	return (seg || STAGE_TIPS[STAGE_TIPS.length - 1]).tips
+}
+
+// 提示行候选池 = 周段词条 + 水果组合（当季果名按月填入；补铁组合孕中期起适用）
 function notePool(week, fruit) {
 	const f = fruit || '当季水果'
-	if (week < 13) {
-		return ['宝宝器官形成期，叶酸别停', '孕吐期少食多餐，清淡为主', `今日维C：${f}正当时`]
-	}
-	if (week < 28) {
-		return ['补钙：每天300~500ml牛奶', `补铁：瘦牛肉配${f}促吸收`, 'DHA：每周吃2~3次深海鱼', '胎动明显了，静心感受一下']
-	}
-	return ['数胎动：早中晚各数1小时', '铁钙继续，甜食要节制', `${f}当季，每天200~350g就好`, '证件和待产包备好了吗']
+	const pool = [...stageTipsForWeek(week)]
+	pool.push(`今日维C：${f}正当时`)
+	if (week >= 13) pool.push(`补铁：瘦牛肉配${f}促吸收`)
+	pool.push(`${f}当季，每天200~350g就好`)
+	return pool
 }
 
 export function buildPushContent(input) {
@@ -108,14 +133,15 @@ export function buildPushContent(input) {
 	const week = Math.floor(days / 7)
 	const label = `孕${week}周+${days % 7}`
 
-	// 主行：孕周 + 产检动态（与 buildTodayTip 同口径：过期 ≤14 天提醒补约，
-	// 未来 7 天内倒计时；取调用方传入的最近一条 pending 产检）
+	// 主行：孕周 + 产检动态。产检相关只保留"当天"与"过期≤14天补提醒"两态——
+	// 2~7 天倒计时已按用户 2026-10-01 裁定移除（前夜 21:30 触发器已覆盖提前提醒，
+	// 每天报倒计时只会挤掉提示行）；未到/远期一律回落普通日（显示提示行）。
+	// 注意：首页瀑布 buildTodayTip 仍保留 7 天倒计时（用户裁定两端口径不同）。
 	let main = label
 	let event = null
 	const cuOrd = dayOrdinal(input.nextCheckupDate)
 	if (cuOrd !== null) {
 		if (cuOrd === todayOrd) { main = `${label} · 今天产检`; event = 'today' }
-		else if (cuOrd > todayOrd && cuOrd - todayOrd <= 7) { main = `${label} · 距产检${cuOrd - todayOrd}天`; event = 'countdown' }
 		else if (cuOrd < todayOrd && todayOrd - cuOrd <= 14) { main = `${label} · 产检已过${todayOrd - cuOrd}天`; event = 'overdue' }
 	}
 
