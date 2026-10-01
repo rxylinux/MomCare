@@ -39,7 +39,7 @@ global.getApp = () => ({ globalData: { statusBarHeight: 42 } })
 // ── 纯核心 bundle（ESM→CJS，与将来 assemble 转译投放同构）──
 const coreFile = path.join(temp, 'dailyTipCore.cjs')
 esbuild.buildSync({ entryPoints: [path.join(root, 'utils/dailyTipCore.js')], bundle: true, platform: 'node', format: 'cjs', outfile: coreFile, logLevel: 'silent' })
-const { buildTodayTip, gestationalLabel } = require(coreFile)
+const { buildTodayTip, gestationalLabel, buildHealthNudge } = require(coreFile)
 
 // ── 组件 bundle：编译宏替换为注入 props（phase-i 先例）──
 function bundleComponent(relPath, propsLiteral, exportNames) {
@@ -225,6 +225,70 @@ async function main() {
     assert.ok(src.includes('v-if="slide.tipTag"'), 'tipTag 条件渲染在')
     assert.ok(src.includes('class="tip-tag"'), '标签样式类在')
     assert.ok(src.includes('.tip-tag-text'), '标签文字样式在')
+  })
+
+  console.log('phase-l：第三级健康温和提示（buildHealthNudge）')
+  const rec = (dayAgo, o) => ({ date: keyOf(dayOffset(dayAgo)), ...o })
+  await scenario('L17 血压单次偏高：今天 145/85 → 提示复测；正常/无记录不出', async () => {
+    const a = buildHealthNudge({ today: TODAY, week: 20, records: [rec(-1, { systolic: 118, diastolic: 76 }), rec(0, { systolic: 145, diastolic: 85 })] })
+    assert.equal(a.type, 'bp'); assert.ok(a.text.includes('再量一次'), a.text); assert.equal(a.tag, '健康')
+    assert.equal(buildHealthNudge({ today: TODAY, week: 20, records: [rec(0, { systolic: 120, diastolic: 80 })] }), null, '正常不出')
+    assert.equal(buildHealthNudge({ today: TODAY, week: 20, records: [] }), null, '无记录不出')
+  })
+
+  await scenario('L18 血压连续偏高优先：最近3次全高→产检沟通文案压过单次', async () => {
+    const a = buildHealthNudge({ today: TODAY, week: 20, records: [
+      rec(-2, { systolic: 142, diastolic: 88 }), rec(-1, { systolic: 150, diastolic: 92 }), rec(0, { systolic: 145, diastolic: 95 })
+    ] })
+    assert.ok(a.text.includes('连续偏高') && a.text.includes('医生'), a.text)
+    // 3 次中夹一次正常 → 不算连续，走单次
+    const b = buildHealthNudge({ today: TODAY, week: 20, records: [
+      rec(-2, { systolic: 142, diastolic: 88 }), rec(-1, { systolic: 120, diastolic: 78 }), rec(0, { systolic: 145, diastolic: 95 })
+    ] })
+    assert.ok(b.text.includes('再量一次'), b.text)
+  })
+
+  await scenario('L19 血压时效：最新偏高在 4 天前 → 不提（过期不唠叨）', async () => {
+    assert.equal(buildHealthNudge({ today: TODAY, week: 20, records: [rec(-4, { systolic: 150, diastolic: 95 })] }), null)
+  })
+
+  await scenario('L20 频控 3 天：昨日已提同类→静默；3 天前已提→恢复', async () => {
+    const hi = [rec(0, { systolic: 150, diastolic: 95 })]
+    assert.equal(buildHealthNudge({ today: TODAY, week: 20, records: hi, lastShown: { bp: keyOf(dayOffset(-1)) } }), null, '昨日已提')
+    const ok2 = buildHealthNudge({ today: TODAY, week: 20, records: hi, lastShown: { bp: keyOf(dayOffset(-3)) } })
+    assert.equal(ok2.type, 'bp', '3 天前已提→可再提')
+  })
+
+  await scenario('L21 体重周增：week20 涨0.9→提示含数值；涨0.3→不出；基线缺失→不出', async () => {
+    const over = buildHealthNudge({ today: TODAY, week: 20, records: [rec(-7, { weightKg: 61.5 }), rec(0, { weightKg: 62.4 })] })
+    assert.equal(over.type, 'weight'); assert.ok(over.text.includes('0.9'), over.text)
+    assert.equal(buildHealthNudge({ today: TODAY, week: 20, records: [rec(-7, { weightKg: 62.1 }), rec(0, { weightKg: 62.4 })] }), null, '涨0.3不出')
+    assert.equal(buildHealthNudge({ today: TODAY, week: 20, records: [rec(0, { weightKg: 62.4 })] }), null, '无基线不出')
+  })
+
+  await scenario('L22 体重孕早期不提：week10 涨1kg 也静默（参考线不适用）', async () => {
+    assert.equal(buildHealthNudge({ today: TODAY, week: 10, records: [rec(-7, { weightKg: 60 }), rec(0, { weightKg: 61.2 })] }), null)
+  })
+
+  await scenario('L23 三级内优先级：血压偏高与体重超线同hit → 血压赢', async () => {
+    const a = buildHealthNudge({ today: TODAY, week: 20, records: [
+      rec(-7, { weightKg: 61.5 }), rec(0, { weightKg: 62.4, systolic: 150, diastolic: 95 })
+    ] })
+    assert.equal(a.type, 'bp')
+  })
+
+  await scenario('L24 index.vue 第三级接线：family 分支任务后接健康提示+storage 幂等持久化；demo 不参与', async () => {
+    const src = fs.readFileSync(path.join(root, 'pages/index/index.vue'), 'utf8')
+    assert.ok(src.includes('buildHealthNudge'), '引入共用核心')
+    assert.ok(src.includes('HEALTH_NUDGE_KEY'), '频控持久化键')
+    assert.ok(src.includes('collectFamilyHealthRecords'), 'family 记录归一')
+    const start = src.indexOf('const todayTip')
+    assert.ok(start >= 0, 'todayTip 计算块存在')
+    const seg = src.slice(start, start + 4000)
+    const iFam = seg.indexOf("dataMode.value === 'family'")
+    const iNudge = seg.indexOf('buildHealthNudge')
+    const iDemo = seg.indexOf("dataMode.value === 'demo'")
+    assert.ok(iFam > -1 && iNudge > iFam && iNudge < iDemo, '健康提示位于 family 分支内、demo 分支前（三级瀑布位）')
   })
 
   console.log(`\nphase-l：${passed} 通过，${failed.length} 失败`)

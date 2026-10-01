@@ -146,3 +146,59 @@ export function buildEveReminder(input) {
 	// event:'eve' 与 buildPushContent 同构——发送侧"有事件用主行"的取舍直接命中
 	return { main: clampText(`${label} · 明天产检，证件备好`, 20), event: 'eve' }
 }
+
+// ══ 第三级：健康温和提示（仅主页瀑布消费；刻意不进 9 点推送——锁屏场景只有══
+// ══ 焦虑无行动语境，且"监督感"会伤订阅授权信任，2026-09-30 与用户对齐）══
+// 口径（用户 2026-09-30 拍板）：
+// - 血压偏高 = 收缩压 ≥140 或舒张压 ≥90（医学常见分界）；只看最近 3 天内的
+//   最新一次测量（更早的过期不提）；最近 3 次测量全部偏高 → 升级为"连续偏高，
+//   产检时告诉医生"（优先于单次）。
+// - 体重 = 孕中晚期（≥13 周）适用：最新体重（2 天内）与 6~8 天前基线之差
+//   >0.5kg 触发；孕早期不提（周增参考线不适用）。
+// - 防唠叨：同类提示 3 天内只出现一次（lastShown 由调用方持久化）。
+// 边界（设计红线）：不诊断、不说"危险"、只引导复测与产检沟通。
+export function buildHealthNudge({ records, today, week, lastShown } = {}) {
+	const todayOrd = dayOrdinal(today)
+	if (todayOrd === null) return null
+	const shownRecently = type => {
+		const o = dayOrdinal(lastShown && lastShown[type])
+		return o !== null && todayOrd - o < 3
+	}
+	const list = (Array.isArray(records) ? records : [])
+		.map(r => ({ ord: dayOrdinal(r && r.date), s: r && r.systolic, d: r && r.diastolic, w: r && r.weightKg }))
+		.filter(r => r.ord !== null)
+		.sort((a, b) => a.ord - b.ord)
+
+	// 血压：优先级 连续偏高 > 单次偏高
+	if (!shownRecently('bp')) {
+		const bpList = list.filter(r => r.s != null && r.d != null)
+		const latest = bpList[bpList.length - 1]
+		const isHigh = r => Number(r.s) >= 140 || Number(r.d) >= 90
+		if (latest && todayOrd - latest.ord <= 3) {
+			const recent3 = bpList.slice(-3)
+			if (recent3.length === 3 && recent3.every(isHigh)) {
+				return { type: 'bp', tag: '健康', icon: '❤️', text: '血压连续偏高，产检时记得告诉医生' }
+			}
+			if (isHigh(latest)) {
+				return { type: 'bp', tag: '健康', icon: '❤️', text: '血压偏高，晚上再量一次看看' }
+			}
+		}
+	}
+
+	// 体重：孕中晚期，最新 vs 6~8 天前基线
+	if (week >= 13 && !shownRecently('weight')) {
+		const withW = list.filter(r => r.w != null)
+		const last = withW[withW.length - 1]
+		if (last && todayOrd - last.ord <= 2) {
+			const base = [...withW].reverse().find(r => last.ord - r.ord >= 6 && last.ord - r.ord <= 8)
+			if (base) {
+				const gain = Number(last.w) - Number(base.w)
+				if (gain > 0.5) {
+					return { type: 'weight', tag: '健康', icon: '⚖️', text: `这周体重涨了${gain.toFixed(1)}kg，甜食先收一收` }
+				}
+			}
+		}
+	}
+
+	return null
+}

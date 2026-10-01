@@ -199,7 +199,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useHealthStore, getFruitComparison } from '@/stores/health.js'
-import { buildTodayTip, gestationalLabel } from '@/utils/dailyTipCore.js'
+import { buildTodayTip, gestationalLabel, buildHealthNudge } from '@/utils/dailyTipCore.js'
 import { isLoggedIn } from '@/utils/api.js'
 import { getSessionState, foregroundRecheck, coldStartConfirm, isExplicitDemo, isExplicitLoggedOut } from '@/services/sessionService.js'
 import { useFamilyStore } from '@/services/familyStore.js'
@@ -573,6 +573,34 @@ const tasksForPrepCard = computed(() => collabStore.homeView === 'dad'
 // 云端 mc-daily-push 转译同一单源——两端同一天算出同一句，改口径只动那一处。
 // 本 computed 只做数据归一（薄壳零业务规则）；任务池按视角排序：爸爸先"我负责的"。
 const MASKED_TASK_TITLE = '（分享已撤回）'
+// 第三级健康提示的"已提日期"持久化（同类 3 天内不重复——幂等：同日重算写同值）
+const HEALTH_NUDGE_KEY = 'homeTip.healthNudge.lastShown'
+function readNudgeState() {
+	try {
+		const raw = uni.getStorageSync(HEALTH_NUDGE_KEY)
+		return raw && typeof raw === 'object' ? raw : {}
+	} catch (e) {
+		return {}
+	}
+}
+// 最近 N 天家庭健康数字记录（family 权威投影 → 归一化输入；演示模式无真实数据不参与）
+function collectFamilyHealthRecords(days) {
+	const out = []
+	for (let i = 0; i < days; i++) {
+		const d = new Date()
+		d.setDate(d.getDate() - i)
+		const rec = familyStore.dailyRecord(dateKeyOf(d))
+		const f = rec && rec.fields
+		if (!f) continue
+		out.push({
+			date: dateKeyOf(d),
+			weightKg: f.weightKg != null ? Number(f.weightKg) : null,
+			systolic: f.systolic != null ? Number(f.systolic) : null,
+			diastolic: f.diastolic != null ? Number(f.diastolic) : null
+		})
+	}
+	return out
+}
 const todayTip = computed(() => {
 	const today = new Date()
 	if (dataMode.value === 'family') {
@@ -585,7 +613,22 @@ const todayTip = computed(() => {
 		const tasks = pool
 			.filter(t => t && t.title && t.title !== MASKED_TASK_TITLE)
 			.map(t => ({ title: t.title }))
-		return buildTodayTip({ today, checkups, tasks })
+		const base = buildTodayTip({ today, checkups, tasks })
+		if (base) return base
+		// 第三级：健康温和提示（口径 140/90、每周 0.5kg、同类隔 3 天——详见 dailyTipCore）。
+		// 选中即记已提日期；computed 内写 storage 为同日幂等写，无副作用差异
+		const nudge = buildHealthNudge({
+			records: collectFamilyHealthRecords(10),
+			today,
+			week: famWeekInfo.value ? famWeekInfo.value.week : 0,
+			lastShown: readNudgeState()
+		})
+		if (nudge) {
+			const next = { ...readNudgeState(), [nudge.type]: dateKeyOf(today) }
+			try { uni.setStorageSync(HEALTH_NUDGE_KEY, next) } catch (e) { /* 存不进则最坏多提一次 */ }
+			return { tag: nudge.tag, icon: nudge.icon, text: nudge.text }
+		}
+		return null
 	}
 	if (dataMode.value === 'demo') {
 		const nc = healthStore.nextCheckup
