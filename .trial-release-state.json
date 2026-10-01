@@ -1,7 +1,112 @@
 {
-  "version": "1.1.24",
-  "desc": "发现期文案清除：记末次月经/验孕类提醒永不入库（首页+推送同步修复）",
-  "commit": "a0a9fdb99e66a6aec9fa3c0057a09c48cf2b4c67",
+  "version": "1.1.25",
+  "desc": "R1-R4 修复：推送身份fail-closed/工具可靠保存/AI快照CAS/导出分页/发布闭包与收据",
+  "commit": "8313d01f442e697d8026068ce8b30347045422ba",
   "functions": [],
-  "releasedAt": "2026-10-01T03:13:37.696Z"
+  "releasedAt": "2026-10-01T11:19:43.419Z",
+  "baseline": "a0a9fdb99e66a6aec9fa3c0057a09c48cf2b4c67",
+  "closureReasons": {
+    "mc-collab": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-daily-push": [
+      "函数文件变更：cloud/functions/mc-daily-push/index.js",
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-files": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-health": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-identity": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-private-notes": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-reports": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-restore": [
+      "函数文件变更：cloud/functions/mc-restore/index.js",
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-schedule": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-shared-records": [
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ],
+    "mc-tools": [
+      "scripts/gen-food-safety.mjs 变更（生成器语义影响 mc-tools 伴生物）",
+      "函数文件变更：cloud/functions/mc-tools/food-safety-data.js",
+      "函数文件变更：cloud/functions/mc-tools/index.js",
+      "无可信函数部署基线（state.deployedDigests 缺失/无效）——全部函数必需（R4R-1）"
+    ]
+  },
+  "built": [
+    "mc-collab",
+    "mc-daily-push",
+    "mc-files",
+    "mc-health",
+    "mc-identity",
+    "mc-private-notes",
+    "mc-reports",
+    "mc-restore",
+    "mc-schedule",
+    "mc-shared-records",
+    "mc-tools"
+  ],
+  "selected": [
+    "mc-collab",
+    "mc-daily-push",
+    "mc-files",
+    "mc-health",
+    "mc-identity",
+    "mc-private-notes",
+    "mc-reports",
+    "mc-restore",
+    "mc-schedule",
+    "mc-shared-records",
+    "mc-tools"
+  ],
+  "deployed": [],
+  "deployedDigests": {},
+  "deployedEnv": "rxylinux-momcare-d2eoh6t493c2168",
+  "upload": {
+    "status": "failed",
+    "version": "1.1.25"
+  },
+  "triggers": {
+    "status": "unverified"
+  },
+  "partial": true,
+  "plannedDigests": {
+    "mc-collab": "acbae438d197b635ca55bc727a2e5df87e0f06400fe9cf1f8ceff6de267d30ac",
+    "mc-daily-push": "aff2f23ed00d9a886465883b0bc93d248d826d23d4d2c802366f9fd6bd47e124",
+    "mc-files": "9b90965a84ba5423b2f28b4f2b6564a7da5d7454280199c90a6af668462a637e",
+    "mc-health": "49ad37b49a1f024be52d49be4731621114b84aa0d6d9188837d3c952e61f040f",
+    "mc-identity": "2e122dd39051438553e698ce9d1950447339aa4feb18098640fedb1cf0a0d8f2",
+    "mc-private-notes": "9e6cbefdc690a5ca62c200d97c45f92a71cdf021400e70f13e77330041ec6365",
+    "mc-reports": "37784ff72a5846ef49e476eb5445ec0fe191338bac3d631fecb48f74bb06f647",
+    "mc-restore": "f5bb509fbfdc22af12c07ba69224bc9529395289085bddc4277297b8eb1d8902",
+    "mc-schedule": "7357d45dd6e848d18146b77abd5dce60491dab0ab303fb49b4b24b2f2c179db3",
+    "mc-shared-records": "54eee419fd20ad5163b7e1a57bf7de4cbdda88d774c37b6af84d0515acb5af8f",
+    "mc-tools": "7140f2b77c54034f254cba396d67da1a77a07c987896465bb49df8519066a019"
+  },
+  "stagedDigests": {
+    "mc-collab": "acbae438d197b635ca55bc727a2e5df87e0f06400fe9cf1f8ceff6de267d30ac",
+    "mc-daily-push": "aff2f23ed00d9a886465883b0bc93d248d826d23d4d2c802366f9fd6bd47e124",
+    "mc-files": "9b90965a84ba5423b2f28b4f2b6564a7da5d7454280199c90a6af668462a637e",
+    "mc-health": "49ad37b49a1f024be52d49be4731621114b84aa0d6d9188837d3c952e61f040f",
+    "mc-identity": "2e122dd39051438553e698ce9d1950447339aa4feb18098640fedb1cf0a0d8f2",
+    "mc-private-notes": "9e6cbefdc690a5ca62c200d97c45f92a71cdf021400e70f13e77330041ec6365",
+    "mc-reports": "37784ff72a5846ef49e476eb5445ec0fe191338bac3d631fecb48f74bb06f647",
+    "mc-restore": "f5bb509fbfdc22af12c07ba69224bc9529395289085bddc4277297b8eb1d8902",
+    "mc-schedule": "7357d45dd6e848d18146b77abd5dce60491dab0ab303fb49b4b24b2f2c179db3",
+    "mc-shared-records": "54eee419fd20ad5163b7e1a57bf7de4cbdda88d774c37b6af84d0515acb5af8f",
+    "mc-tools": "7140f2b77c54034f254cba396d67da1a77a07c987896465bb49df8519066a019"
+  },
+  "uploadPackageDigest": "e4fd855a0a9c7223002053e74e2d3ff28ee84ef4fdf4e1ab4df857eebd0f892f"
 }
