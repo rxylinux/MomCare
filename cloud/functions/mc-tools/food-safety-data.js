@@ -4,6 +4,7 @@
 // static/data/food-safety.json 生成，勿手改；phase-e3-server 套件逐字段
 // deepEqual 钉双源不漂移）。
 // 审校依据：中国营养学会《孕期妇女膳食指南 (2022)》/ NHS / FDA-EPA / ACOG——reviewedAt 见各词条。
+// source-sha256: 0e15a2c57bdece067dde2ba1efd4b4370c48ccb23d468d9eabc5c60a7da95beb
 module.exports = [
   {
     "id": "food_salmon_cooked",

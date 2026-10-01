@@ -6,6 +6,7 @@
 //
 // 用法：node scripts/gen-food-safety.mjs [--out <path>]
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -39,5 +40,8 @@ const HEADER = `'use strict'
 // 审校依据：中国营养学会《孕期妇女膳食指南 (2022)》/ NHS / FDA-EPA / ACOG——reviewedAt 见各词条。
 `
 
-writeFileSync(OUT, HEADER + 'module.exports = ' + JSON.stringify(entries, null, 2) + '\n')
-console.log(`done: ${entries.length} 词条 → ${OUT}`)
+// R4R-7：生成物内嵌作者源摘要标记（发布一致性门用——release-trial 比对该标记与
+// 当前 static/data/food-safety.json 摘要，陈旧生成物如实拒绝发布）
+const sourceSha = createHash('sha256').update(readFileSync(SRC)).digest('hex')
+writeFileSync(OUT, HEADER + `// source-sha256: ${sourceSha}\n` + 'module.exports = ' + JSON.stringify(entries, null, 2) + '\n')
+console.log(`done: ${entries.length} 词条 → ${OUT}（source-sha256: ${sourceSha.slice(0, 8)}…）`)

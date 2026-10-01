@@ -6,6 +6,7 @@ import { useToolsStore } from '@/services/toolsStore.js'
 import { reportsStorageKey, isDemoMode, FORMAL_REPORTS_KEY } from '@/utils/storage.js'
 import { legacyFormalStoresEnabled, formalStoresQuarantineMessage, legacyHttpEnabled, legacyDisabledMessage } from '@/utils/backendGate.js'
 import { isFamilyMode } from '@/services/sessionService.js'
+import { useFamilyStore } from '@/services/familyStore.js'
 
 // 报告类型映射
 export const REPORT_TYPES = [
@@ -294,6 +295,14 @@ export const useReportStore = defineStore('report', () => {
   })
 
   // ── Actions ──
+
+  let familyStoreRef = null
+  function getFamilyStore() {
+    if (!familyStoreRef) {
+      familyStoreRef = useFamilyStore()
+    }
+    return familyStoreRef
+  }
 
   function getHealthStore() {
     if (!healthStore) {
@@ -684,21 +693,34 @@ function _markUnverifiedOnRead(list) {
   // （经 toolsStore.analyzeReportWithAi → sessionService.familyCall('mc-tools')），
   // 拔除旧 Cloudflare HTTP /api/analyze-report；未配置 Key 时优雅返回提示，不抛错不假死。
   async function triggerAiPipeline(reportId) {
-    const report = _findReport(reportId)
-    if (!report) {
-      uni.showToast({ title: '报告不存在', icon: 'none' })
-      return false
+    // R2 审核补：存在性检查按模式分流。family 正式态权威源是云端 mc_reports
+    //（familyStore 镜像），旧本地库被 B3 隔离恒为空——不得用 _findReport 拦截正式态
+    // 分析（否则正式态的分析/重新分析入口恒"报告不存在"）。
+    const familyMode = isFamilyMode()
+    if (familyMode) {
+      const famRec = getFamilyStore().reports[reportId]
+      if (famRec && famRec.deleted) {
+        uni.showToast({ title: '报告不存在或已删除', icon: 'none' })
+        return false
+      }
+      // 镜像未命中（未拉取/离线）不本地拦截——云端 ai.analyzeReport 的 report-not-found
+      // 才是权威判定（存在性校验在服务端，客户端不猜）。
+    } else {
+      const report = _findReport(reportId)
+      if (!report) {
+        uni.showToast({ title: '报告不存在', icon: 'none' })
+        return false
+      }
+      if (report._originUnverified) {
+        // 来源未确认的旧报告：不在当前身份下发起 AI 处理（属于迁出通路）
+        uni.showToast({ title: '旧报告来源待确认，确认后再使用 AI 解读', icon: 'none', duration: 2500 })
+        return false
+      }
     }
 
     if (isGuestMode()) {
       // 演示模式没有真实 AI 后端：明确不可用，不发起请求、不扣次数、不显示完成
       uni.showToast({ title: '演示模式暂不支持 AI 解读', icon: 'none', duration: 2500 })
-      return false
-    }
-
-    if (report._originUnverified) {
-      // 来源未确认的旧报告：不在当前身份下发起 AI 处理（属于迁出通路）
-      uni.showToast({ title: '旧报告来源待确认，确认后再使用 AI 解读', icon: 'none', duration: 2500 })
       return false
     }
 
@@ -708,12 +730,11 @@ function _markUnverifiedOnRead(list) {
       return false
     }
 
-    const previousAiStatus = report.ai_status || 'pending'
-    const previousOcrStatus = report.ocr_status || 'pending'
+    const previousAiStatus = familyMode ? 'pending' : (((_findReport(reportId) || {}).ai_status) || 'pending')
+    const previousOcrStatus = familyMode ? 'pending' : (((_findReport(reportId) || {}).ocr_status) || 'pending')
     // family 模式：权威持久化在云端（mc-tools CAS 写 ai_result/ocr_result/vision_result），
     // 本管线全程不读写旧本地库（B3 隔离恒拒写——读写都会产生误导态或"本机保存失败"误报）。
     // demo/legacy：本地库标记/持久化照旧，失败如实提示。
-    const familyMode = isFamilyMode()
     const localMark = familyMode ? () => {} : updates => _updateReportField(reportId, updates)
     localMark({ ai_status: 'processing', ocr_status: 'processing' })
 
@@ -728,6 +749,11 @@ function _markUnverifiedOnRead(list) {
       if (!res.ok) {
         // 云端调用失败（网络/鉴权/报告不存在等）：如实失败，不消耗次数
         localMark({ ai_status: previousAiStatus, ocr_status: previousOcrStatus })
+        if (res.code === 'ai-input-changed') {
+          // R2：分析在途报告被编辑（备注/附件/日期/类型）——旧输入结果未保存，如实提示重新分析
+          uni.showToast({ title: '报告在分析期间被修改，本次结果未保存，请重新分析', icon: 'none', duration: 3000 })
+          return false
+        }
         uni.showToast({ title: res.message || 'AI 解读失败，请稍后重试', icon: 'none', duration: 2500 })
         return false
       }

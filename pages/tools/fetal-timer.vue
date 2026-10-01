@@ -5,6 +5,19 @@
 			<text class="subtitle">1 小时连续监测 · 5 分钟内的连续胎动计为 1 次</text>
 		</view>
 
+		<!-- 本地未保存警示（R1 A04：存储写入失败如实披露，绝不显示"已暂存"） -->
+		<view v-if="unsaved" class="unsaved-banner">
+			<text class="unsaved-banner-text">本地保存失败：当前记录仅保留在内存中，重启会丢失。请清理手机存储空间后继续记录。</text>
+		</view>
+
+		<!-- 恢复异常持久披露（R1 审核6/第二轮6 + R3 审核2：如实区分已备份/未备份） -->
+		<view v-if="restoreWarnings.length > 0" class="restore-banner">
+			<text class="restore-banner-text">{{ restoreWarningText }}</text>
+			<view v-if="recoveryBlocked" class="restore-banner-btn" @tap="onAckRestore">
+				<text class="restore-banner-btn-text">我已知悉异常，恢复自动同步</text>
+			</view>
+		</view>
+
 		<!-- 无进行中会话：入口 -->
 		<view v-if="!session" class="start-card" @tap="onStart">
 			<text class="start-title">开始记录胎动</text>
@@ -77,6 +90,42 @@ const paused = computed(() => session.value && session.value.status === 'paused'
 const validCount = computed(() => (session.value ? session.value.validCount : 0))
 const rawCount = computed(() => (session.value ? session.value.rawCount || (session.value.clicks ? session.value.clicks.length : 0) : 0))
 const fetalSessions = computed(() => toolsStore.fetalSessions)
+const unsaved = computed(() => toolsStore.fetalUnsaved)
+// 恢复异常持久披露（R1 审核6/第二轮6 + R3 审核2 + 终审2）：页面级横幅，非 console/toast
+// 一闪而过。三态如实：已隔离备份 / 未能备份（原字节保留未动）/ 孤儿 RAM 草稿恢复
+// （orphan-draft-restored 是内存恢复，没有做任何耐久备份——不得归类为"已备份"）。
+// 同步状态同步披露：未确认=暂停，已确认=已恢复。
+const restoreWarnings = computed(() => toolsStore.restoreWarnings)
+const recoveryBlocked = computed(() => toolsStore.recoveryBlocked)
+const RESTORE_WARNING_LABELS = {
+	'error': '缓存读取失败',
+	'corrupt': '缓存数据损坏',
+	'corrupt-frozen': '缓存数据损坏且备份失败',
+	'invalid-shape': '缓存结构不合法',
+	'invalid-shape-unbacked': '缓存结构不合法且备份失败',
+	'scope-foreign': '存在其他成员的数据',
+	'scope-foreign-unbacked': '存在其他成员的数据且备份失败'
+}
+const UNBACKED_STATUSES = ['error', 'corrupt-frozen', 'invalid-shape-unbacked', 'scope-foreign-unbacked']
+const restoreWarningText = computed(() => {
+	const segs = []
+	const integrity = restoreWarnings.value.filter(w => w.status !== 'orphan-draft-restored')
+	if (integrity.length > 0) {
+		const parts = [...new Set(integrity.map(w => RESTORE_WARNING_LABELS[w.status] || w.status))]
+		const hasUnbacked = integrity.some(w => UNBACKED_STATUSES.includes(w.status))
+		const backup = hasUnbacked ? '异常数据未能备份（原数据保留在原位、未被覆写）' : '异常数据已隔离备份'
+		segs.push(`本地记录恢复异常（${parts.join('、')}）：${backup}，自动同步${recoveryBlocked.value ? '已暂停' : '已恢复（已确认）'}`)
+	}
+	if (restoreWarnings.value.some(w => w.status === 'orphan-draft-restored')) {
+		segs.push('检测到未落盘的记录草稿，已从内存恢复——数据仍未保存到本地存储')
+	}
+	return segs.join('。')
+})
+function onAckRestore() {
+	// 显式确认（R3 审核2：含义明确——仅解除自动同步暂停；不改变数据、不删警告）
+	toolsStore.acknowledgeRestoreWarnings()
+	uni.showToast({ title: '已确认：自动同步恢复，异常提示保留至数据恢复', icon: 'none' })
+}
 
 const elapsedMs = computed(() => {
 	void nowTick.value
@@ -114,6 +163,7 @@ function onStart() {
 	toolsStore.startFetalSession(3600000).then(r => {
 		if (r.ok) uni.showToast({ title: '已开始监测', icon: 'none' })
 		else if (r.code === 'offline-pending') uni.showToast({ title: '已开始（联网后同步）', icon: 'none' })
+		else if (r.code === 'local-persist-failed') uni.showToast({ title: r.message || '本地保存失败，重启会丢失', icon: 'none' })
 		else uni.showToast({ title: r.message || '开始失败', icon: 'none' })
 	})
 }
@@ -151,6 +201,7 @@ function onFinish() {
 	toolsStore.finishFetalSession({ syncDaily: true }).then(r => {
 		if (r.ok) uni.showToast({ title: '已完成记录（当日胎动已累计）', icon: 'none' })
 		else if (r.code === 'offline-pending') uni.showToast({ title: '已暂存，联网后同步', icon: 'none' })
+		else if (r.code === 'local-persist-failed') uni.showToast({ title: r.message || '本地保存未全部成功', icon: 'none' })
 		else uni.showToast({ title: r.message || '完成失败', icon: 'none' })
 	})
 }
@@ -346,6 +397,39 @@ onShow(() => {
 .paused-tip-text {
 	font-size: 22rpx;
 	color: #9a7b2d;
+}
+.unsaved-banner {
+	margin: 20rpx 32rpx 0;
+	padding: 16rpx 24rpx;
+	border-radius: 16rpx;
+	background: #fdeeee;
+}
+.unsaved-banner-text {
+	font-size: 22rpx;
+	color: #c0392b;
+	line-height: 1.6;
+}
+.restore-banner {
+	margin: 20rpx 32rpx 0;
+	padding: 16rpx 24rpx;
+	border-radius: 16rpx;
+	background: #fdf6e8;
+}
+.restore-banner-text {
+	font-size: 22rpx;
+	color: #9a7b2d;
+	line-height: 1.6;
+}
+.restore-banner-btn {
+	margin-top: 12rpx;
+	align-self: flex-end;
+	padding: 8rpx 20rpx;
+	border-radius: 999rpx;
+	background: #f0e3c0;
+}
+.restore-banner-btn-text {
+	font-size: 22rpx;
+	color: #7a6120;
 }
 .history-card {
 	margin: 40rpx 32rpx 0;

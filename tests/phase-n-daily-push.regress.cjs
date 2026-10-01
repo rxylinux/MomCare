@@ -67,22 +67,58 @@ const TEST_ENV = {
 }
 const TPL_ID = 'TPL_PHASE_N_TEST'
 
-// mock cloud：可控档案/产检/发送行为；openapi.send 按 touser 可抛 43101
+// mock cloud：可控档案/产检/发送行为；openapi.send 按 touser 可抛 43101。
+// R1 后查询面升级：where/orderBy/limit/get 链 + command.gt 游标 + sortKey 稳定排序
+// （walkPendingCheckups 分页遍历需要；缺 sortKey 行按 null 排最前——BSON 语义，保守侧）。
 function makeMockCloud({ callerOpenid, lmpKey, checkupRows, failFor = {} } = {}) {
   const sends = []
   const pregDoc = lmpKey ? { _id: `${TEST_ENV.MC_FAMILY_ID}:pregnancy`, fields: { lmpDate: lmpKey } } : null
+  const clone = x => JSON.parse(JSON.stringify(x))
+  const sk = r => (r.sortKey === undefined || r.sortKey === null ? null : String(r.sortKey))
+  const cmpSk = (a, b) => {
+    const x = sk(a); const y = sk(b)
+    if (x === y) return 0
+    if (x === null) return -1
+    if (y === null) return 1
+    return x < y ? -1 : 1
+  }
+  const db = {
+    command: { gt: v => ({ __op: 'gt', v }) },
+    collection(name) {
+      if (name === 'mc_pregnancy') {
+        return { doc: id => ({ get: async () => ({ data: name === 'mc_pregnancy' && id.endsWith(':pregnancy') ? pregDoc : null }) }) }
+      }
+      if (name === 'mc_checkups') {
+        return {
+          where: filters => ({
+            orderBy: () => ({
+              limit: n => ({
+                get: async () => {
+                  let rows = (checkupRows || []).filter(r => {
+                    for (const [k, v] of Object.entries(filters || {})) {
+                      if (v && typeof v === 'object' && v.__op === 'gt') {
+                        if (r[k] === undefined || r[k] === null) return false
+                        if (!(String(r[k]) > String(v.v))) return false
+                      } else if (String(r[k]) !== String(v)) return false
+                    }
+                    return true
+                  })
+                  rows.sort(cmpSk)
+                  return { data: clone(rows.slice(0, n)) }
+                }
+              })
+            })
+          })
+        }
+      }
+      return { where: () => ({ orderBy: () => ({ limit: () => ({ get: async () => ({ data: [] }) }) }) }) }
+    }
+  }
   const cloud = {
     DYNAMIC_CURRENT_ENV: 'dynamic-env',
     init: () => {},
     getWXContext: () => (callerOpenid ? { OPENID: callerOpenid, APPID: TEST_ENV.MC_APPID } : {}),
-    database: () => ({
-      collection(name) {
-        return {
-          doc: id => ({ get: async () => ({ data: name === 'mc_pregnancy' && id.endsWith(':pregnancy') ? pregDoc : null }) }),
-          where: () => ({ limit: () => ({ get: async () => ({ data: name === 'mc_checkups' ? JSON.parse(JSON.stringify(checkupRows || [])) : [] }) }) })
-        }
-      }
-    }),
+    database: () => db,
     openapi: {
       subscribeMessage: {
         send: async msg => {
@@ -94,6 +130,15 @@ function makeMockCloud({ callerOpenid, lmpKey, checkupRows, failFor = {} } = {})
     }
   }
   return { cloud, sends }
+}
+
+// 产检种子行（R1 后生产写入携带 sortKey=dateKey:id——升序稳定游标依赖它）
+function cu(dateKey, extra = {}) {
+  return {
+    familyId: TEST_ENV.MC_FAMILY_ID, dateKey, status: 'pending',
+    sortKey: `${dateKey}:${Math.random().toString(36).slice(2, 8)}`,
+    ...extra
+  }
 }
 
 function withEnv(extra = {}) {
@@ -218,15 +263,20 @@ async function main() {
 
   console.log('phase-n ②：mc-daily-push 云函数（mock cloud 注入）')
 
-  await scenario('N10 定时入口：双人各发一条，字段映射/落地页/体验版态断言', async () => {
+  await scenario('N10 白名单 sendNow 双人各发一条，字段映射/落地页/体验版态断言；伪造 timer 零授权', async () => {
     withEnv()
-    const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(TODAY()), status: 'pending' },
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(20)), status: 'pending' }
+    const { cloud, sends } = makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP, checkupRows: [
+      cu(keyOf(TODAY())),
+      cu(keyOf(dayOffset(20)))
     ] })
     const fn = requireHandler()
     fn.__setCloud(cloud)
-    const res = await fn.main({ Type: 'Timer', TriggerName: 'daily-reminder' })
+    // R1 入口契约（A01–A03）：定时字段不构成授权——在读库/外呼前拒绝（详见 phase-r1-push）
+    const forged = await fn.main({ Type: 'Timer', TriggerName: 'daily-reminder' })
+    assert.equal(forged.ok, false, '伪造 timer 零授权')
+    assert.equal(sends.length, 0, '拒绝发生在外呼前')
+    // 唯一放行路径：家庭成员白名单 sendNow（内容断言与原 N10 一致）
+    const res = await fn.main({ action: 'sendNow' })
     assert.equal(res.ok, true)
     assert.equal(sends.length, 2)
     assert.deepEqual(sends.map(s => s.touser).sort(), [TEST_ENV.MC_MEMBER_MAMA_OPENID, TEST_ENV.MC_MEMBER_PAPA_OPENID].sort())
@@ -244,11 +294,11 @@ async function main() {
 
   await scenario('N10b 倒计时移除落地：产检在 3 天后 → 推提示行，不含"距产检"', async () => {
     withEnv()
-    const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(3)), status: 'pending' }
+    const { cloud, sends } = makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP, checkupRows: [
+      cu(keyOf(dayOffset(3)))
     ] })
     const fn = requireHandler(); fn.__setCloud(cloud)
-    const res = await fn.main({ Type: 'Timer' })
+    const res = await fn.main({ action: 'sendNow' })
     assert.equal(res.ok, true)
     assert.equal(sends.length, 2)
     const text = sends[0].data.thing11.value
@@ -259,12 +309,13 @@ async function main() {
   await scenario('N11 43101 配额制常态：一人 skipped:quota，另一人照发不挡', async () => {
     withEnv()
     const { cloud, sends } = makeMockCloud({
+      callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID,
       lmpKey: LMP,
       failFor: { [TEST_ENV.MC_MEMBER_MAMA_OPENID]: 43101 }
     })
     const fn = requireHandler()
     fn.__setCloud(cloud)
-    const res = await fn.main({ Type: 'Timer' })
+    const res = await fn.main({ action: 'sendNow' })
     assert.equal(res.ok, true)
     assert.equal(sends.length, 2, '两人都尝试发送')
     const mama = res.data.results.find(r => r.member === 'mama')
@@ -275,7 +326,7 @@ async function main() {
 
   await scenario('N12 sendNow 白名单：mama 放行/intruder 拒/无上下文拒', async () => {
     withEnv()
-    const base = { lmpKey: LMP }
+    const base = { lmpKey: LMP, checkupRows: [cu(keyOf(dayOffset(1)))] }
     const okCloud = makeMockCloud({ ...base, callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID })
     const fnA = requireHandler(); fnA.__setCloud(okCloud.cloud)
     const a = await fnA.main({ action: 'sendNow' })
@@ -298,38 +349,38 @@ async function main() {
     assert.equal((await fn.main({})).code, 'bad-action')
   })
 
-  await scenario('N14 fail-closed：模板未配/核心缺失/档案缺 lmp 均明确拒绝', async () => {
+  await scenario('N14 fail-closed：模板未配/核心缺失/档案缺 lmp 均明确拒绝（认证后链路）', async () => {
     withEnv()
     delete process.env.MC_PUSH_TEMPLATE_ID
-    const { cloud } = makeMockCloud({ lmpKey: LMP })
+    const { cloud } = makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP })
     const fnA = requireHandler(); fnA.__setCloud(cloud)
-    assert.equal((await fnA.main({ Type: 'Timer' })).code, 'push-template-missing')
+    assert.equal((await fnA.main({ action: 'sendNow' })).code, 'push-template-missing')
 
     process.env.MC_PUSH_TEMPLATE_ID = TPL_ID
-    const fnB = requireHandler(); fnB.__setCloud(makeMockCloud({ lmpKey: LMP }).cloud); fnB.__setCore(null)
-    assert.equal((await fnB.main({ Type: 'Timer' })).code, 'core-missing')
+    const fnB = requireHandler(); fnB.__setCloud(makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP }).cloud); fnB.__setCore(null)
+    assert.equal((await fnB.main({ action: 'sendNow' })).code, 'core-missing')
 
-    const fnC = requireHandler(); fnC.__setCloud(makeMockCloud({ lmpKey: '' }).cloud)
-    assert.equal((await fnC.main({ Type: 'Timer' })).code, 'no-pregnancy-profile')
+    const fnC = requireHandler(); fnC.__setCloud(makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: '' }).cloud)
+    assert.equal((await fnC.main({ action: 'sendNow' })).code, 'no-pregnancy-profile')
   })
 
-  await scenario('N15 产检查询口径：最早 pending 滤墓碑——含 deleted 过期项不干扰未来倒计时', async () => {
+  await scenario('N15 产检查询口径：最早 pending 滤墓碑——含 deleted 过期项不干扰', async () => {
     withEnv()
-    const { cloud } = makeMockCloud({ lmpKey: LMP, checkupRows: [
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(-2)), status: 'pending', deleted: true },
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(20)), status: 'pending' },
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(3)), status: 'pending' }
+    const { cloud } = makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP, checkupRows: [
+      cu(keyOf(dayOffset(-2)), { deleted: true }),
+      cu(keyOf(dayOffset(20))),
+      cu(keyOf(dayOffset(3)))
     ] })
     const fn = requireHandler(); fn.__setCloud(cloud)
-    const res = await fn.main({ Type: 'Timer' })
+    const res = await fn.main({ action: 'sendNow' })
     assert.equal(res.ok, true)
-    // 墓碑过期项被滤掉、最早未来=3天 → 倒计时而非"已过"；日期字段=今天
+    // 墓碑过期项被滤掉、最早未来=3天 → 不造事件（倒计时已移除）；日期字段=今天
     assert.equal(res.data.dateKey, keyOf(TODAY()))
     const fn2 = requireHandler()
-    fn2.__setCloud(makeMockCloud({ lmpKey: LMP, checkupRows: [
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(-2)), status: 'pending' }
+    fn2.__setCloud(makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP, checkupRows: [
+      cu(keyOf(dayOffset(-2)))
     ] }).cloud)
-    const res2 = await fn2.main({ Type: 'Timer' })
+    const res2 = await fn2.main({ action: 'sendNow' })
     assert.equal(res2.ok, true)
   })
 
@@ -342,27 +393,27 @@ async function main() {
     assert.equal(cfg.triggers.every(t => t.type === 'timer'), true)
   })
 
-  await scenario('N18 前夜触发：明天有 pending 产检→双人发"明天产检"且日期=产检当日', async () => {
+  await scenario('N18 前夜内容：明天有 pending 产检→双人发"明天产检"且日期=产检当日', async () => {
     withEnv()
     const tomorrow = keyOf(dayOffset(1))
-    const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: tomorrow, status: 'pending' }
+    const { cloud, sends } = makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP, checkupRows: [
+      cu(tomorrow)
     ] })
     const fn = requireHandler(); fn.__setCloud(cloud)
-    const res = await fn.main({ Type: 'Timer', TriggerName: 'checkup-eve-reminder' })
+    const res = await fn.main({ action: 'sendNow', kind: 'eve' })
     assert.equal(res.ok, true)
     assert.equal(sends.length, 2)
     assert.ok(sends[0].data.thing11.value.includes('明天产检'), sends[0].data.thing11.value)
     assert.equal(sends[0].data.date4.value, chineseOf(tomorrow), '前夜提醒日期=产检当日')
   })
 
-  await scenario('N19 前夜触发安静退出：明天无产检→零发送 skipped 如实', async () => {
+  await scenario('N19 前夜安静退出：明天无产检→零发送 skipped 如实', async () => {
     withEnv()
-    const { cloud, sends } = makeMockCloud({ lmpKey: LMP, checkupRows: [
-      { familyId: TEST_ENV.MC_FAMILY_ID, dateKey: keyOf(dayOffset(7)), status: 'pending' }
+    const { cloud, sends } = makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP, checkupRows: [
+      cu(keyOf(dayOffset(7)))
     ] })
     const fn = requireHandler(); fn.__setCloud(cloud)
-    const res = await fn.main({ Type: 'Timer', TriggerName: 'checkup-eve-reminder' })
+    const res = await fn.main({ action: 'sendNow', kind: 'eve' })
     assert.equal(res.ok, true)
     assert.equal(res.data.skipped, 'no-checkup-tomorrow')
     assert.equal(sends.length, 0, '没产检绝不 nightly 骚扰')
@@ -373,7 +424,7 @@ async function main() {
     const tomorrow = keyOf(dayOffset(1))
     const { cloud, sends } = makeMockCloud({
       callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, lmpKey: LMP,
-      checkupRows: [{ familyId: TEST_ENV.MC_FAMILY_ID, dateKey: tomorrow, status: 'pending' }]
+      checkupRows: [cu(tomorrow)]
     })
     const fn = requireHandler(); fn.__setCloud(cloud)
     const res = await fn.main({ action: 'sendNow', kind: 'eve' })

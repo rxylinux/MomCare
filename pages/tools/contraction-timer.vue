@@ -5,6 +5,19 @@
 			<text class="subtitle">记录持续时长与发作间隔 · 511 规律仅为辅助参考</text>
 		</view>
 
+		<!-- 本地未保存警示（R1 A04：存储写入失败如实披露，绝不显示"已暂存"） -->
+		<view v-if="unsaved" class="unsaved-banner">
+			<text class="unsaved-banner-text">本地保存失败：当前记录仅保留在内存中，重启会丢失。请清理手机存储空间后继续记录。</text>
+		</view>
+
+		<!-- 恢复异常持久披露（R1 审核6/第二轮6 + R3 审核2：如实区分已备份/未备份） -->
+		<view v-if="restoreWarnings.length > 0" class="restore-banner">
+			<text class="restore-banner-text">{{ restoreWarningText }}</text>
+			<view v-if="recoveryBlocked" class="restore-banner-btn" @tap="onAckRestore">
+				<text class="restore-banner-btn-text">我已知悉异常，恢复自动同步</text>
+			</view>
+		</view>
+
 		<!-- 建档医院/医生/急救电话卡片 -->
 		<view class="hospital-card">
 			<view class="hospital-row">
@@ -45,6 +58,18 @@
 			<text class="p511-disclaimer">{{ disclaimer }}</text>
 		</view>
 
+		<!-- R3 重启 1：全部未完成输入（跨日可见）——独立于最近一天时间线；披露不随展示窗消失 -->
+		<view v-if="unfinishedList.length > 0" class="unfinished-card">
+			<text class="unfinished-title">未完成同步的记录（{{ unfinishedList.length }} 条）</text>
+			<text class="unfinished-desc">以下本机输入尚未同步到云端（含跨日）；联网后自动重试，冲突项需核对两台设备。</text>
+			<view v-for="r in unfinishedList" :key="'uf-' + (r.recordId || r.localRef || r.startTime)" class="unfinished-row">
+				<text class="unfinished-line">{{ unfinishedTimeText(r) }} · {{ r.durationSec === null ? '—' : r.durationSec + 's' }}{{ r.intensity ? ' · ' + intensityText(r.intensity) : '' }}</text>
+				<text v-if="r.conflict === true" class="unfinished-conflict">⚠️ 与其他设备的记录冲突：本机输入未同步，需处理</text>
+				<text v-else class="unfinished-pending">待同步（本机保留，联网后自动重试；未同步到云端）</text>
+			</view>
+		</view>
+
+
 		<!-- 历史时间线 -->
 		<view class="timeline-card">
 			<text class="timeline-title">宫缩时间线</text>
@@ -53,6 +78,9 @@
 				<view class="timeline-main">
 					<text class="timeline-line">{{ timeText(r.startTime) }} 开始</text>
 					<text class="timeline-meta">持续 {{ r.durationSec === null ? '—' : r.durationSec + 's' }} · 间隔 {{ r.intervalSec === null ? '—' : Math.round(r.intervalSec / 60) + ' 分钟' }}{{ r.intensity ? ' · ' + intensityText(r.intensity) : '' }}</text>
+					<!-- R3 终审 1：未同步/冲突如实可见——不与已同步记录同观 -->
+					<text v-if="r.synced === false && r.conflict === true" class="timeline-conflict">⚠️ 与其他设备的记录冲突：本机输入未同步，需处理（重试仍失败请核对两台设备）</text>
+					<text v-else-if="r.synced === false" class="timeline-pending">待同步（本机保留，联网后自动重试；未同步到云端）</text>
 				</view>
 				<view class="timeline-del" @tap="onDelete(r)"><text class="timeline-del-text">删除</text></view>
 			</view>
@@ -73,10 +101,52 @@ const nowTick = ref(Date.now())
 let ticker = null
 
 const active = computed(() => toolsStore.activeContraction)
+const unsaved = computed(() => toolsStore.contraUnsaved)
+// 恢复异常持久披露（R1 审核6/第二轮6 + R3 审核2 + 终审2）：页面级横幅，非 console/toast
+// 一闪而过。三态如实：已隔离备份 / 未能备份（原字节保留未动）/ 孤儿 RAM 草稿恢复
+// （orphan-draft-restored 是内存恢复，没有做任何耐久备份——不得归类为"已备份"）。
+// 同步状态同步披露：未确认=暂停，已确认=已恢复。
+const restoreWarnings = computed(() => toolsStore.restoreWarnings)
+const recoveryBlocked = computed(() => toolsStore.recoveryBlocked)
+const RESTORE_WARNING_LABELS = {
+	'error': '缓存读取失败',
+	'corrupt': '缓存数据损坏',
+	'corrupt-frozen': '缓存数据损坏且备份失败',
+	'invalid-shape': '缓存结构不合法',
+	'invalid-shape-unbacked': '缓存结构不合法且备份失败',
+	'scope-foreign': '存在其他成员的数据',
+	'scope-foreign-unbacked': '存在其他成员的数据且备份失败'
+}
+const UNBACKED_STATUSES = ['error', 'corrupt-frozen', 'invalid-shape-unbacked', 'scope-foreign-unbacked']
+const restoreWarningText = computed(() => {
+	const segs = []
+	const integrity = restoreWarnings.value.filter(w => w.status !== 'orphan-draft-restored')
+	if (integrity.length > 0) {
+		const parts = [...new Set(integrity.map(w => RESTORE_WARNING_LABELS[w.status] || w.status))]
+		const hasUnbacked = integrity.some(w => UNBACKED_STATUSES.includes(w.status))
+		const backup = hasUnbacked ? '异常数据未能备份（原数据保留在原位、未被覆写）' : '异常数据已隔离备份'
+		segs.push(`本地记录恢复异常（${parts.join('、')}）：${backup}，自动同步${recoveryBlocked.value ? '已暂停' : '已恢复（已确认）'}`)
+	}
+	if (restoreWarnings.value.some(w => w.status === 'orphan-draft-restored')) {
+		segs.push('检测到未落盘的记录草稿，已从内存恢复——数据仍未保存到本地存储')
+	}
+	return segs.join('。')
+})
+function onAckRestore() {
+	// 显式确认（R3 审核2：含义明确——仅解除自动同步暂停；不改变数据、不删警告）
+	toolsStore.acknowledgeRestoreWarnings()
+	uni.showToast({ title: '已确认：自动同步恢复，异常提示保留至数据恢复', icon: 'none' })
+}
 const hospitalName = computed(() => toolsStore.hospitalName)
 const doctorName = computed(() => toolsStore.doctorName)
 const hospitalPhone = computed(() => toolsStore.hospitalPhone)
 const recentContractions = computed(() => toolsStore.recentContractions)
+// R3 重启 1：全部未完成输入（跨日可见——独立于 recentContractions 的一天窗口）
+const unfinishedList = computed(() => toolsStore.unfinishedContractions)
+function unfinishedTimeText(r) {
+  const d = new Date(r.startTime)
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 const avgDurationSec = computed(() => toolsStore.avgDurationSec)
 const avgIntervalSec = computed(() => toolsStore.avgIntervalSec)
 const avgIntervalMin = computed(() => (avgIntervalSec.value === null ? null : Math.round(avgIntervalSec.value / 60)))
@@ -112,12 +182,14 @@ function onToggle() {
 		toolsStore.stopContraction().then(r => {
 			if (r.ok) uni.showToast({ title: '已记录本次宫缩', icon: 'none' })
 			else if (r.code === 'offline-pending') uni.showToast({ title: '已暂存，联网后同步', icon: 'none' })
+			else if (r.code === 'local-persist-failed') uni.showToast({ title: r.message || '本地保存未全部成功', icon: 'none' })
 			else uni.showToast({ title: r.message || '记录失败', icon: 'none' })
 		})
 	} else {
 		toolsStore.startContraction().then(r => {
 			if (r.ok) { uni.vibrateShort({ type: 'light' }); ensureTicker() }
 			else if (r.code === 'offline-pending') { uni.showToast({ title: '已开始（联网后同步）', icon: 'none' }); ensureTicker() }
+			else if (r.code === 'local-persist-failed') uni.showToast({ title: r.message || '本地保存失败，重启会丢失', icon: 'none' })
 			else uni.showToast({ title: r.message || '开始失败', icon: 'none' })
 		})
 	}
@@ -170,6 +242,39 @@ onShow(() => {
 	margin-top: 8rpx;
 	font-size: 24rpx;
 	color: #8a94a6;
+}
+.unsaved-banner {
+	margin: 20rpx 32rpx 0;
+	padding: 16rpx 24rpx;
+	border-radius: 16rpx;
+	background: #fdeeee;
+}
+.unsaved-banner-text {
+	font-size: 22rpx;
+	color: #c0392b;
+	line-height: 1.6;
+}
+.restore-banner {
+	margin: 20rpx 32rpx 0;
+	padding: 16rpx 24rpx;
+	border-radius: 16rpx;
+	background: #fdf6e8;
+}
+.restore-banner-text {
+	font-size: 22rpx;
+	color: #9a7b2d;
+	line-height: 1.6;
+}
+.restore-banner-btn {
+	margin-top: 12rpx;
+	align-self: flex-end;
+	padding: 8rpx 20rpx;
+	border-radius: 999rpx;
+	background: #f0e3c0;
+}
+.restore-banner-btn-text {
+	font-size: 22rpx;
+	color: #7a6120;
 }
 .hospital-card {
 	margin: 24rpx 32rpx 0;
@@ -294,6 +399,19 @@ onShow(() => {
 	color: #8a94a6;
 	line-height: 1.6;
 }
+.unfinished-card {
+	margin: 24rpx 32rpx 0;
+	padding: 24rpx 28rpx;
+	border-radius: 24rpx;
+	background: #fdf6e8;
+	border: 2rpx solid #f0e3c0;
+}
+.unfinished-title { font-size: 28rpx; font-weight: 600; color: #7a6120; }
+.unfinished-desc { display: block; margin-top: 6rpx; font-size: 22rpx; color: #9a7b2d; line-height: 1.5; }
+.unfinished-row { margin-top: 16rpx; display: flex; flex-direction: column; }
+.unfinished-line { font-size: 26rpx; color: #2a3444; }
+.unfinished-conflict { margin-top: 4rpx; font-size: 22rpx; color: #c0392b; line-height: 1.5; }
+.unfinished-pending { margin-top: 4rpx; font-size: 22rpx; color: #d98a2b; line-height: 1.5; }
 .timeline-card {
 	margin: 24rpx 32rpx 0;
 	padding: 28rpx;
@@ -331,6 +449,8 @@ onShow(() => {
 	font-size: 26rpx;
 	color: #2a3444;
 }
+.timeline-conflict { display: block; margin-top: 4rpx; font-size: 22rpx; color: #c0392b; line-height: 1.5; }
+.timeline-pending { display: block; margin-top: 4rpx; font-size: 22rpx; color: #d98a2b; line-height: 1.5; }
 .timeline-meta {
 	margin-top: 6rpx;
 	font-size: 22rpx;

@@ -29,6 +29,10 @@ try { v20 = require('./v20') } catch (e) { v20 = null }
 let cloud = null
 try { cloud = require('wx-server-sdk') } catch (e) { cloud = null }
 exports.__setCloud = function __setCloud(mockCloud) { cloud = mockCloud }
+// 回归注入口：域记录形状校验（R3 A18——键级白名单对新字段的接受/拒绝矩阵）
+exports.__validateRecordShapeForTests = function __validateRecordShapeForTests(domain, record, decl) {
+  return validateRecordShape(domain, JSON.parse(JSON.stringify(record)), decl)
+}
 
 // V20 协议开关（D29/审查切片裁定）：仅当 MC_RESTORE_V20_ENABLED 恰为字符串 'true' 时请求 V20 模式。
 // **fail-closed（协调方复核修正 2026-09-20）**：flag='true' 但 v20 模块缺失/加载失败 → dispatch 前置门
@@ -216,7 +220,17 @@ const DAILY_FIELDS = ['weightKg', 'systolic', 'diastolic', 'fetalCount', 'shared
 const MOOD_FIELDS = ['mood', 'symptoms', 'note', 'plans']
 const CHECKUP_FIELDS = ['dateKey', 'time', 'hospital', 'companion', 'materials', 'questions', 'examItems', 'status', 'templateKey', 'source']
 const BAG_FIELDS = ['name', 'category', 'quantity', 'location', 'assignee', 'prepared', 'templateKey']
-const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus', 'hospital', 'weekOfPregnancy']
+// R3（2026-10-01）：与导出端同步纳入 mc-tools 写入的 AI 解读产物（含 R2 provenance）。
+// 依 2026-09-20 裁定，恢复侧只重施键级白名单（嵌套键与导出端投影形状一致）；
+// 值类型/大小不在恢复侧强制。恢复为隔离冻结（零写回实时集合）——AI 字段随记录字节
+// 原样冻结保存，不构成"完整恢复写入"验收（见 R3_HANDOFF 如实注明）。
+const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus', 'hospital', 'weekOfPregnancy', 'ai_result', 'ocr_result', 'vision_result']
+const REPORT_NESTED_KEY_WHITELIST = {
+  ai_result: ['text', 'model', 'generatedAt', 'inputDigest', 'baseRevision', 'coverage'],
+  ai_result_coverage: ['analyzedCount', 'totalAttachments', 'analyzedFileIds', 'skippedFileIds', 'mode'],
+  ocr_result: ['text', 'included', 'provider', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision'],
+  vision_result: ['included', 'pageCount', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision']
+}
 const RECORD_TOP_ALLOWED = {
   pregnancy: ['id', 'fields', 'revision', 'deleted'],
   daily: ['id', 'dateKey', 'fields', 'revision', 'deleted'],
@@ -254,6 +268,22 @@ function validateRecordShape(domain, record, decl) {
     }
   }
   if (domain === 'reports') {
+    // R3：AI 产物嵌套键白名单（键级——值类型依裁定不强制；对象性须可枚举键）
+    for (const f of ['ai_result', 'ocr_result', 'vision_result']) {
+      const v = record[f]
+      if (v === undefined || v === null) continue
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return `${f} 须对象`
+      for (const k of Object.keys(v)) {
+        if (!REPORT_NESTED_KEY_WHITELIST[f].includes(k)) return `${f}.${k} 嵌套键白名单外`
+      }
+    }
+    const cov = record.ai_result && record.ai_result.coverage
+    if (cov !== undefined && cov !== null) {
+      if (!cov || typeof cov !== 'object' || Array.isArray(cov)) return 'ai_result.coverage 须对象'
+      for (const k of Object.keys(cov)) {
+        if (!REPORT_NESTED_KEY_WHITELIST.ai_result_coverage.includes(k)) return `ai_result.coverage.${k} 嵌套键白名单外`
+      }
+    }
     if (!Array.isArray(record.attachments)) return 'attachments 须数组'
     if (record.deleted && record.attachments.length > 0) return '墓碑报告正文不得携带附件'
     for (let i = 0; i < record.attachments.length; i++) {

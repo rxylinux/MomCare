@@ -127,6 +127,17 @@
         <text class="ai-entry-arrow">›</text>
       </view>
 
+      <!-- R2：解读覆盖范围/过期如实披露（信息行——未覆盖与未知覆盖不得显示为完整分析） -->
+      <view v-if="aiStatus === 'done' && aiCoverageNote" class="ai-coverage-note">
+        <text class="ai-coverage-note-text">{{ aiCoverageNote }}</text>
+      </view>
+      <view v-if="aiStatus === 'done' && report.ai_stale" class="ai-stale-note">
+        <text class="ai-stale-note-text">报告在解读后已被编辑：当前解读基于旧版本。仍可点击上方卡片查看原解读。</text>
+        <view class="ai-stale-btn" @tap="onReanalyze">
+          <text class="ai-stale-btn-text">重新分析</text>
+        </view>
+      </view>
+
       <!-- Action Row -->
       <view v-if="!isEditing" class="action-row">
         <view class="action-btn" @tap="onShare">
@@ -254,6 +265,21 @@ const currentImageUrl = computed(() => {
 })
 
 const aiStatus = computed(() => report.value.ai_status || 'pending')
+
+// R2：覆盖范围披露文案——未知覆盖（历史版本结果）不称完整；未覆盖如实计数
+const aiCoverageNote = computed(() => {
+  const cov = report.value.ai_coverage
+  if (!cov) return ''
+  if (cov.unknown) {
+    return cov.total != null && cov.total > 0
+      ? `历史版本解读：覆盖范围未知（本报告共 ${cov.total} 个附件），不保证覆盖全部附件`
+      : '历史版本解读：覆盖范围未知'
+  }
+  if (cov.total === 0) return '' // 无附件的元数据解读——无覆盖歧义
+  if (cov.complete) return `已分析全部 ${cov.total} 个附件`
+  if (cov.mode === 'metadata') return `本次仅分析报告元数据：未读取任何附件（共 ${cov.total} 个）`
+  return `已分析 ${cov.analyzed}/${cov.total} 个附件（${cov.total - cov.analyzed} 个未分析——单次页数上限）`
+})
 
 const aiCardClass = computed(() => {
   // Phase G：正式态不再硬封锁——云端 mc-tools 网关负责未配置时如实降级（enabled:false）
@@ -531,6 +557,27 @@ async function onAiCardTap() {
     return
   }
   // 演示模式：无真实 AI 后端，明确不可用（不发起请求、不扣次数）
+  uni.showToast({ title: '演示模式暂不支持 AI 解读', icon: 'none', duration: 2500 })
+}
+
+// R2 审核补：过期结果的可用重新分析入口（stale 提示区按钮）。保留原结果可查看——
+// 卡片点击仍进结果页；本入口走与 pending 相同的网关管线，失败/冲突如实提示、
+// 不伪装新完成（成功且不再过期才导航到新结果）。
+async function onReanalyze() {
+  if (isFamilyMode()) {
+    if (!healthStore.canUseAiInterpret()) {
+      uni.showToast({ title: '今日 50 次 AI 解读已用完，明天再来吧', icon: 'none', duration: 3000 })
+      return
+    }
+    uni.showLoading({ title: '重新分析…' })
+    await reportStore.triggerAiPipeline(reportId.value)
+    await loadReport()
+    uni.hideLoading()
+    if (report.value.ai_status === 'done' && !report.value.ai_stale) {
+      navigateToPage(`/pages/archives/ai-result?id=${reportId.value}`)
+    }
+    return
+  }
   uni.showToast({ title: '演示模式暂不支持 AI 解读', icon: 'none', duration: 2500 })
 }
 
@@ -984,6 +1031,12 @@ page {
 .ai-entry-text { flex: 1; }
 .ai-entry-title { font-size: 30rpx; font-weight: 600; color: white; margin-bottom: 4rpx; display: block; }
 .ai-entry-sub { font-size: 24rpx; color: rgba(255, 255, 255, 0.7); }
+.ai-coverage-note { margin: 12rpx 24rpx 0; }
+.ai-coverage-note-text { font-size: 22rpx; color: #8a94a6; line-height: 1.6; }
+.ai-stale-note { margin: 8rpx 24rpx 0; display: flex; flex-direction: column; }
+.ai-stale-note-text { font-size: 22rpx; color: #d98a2b; line-height: 1.6; }
+.ai-stale-btn { margin-top: 10rpx; align-self: flex-start; padding: 8rpx 24rpx; border-radius: 999rpx; background: #fdf1de; }
+.ai-stale-btn-text { font-size: 22rpx; color: #b06f10; }
 .ai-entry-arrow { font-size: 32rpx; color: rgba(255, 255, 255, 0.8); flex-shrink: 0; }
 
 /* ── Action Row ── */

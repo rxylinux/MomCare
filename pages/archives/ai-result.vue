@@ -22,6 +22,14 @@
 
     <!-- Scrollable Content（AI 未启用时不渲染任何解读结果） -->
     <scroll-view v-if="!aiDisabled" scroll-y class="scroll">
+      <!-- R2：覆盖范围/过期如实披露（信息行——未覆盖与未知覆盖不得显示为完整分析） -->
+      <view v-if="aiCoverageNote" class="ai-coverage-banner">
+        <text class="ai-coverage-banner-text">{{ aiCoverageNote }}</text>
+      </view>
+      <view v-if="report.ai_stale" class="ai-stale-banner">
+        <text class="ai-stale-banner-text">报告在解读后已被编辑：以下解读基于旧版本，建议返回详情页重新分析</text>
+      </view>
+
       <!-- Indicators Section -->
       <view v-if="indicators.length > 0" class="ai-section-title-wrap">
         <text class="ai-section-title">逐项解读</text>
@@ -67,6 +75,15 @@
       <view v-if="ocrText" class="ocr-text-card">
         <text class="ocr-text-body" user-select>{{ ocrText }}</text>
         <text class="ocr-text-note">✦ 机器识别可能有误，请以报告原件为准</text>
+      </view>
+
+      <!-- R2 二审：历史提取（来源未确认）——可能来自更早附件版本，与本次解读输入无关 -->
+      <view v-if="!ocrText && ocrHistory" class="ai-section-title-wrap">
+        <text class="ai-section-title">历史提取（来源未确认）</text>
+      </view>
+      <view v-if="!ocrText && ocrHistory" class="ocr-text-card">
+        <text class="ocr-text-body" user-select>{{ ocrHistory.text }}</text>
+        <text class="ocr-text-note">✦ 此提取来自历史记录，未能确认属于本次解读的输入（附件可能已变化）；仅供核对，请以报告原件为准</text>
       </view>
 
       <!-- Disclaimer -->
@@ -120,6 +137,28 @@ const aiDisabled = computed(() => {
 const ocrText = computed(() => {
   const t = report.value.ocr_text
   return typeof t === 'string' ? t.trim() : ''
+})
+
+// R2 二审：来源未确认的历史提取（可能来自更早附件版本）——独立标注展示，
+// 不得与本次"原文提取"混同；仅当本次无已证明提取时展示该历史块。
+const ocrHistory = computed(() => {
+  const h = report.value.ocr_history
+  return h && typeof h.text === 'string' && h.text.trim() && h.unverified === true ? h : null
+})
+
+// R2：覆盖范围披露文案——未知覆盖（历史版本结果）不称完整；未覆盖如实计数
+const aiCoverageNote = computed(() => {
+  const cov = report.value.ai_coverage
+  if (!cov) return ''
+  if (cov.unknown) {
+    return cov.total != null && cov.total > 0
+      ? `历史版本解读：覆盖范围未知（本报告共 ${cov.total} 个附件），不保证覆盖全部附件`
+      : '历史版本解读：覆盖范围未知'
+  }
+  if (cov.total === 0) return '' // 无附件的元数据解读——无覆盖歧义
+  if (cov.complete) return `已分析全部 ${cov.total} 个附件`
+  if (cov.mode === 'metadata') return `本次仅分析报告元数据：未读取任何附件（共 ${cov.total} 个）`
+  return `已分析 ${cov.analyzed}/${cov.total} 个附件（${cov.total - cov.analyzed} 个未分析——单次页数上限）`
 })
 
 const typeLabel = computed(() => {
@@ -307,6 +346,10 @@ page {
 
 /* ── Scroll ── */
 .scroll { flex: 1; padding-bottom: 24rpx; }
+.ai-coverage-banner { margin: 16rpx 24rpx 0; padding: 14rpx 20rpx; border-radius: 12rpx; background: #f2f5fa; }
+.ai-coverage-banner-text { font-size: 22rpx; color: #6b7686; line-height: 1.6; }
+.ai-stale-banner { margin: 12rpx 24rpx 0; padding: 14rpx 20rpx; border-radius: 12rpx; background: #fdf6e8; }
+.ai-stale-banner-text { font-size: 22rpx; color: #9a7b2d; line-height: 1.6; }
 
 /* ── Section Title ── */
 .ai-section-title-wrap { padding: 0 32rpx; margin-top: 36rpx; }

@@ -174,7 +174,7 @@ async function main() {
       const s = store.currentFetalSession
       assert.ok(s.sessionId && /^fst_/.test(s.sessionId), '服务端 sessionId 已采纳')
       assert.equal(fetalDocs(stack).length, 1, '服务端会话在盘')
-      assert.ok(JSON.parse(storage.get('momcare_fetal_active_session')).startTime === s.startTime, '本地活跃会话落盘')
+      assert.ok(JSON.parse(storage.get('momcare_tools_env-e1c_wxapp-e1c_fam-e1c_mama_t1_fetal_active')).startTime === s.startTime, '本地活跃会话落盘（R1 作用域键）')
       // 三连击（1 分钟内）→ 1 簇
       fake += 60000; await store.recordFetalClick()
       fake += 60000; await store.recordFetalClick()
@@ -287,7 +287,7 @@ async function main() {
       const st1 = await store.startContraction({ intensity: 'moderate', notes: '第一次' })
       assert.ok(st1.ok, `start: ${JSON.stringify(st1).slice(0, 150)}`)
       assert.ok(store.activeContraction.recordId && /^cnt_/.test(store.activeContraction.recordId), '服务端 recordId 采纳')
-      assert.ok(JSON.parse(storage.get('momcare_active_contraction')).startTime === store.activeContraction.startTime, '活跃宫缩落盘')
+      assert.ok(JSON.parse(storage.get('momcare_tools_env-e1c_wxapp-e1c_fam-e1c_mama_t1_contra_active')).startTime === store.activeContraction.startTime, '活跃宫缩落盘（R1 作用域键）')
       fake += 90000
       const sp1 = await store.stopContraction()
       assert.ok(sp1.ok, `stop: ${JSON.stringify(sp1).slice(0, 150)}`)

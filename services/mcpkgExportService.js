@@ -136,7 +136,21 @@ const MOOD_FIELDS = ['mood', 'symptoms', 'note', 'plans']
 const PREGNANCY_FIELDS = ['lmpDate', 'dueDate', 'nickname', 'babyNickname', 'hospital', 'doctor', 'hospitalPhone', 'preWeightKg', 'heightCm']
 const CHECKUP_FIELDS = ['dateKey', 'time', 'hospital', 'companion', 'materials', 'questions', 'examItems', 'status', 'templateKey', 'source']
 const BAG_FIELDS = ['name', 'category', 'quantity', 'location', 'assignee', 'prepared', 'templateKey']
-const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus', 'hospital', 'weekOfPregnancy']
+// R3（2026-10-01）：纳入 mc-tools 真实写入的 AI 解读产物（ai_result/ocr_result/vision_result，
+// 含 R2 provenance：inputDigest/baseRevision/coverage.mode）。形状/大小/嵌套键/内部一致性约束见
+// guardReportAiFields——未知嵌套键（如未来供应商原始秘密/调试内部状态）记 problem 降诊断包，
+// 且违规对象整体剔出投影：原值不进导出字节（R3 一审 2），合法字段不静默丢弃。
+const REPORT_FIELDS = ['reportType', 'dateKey', 'note', 'archiveStatus', 'hospital', 'weekOfPregnancy', 'ai_result', 'ocr_result', 'vision_result']
+const AI_TEXT_MAX_BYTES = 64 * 1024      // analyzeReport maxTokens 1600 的产出量级上界（防御性放大）
+const OCR_TEXT_MAX_BYTES = 8 * 1024      // OCR_TEXT_MAX=2000+截断后缀的量级上界
+const RESULT_ID_LIST_MAX = 20            // 与 mc-reports ATTACHMENTS_MAX 同限
+const RESULT_MODEL_MAX = 64
+const RESULT_PROVIDER_MAX = 32
+const HEX64_RE = /^[0-9a-f]{64}$/
+const AI_RESULT_KEYS = ['text', 'model', 'generatedAt', 'inputDigest', 'baseRevision', 'coverage']
+const AI_COVERAGE_KEYS = ['analyzedCount', 'totalAttachments', 'analyzedFileIds', 'skippedFileIds', 'mode']
+const OCR_RESULT_KEYS = ['text', 'included', 'provider', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision']
+const VISION_RESULT_KEYS = ['included', 'pageCount', 'generatedAt', 'pageFileIds', 'inputDigest', 'baseRevision']
 
 // 服务端文档的非临床元数据键（不进包也不算未知字段）
 const META_IGNORED = ['familyId', 'sortKey', 'updatedAt', 'createdAt', 'updatedBy', 'uploaderId', 'type', 'schemaVersion', 'unsupportedSchema', 'appId', '_id', '__v', 'lastDetachedAt', 'registeredAt']
@@ -172,6 +186,93 @@ function guardUnsupportedSchema(rec, domain, idOf, problems) {
   if (rec && rec.unsupportedSchema === true) {
     problems.push(`unsupported-schema:${domain}@${idOf(rec)}`)
   }
+}
+
+// ── R3：报告 AI 产物形状守卫（导出侧；与 mc-tools 真实写入形状逐字段对齐）──
+// 违规（未知嵌套键/类型不符/超限/内部不一致）→ problems + 返回坏字段集合——
+// 调用方据此把违规对象整体剔出投影（原值不进任何导出字节，见 reports project）。
+// 旧格式（无 provenance 字段）为子集，天然通过。
+// R3 一审 1：本文件运行于微信客户端（无 Node Buffer）——字节长度用共享严格 UTF-8
+// 编码层（encodeStrict）计算；孤立代理项字符串按畸形拒绝（不让导出崩溃）。
+// R3 一审 3：coverage 提供时五字段齐全且内部一致（计数=ID 列表长度、分析+未分析=总数、
+// 两列表不相交、无重复）——畸形 coverage 不当完整证据。
+function utf8ByteLenOrNegative(str) {
+  try { return encodeStrict(str).length } catch (e) { return -1 }
+}
+function isHex64(v) { return typeof v === 'string' && HEX64_RE.test(v) }
+function isIdList(v) {
+  return Array.isArray(v) && v.length <= RESULT_ID_LIST_MAX && v.every(x => typeof x === 'string' && x && x.length <= 128) && new Set(v).size === v.length
+}
+function guardProvenancePair(obj, field, bad) {
+  const hasD = obj.inputDigest !== undefined
+  const hasB = obj.baseRevision !== undefined
+  if (hasD !== hasB) { bad(`${field}.${hasD ? 'inputDigest 无 baseRevision' : 'baseRevision 无 inputDigest'}（provenance 须成对）`); return false }
+  return true
+}
+export function guardReportAiFields(rec, idOf, problems) {
+  const id = idOf(rec)
+  const badFields = new Set()
+  const fieldGuard = (name, fn) => {
+    const v = rec[name]
+    if (v === undefined || v === null) return
+    const bad = detail => { problems.push(`ai-shape:reports.${detail}@${id}`); badFields.add(name) }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) { bad(`${name} 须对象`); return }
+    fn(v, bad)
+  }
+
+  fieldGuard('ai_result', (ai, bad) => {
+    for (const k of Object.keys(ai)) if (!AI_RESULT_KEYS.includes(k)) return bad(`ai_result.${k} 嵌套键白名单外`)
+    const len = utf8ByteLenOrNegative(ai.text)
+    if (typeof ai.text !== 'string' || !ai.text || len < 0 || len > AI_TEXT_MAX_BYTES) return bad('ai_result.text 畸形（含孤立代理项）/超限/非串')
+    if (ai.model !== undefined && !(typeof ai.model === 'string' && ai.model.length <= RESULT_MODEL_MAX)) return bad('ai_result.model 非串/超限')
+    if (ai.generatedAt !== undefined && !(typeof ai.generatedAt === 'number' && Number.isFinite(ai.generatedAt))) return bad('ai_result.generatedAt 非有限数')
+    if (ai.inputDigest !== undefined && !isHex64(ai.inputDigest)) return bad('ai_result.inputDigest 非 64hex')
+    if (ai.baseRevision !== undefined && !(Number.isInteger(ai.baseRevision) && ai.baseRevision >= 0)) return bad('ai_result.baseRevision 非非负整数')
+    if (!guardProvenancePair(ai, 'ai_result', bad)) return
+    const cov = ai.coverage
+    if (cov === undefined || cov === null) return
+    if (!cov || typeof cov !== 'object' || Array.isArray(cov)) return bad('ai_result.coverage 须对象')
+    for (const k of Object.keys(cov)) if (!AI_COVERAGE_KEYS.includes(k)) return bad(`ai_result.coverage.${k} 嵌套键白名单外`)
+    // R3 一审 3：coverage 提供则五必需字段齐全（真实 handler 恒全写；旧格式整体无 coverage）
+    for (const req of ['analyzedCount', 'totalAttachments', 'analyzedFileIds', 'skippedFileIds', 'mode']) {
+      if (cov[req] === undefined) return bad(`ai_result.coverage 缺必需字段 ${req}`)
+    }
+    if (!(Number.isInteger(cov.analyzedCount) && cov.analyzedCount >= 0)) return bad('coverage.analyzedCount 非非负整数')
+    if (!(Number.isInteger(cov.totalAttachments) && cov.totalAttachments >= 0)) return bad('coverage.totalAttachments 非非负整数')
+    if (!isIdList(cov.analyzedFileIds)) return bad('coverage.analyzedFileIds 非唯一ID列表/超限')
+    if (!isIdList(cov.skippedFileIds)) return bad('coverage.skippedFileIds 非唯一ID列表/超限')
+    if (!['vision', 'ocr', 'metadata'].includes(cov.mode)) return bad('coverage.mode 非法枚举')
+    if (cov.analyzedCount !== cov.analyzedFileIds.length) return bad('coverage.analyzedCount ≠ analyzedFileIds 长度')
+    if (cov.analyzedCount + cov.skippedFileIds.length !== cov.totalAttachments) return bad('coverage 计数矛盾（分析+未分析 ≠ 总附件数）')
+    const overlap = cov.analyzedFileIds.find(x => cov.skippedFileIds.includes(x))
+    if (overlap) return bad(`coverage 分析/未分析列表重叠（${String(overlap).slice(0, 16)}）`)
+  })
+
+  fieldGuard('ocr_result', (ocr, bad) => {
+    for (const k of Object.keys(ocr)) if (!OCR_RESULT_KEYS.includes(k)) return bad(`ocr_result.${k} 嵌套键白名单外`)
+    const len = utf8ByteLenOrNegative(ocr.text)
+    if (typeof ocr.text !== 'string' || !ocr.text || len < 0 || len > OCR_TEXT_MAX_BYTES) return bad('ocr_result.text 畸形（含孤立代理项）/超限/非串')
+    if (ocr.included !== true) return bad('ocr_result.included 须 true')
+    if (ocr.provider !== undefined && !(typeof ocr.provider === 'string' && ocr.provider.length <= RESULT_PROVIDER_MAX)) return bad('ocr_result.provider 非串/超限')
+    if (ocr.generatedAt !== undefined && !(typeof ocr.generatedAt === 'number' && Number.isFinite(ocr.generatedAt))) return bad('ocr_result.generatedAt 非有限数')
+    if (ocr.pageFileIds !== undefined && !isIdList(ocr.pageFileIds)) return bad('ocr_result.pageFileIds 非唯一ID列表/超限')
+    if (ocr.inputDigest !== undefined && !isHex64(ocr.inputDigest)) return bad('ocr_result.inputDigest 非 64hex')
+    if (ocr.baseRevision !== undefined && !(Number.isInteger(ocr.baseRevision) && ocr.baseRevision >= 0)) return bad('ocr_result.baseRevision 非非负整数')
+    guardProvenancePair(ocr, 'ocr_result', bad)
+  })
+
+  fieldGuard('vision_result', (vis, bad) => {
+    for (const k of Object.keys(vis)) if (!VISION_RESULT_KEYS.includes(k)) return bad(`vision_result.${k} 嵌套键白名单外`)
+    if (vis.included !== true) return bad('vision_result.included 须 true')
+    if (vis.pageCount !== undefined && !(Number.isInteger(vis.pageCount) && vis.pageCount >= 0)) return bad('vision_result.pageCount 非非负整数')
+    if (vis.generatedAt !== undefined && !(typeof vis.generatedAt === 'number' && Number.isFinite(vis.generatedAt))) return bad('vision_result.generatedAt 非有限数')
+    if (vis.pageFileIds !== undefined && !isIdList(vis.pageFileIds)) return bad('vision_result.pageFileIds 非唯一ID列表/超限')
+    if (vis.inputDigest !== undefined && !isHex64(vis.inputDigest)) return bad('vision_result.inputDigest 非 64hex')
+    if (vis.baseRevision !== undefined && !(Number.isInteger(vis.baseRevision) && vis.baseRevision >= 0)) return bad('vision_result.baseRevision 非非负整数')
+    guardProvenancePair(vis, 'vision_result', bad)
+  })
+
+  return badFields
 }
 
 async function pagedCollect(fnName, action, requiresOpId, onRecord) {
@@ -449,7 +550,20 @@ export async function buildAndPublishPackage({ includeShared = true, includePriv
     { key: 'bag', fn: 'mc-schedule', action: 'bag.list', opId: false, shared: true,
       project: r => pick(r, BAG_FIELDS), idOf: r => r.id, allow: BAG_FIELDS },
     { key: 'reports', fn: 'mc-reports', action: 'report.list', opId: false, shared: true,
-      project: r => { const p = pick(r, REPORT_FIELDS); p.attachments = r.deleted ? [] : (r.attachments || []).map((a, i) => ({ fileId: a.fileId, order: i })); return p },
+      project: r => {
+        const badFields = guardReportAiFields(r, () => r.id, problems)
+        const p = pick(r, REPORT_FIELDS)
+        // R3 一审 2：非法嵌套结果（未知键/超限/畸形/含秘密）整体剔出投影——原值绝不
+        // 进入导出字节/目标文件/可分享产物（诊断包只携带可审阅的排除记录，不是泄漏通道）
+        for (const f of ['ai_result', 'ocr_result', 'vision_result']) {
+          if (badFields.has(f)) {
+            delete p[f]
+            problems.push(`ai-excluded:reports.${f}@${r.id}（原值未入包，原因见 ai-shape 记录）`)
+          }
+        }
+        p.attachments = r.deleted ? [] : (r.attachments || []).map((a, i) => ({ fileId: a.fileId, order: i }))
+        return p
+      },
       idOf: r => r.id, allow: [...REPORT_FIELDS, 'attachments'] }
   ]
   if (includePrivateOf === s.member.memberId) {

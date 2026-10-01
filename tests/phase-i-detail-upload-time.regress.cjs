@@ -14,6 +14,8 @@ const assert = require('node:assert/strict')
 const root = path.resolve(__dirname, '..')
 const esbuild = require(require.resolve('esbuild', { paths: [root] }))
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'momcare-uptime-'))
+// 真实时钟在首次 mock 覆盖前捕获（各 makeMockCloud 共用同一真实源）
+const REAL_NOW = Date.now
 
 let passed = 0
 const failed = []
@@ -67,8 +69,13 @@ const reportsH = require(path.join(root, 'dist/cloud-functions/mc-reports/index.
 function makeMockCloud() {
   const docs = new Map()
   const state = { clockOffset: 0 }
-  const realNow = Date.now
-  Date.now = () => realNow() + state.clockOffset
+  // 夹具时钟（2026-10-01 独立验证修正，经审核授权）：冻结单一基准时刻、只经 clockOffset
+  // 显式推进。原实现跟随墙钟（realNow()+offset），创建与编辑两次调用之间事件循环走 1ms
+  // 即令"updatedAt === created.updatedAt + offset"的严格断言假失败（首轮串行日志
+  // suite-logs/phase-i-detail-upload-time.log：…574 vs …575）。业务断言保持严格相等
+  // 不放宽；生产代码零改动。
+  const frozenBase = REAL_NOW()
+  Date.now = () => frozenBase + state.clockOffset
   const clone = x => JSON.parse(JSON.stringify(x))
   function docApi(col, id, tx) {
     return {

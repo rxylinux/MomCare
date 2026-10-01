@@ -184,12 +184,26 @@ function callDeepSeek(apiKey, prompt, opts) {
       let data = ''
       res.on('data', chunk => { data += chunk })
       res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data)
-          const text = parsed && parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content
-          if (typeof text !== 'string' || !text) return reject(new Error('ai-empty-response'))
-          resolve(text)
-        } catch (e) { reject(new Error('ai-malformed-response')) }
+        // R2 完整性契约：仅"明确完整终止"的响应可成功——按 DeepSeek chat/completions 的
+        // 真实完成字段（choices[].finish_reason）判定。供应商 HTTP 错误、畸形响应、
+        // 空 content、length 截断、content_filter、缺失/未知终止原因一律受控失败，
+        // 调用方绝不保存为新"有效"分析。
+        const status = res.statusCode
+        if (typeof status === 'number' && (status < 200 || status >= 300)) {
+          return reject(new Error('ai-http-error:' + status))
+        }
+        let parsed
+        try { parsed = JSON.parse(data) } catch (e) { return reject(new Error('ai-malformed-response')) }
+        const choice = parsed && Array.isArray(parsed.choices) && parsed.choices.length > 0 ? parsed.choices[0] : null
+        const text = choice && choice.message && choice.message.content
+        if (typeof text !== 'string' || !text) return reject(new Error('ai-empty-response'))
+        const finish = choice.finish_reason
+        if (finish !== 'stop') {
+          if (finish === 'length') return reject(new Error('ai-truncated'))
+          if (finish === 'content_filter') return reject(new Error('ai-content-filtered'))
+          return reject(new Error('ai-unknown-finish:' + String(finish)))
+        }
+        resolve(text)
       })
     })
     req.on('error', reject)
@@ -430,6 +444,21 @@ function digestOf(obj) {
   return createHash('sha256').update(stableRequestHash(obj), 'utf8').digest('hex')
 }
 
+// ── R2：AI 输入快照摘要 ──
+// 覆盖 ai.analyzeReport 实际进入 prompt 的报告字段（dateKey/reportType/note 前 100 字/
+// 附件 fileId 列表）。发起分析时捕获；保存事务内对 fresh 重算比对——输入任何编辑使旧
+// 结果失效（受控拒绝，不写 ai_result/ocr_result/vision_result）。revision 一并比对：
+// 非输入字段编辑（如归档状态）也推进版本，按"基于旧版本"如实拒绝。
+function reportInputDigest(report) {
+  const atts = Array.isArray(report.attachments) ? report.attachments : []
+  return digestOf({
+    dateKey: report.dateKey || '',
+    reportType: report.reportType || '',
+    note: typeof report.note === 'string' ? report.note.slice(0, 100) : '',
+    attachments: atts.map(a => String((a && a.fileId) || ''))
+  })
+}
+
 // Asia/Shanghai 日号（与 mc-health/familyStore 同式——家庭时区口径）
 function shanghaiDateKey(ms) {
   const sh = new Date(ms + (8 * 60 + new Date(ms).getTimezoneOffset()) * 60000)
@@ -455,6 +484,64 @@ function stripId(doc) {
 
 function sortKeyOf(ms, id) {
   return `${String(ms).padStart(16, '0')}:${id}`
+}
+
+// ── R3：过滤列表扫描游标分页（contraction/efw 共用）──
+// 按数据库实际扫描序（sortKey 降序；sortKey 写入已内嵌唯一 id 后缀——同键并列不重不漏）
+// 逐页扫描后过滤：连续墓碑/被过滤记录超出单次超取窗口不再提前结束（旧 limit*3 上限 300
+// 会误判 hasMore:false）。单次调用扫描预算（LIST_SCAN_BUDGET 行）用尽而当前页未填满时，
+// 返回可继续扫描游标 + hasMore:true（当前页可为空）——客户端继续拉取；仅扫描自然到尾
+// 才 hasMore:false。游标恒为"已检查过的最后一行 sortKey"（严格 lt 续扫，无跳过无重复）。
+const LIST_SCAN_PAGE = 100
+const LIST_SCAN_BUDGET = 300
+// ── R3 一审 6：列表游标绑定查询范围 ──
+// 游标格式 `<16hex scope>:<sortKey>`。scope = SHA-256(动作|家庭|集合|过滤参数) 前 16 hex：
+// 另一家庭/另一集合（contraction↔efw）/过滤参数变化（includeDiscarded/sinceMs）的游标
+// 一律受控拒绝（明确提示从首页重新拉取），绝不无提示复用排序边界（familyId 防泄漏但
+// 不防漏读）。旧裸 sortKey 游标（无 scope 前缀）同受控拒绝——不静默重新解释。
+function listCursorScope(parts) {
+  return digestOf(parts.join('\u0000')).slice(0, 16)
+}
+function encodeListCursor(scope, sortKey) {
+  return `${scope}:${sortKey}`
+}
+function decodeListCursor(scope, cursor) {
+  if (typeof cursor !== 'string' || !cursor) return { sortKey: null }
+  if (!/^[0-9a-f]{16}:/.test(cursor) || cursor.slice(0, 16) !== scope) return { error: true }
+  return { sortKey: cursor.slice(17) }
+}
+async function scanFilteredList(db, col, whereBase, cursor, filterFn, limit, cmd) {
+  const valid = []
+  let scanCursor = cursor || null
+  let lastScanned = null
+  let scanned = 0
+  let ended = false
+  while (valid.length <= limit && scanned < LIST_SCAN_BUDGET) {
+    const where = { ...whereBase }
+    if (scanCursor) where.sortKey = cmd.lt(scanCursor)
+    const res = await db.collection(col).where(where).orderBy('sortKey', 'desc').limit(LIST_SCAN_PAGE).get()
+    const rows = (res && res.data) || []
+    scanned += rows.length
+    for (const r of rows) {
+      if (valid.length > limit) break
+      if (filterFn(r)) valid.push(r)
+    }
+    if (rows.length < LIST_SCAN_PAGE) { ended = true; break }
+    const prev = scanCursor
+    scanCursor = rows[rows.length - 1].sortKey
+    // R3 一审 5：游标未前进=库/排序完整性异常——受控失败（调用方明确报 scan-unstable），
+    // 绝不伪装成自然结束的完整尾页
+    if (scanCursor === prev) return { error: 'scan-cursor-stuck' }
+    lastScanned = scanCursor
+  }
+  const page = valid.slice(0, limit)
+  if (valid.length > limit && page.length > 0) {
+    return { page, nextCursor: page[page.length - 1].sortKey, hasMore: true }
+  }
+  if (!ended && lastScanned !== null) {
+    return { page, nextCursor: lastScanned, hasMore: true } // 预算用尽：空页也可继续
+  }
+  return { page, nextCursor: null, hasMore: false }
 }
 
 // ── 胎动有效计数重算（纯函数）：按时间戳升序聚类——簇间隔 >MERGE_WINDOW_MS 开新簇；
@@ -878,20 +965,17 @@ exports.main = async function main(event) {
       return fail('invalid-params', 'sinceMs 须正整数毫秒')
     }
     const cmd = db.command
-    const where = { familyId: fid }
-    if (cursor) where.sortKey = cmd.lt(cursor)
-    // 排除废弃：mock/真库 where 不便表达 neq+or——超取后过滤再截断（单家庭宫缩记录量级，
-    // 取 limit*3 上限 300 足覆盖误录占比；511 分析亦可由 includeDiscarded 全量重算）。
-    // includeDiscarded（无过滤路径）：取 limit+1 以探测 hasMore。
-    const fetchLimit = event.includeDiscarded === true ? limit + 1 : Math.min(limit * 3, 300)
-    const res = await db.collection(CONTRA).where(where).orderBy('sortKey', 'desc').limit(fetchLimit).get()
-    let rows = (res && res.data) || []
-    if (event.includeDiscarded !== true) rows = rows.filter(r => r.status !== 'discarded')
-    if (sinceMs !== null) rows = rows.filter(r => r.startTime >= sinceMs)
-    const page = rows.slice(0, limit)
-    const last = page[page.length - 1]
-    const nextCursor = rows.length > limit && last ? last.sortKey : null
-    return ok({ records: page.map(viewRecord), nextCursor, hasMore: Boolean(nextCursor) })
+    // R3：扫描游标分页（scanFilteredList）——软废弃/sinceMs 为后置过滤条件，
+    // 连续墓碑不再因超取窗口提前 hasMore:false；预算用尽返回可继续游标（页可空）。
+    // includeDiscarded（无过滤路径）同走扫描（页满即 hasMore 精确）。
+    const basePred = event.includeDiscarded === true ? () => true : r => r.status !== 'discarded'
+    const pred = sinceMs !== null ? r => basePred(r) && typeof r.startTime === 'number' && r.startTime >= sinceMs : basePred
+    const scope = listCursorScope(['contraction.list', fid, CONTRA, event.includeDiscarded === true ? '1' : '0', sinceMs === null ? '' : String(sinceMs)])
+    const dec = decodeListCursor(scope, cursor)
+    if (dec.error) return fail('cursor-scope-mismatch', '游标与当前查询范围不匹配（家庭/集合/过滤参数变化或旧格式）——请从首页重新拉取')
+    const scan = await scanFilteredList(db, CONTRA, { familyId: fid }, dec.sortKey, pred, limit, cmd)
+    if (scan.error) return fail('scan-unstable', '列表扫描游标未前进（数据/排序完整性异常）——本次已中止未返回部分结果，请刷新重试')
+    return ok({ records: scan.page.map(viewRecord), nextCursor: scan.nextCursor ? encodeListCursor(scope, scan.nextCursor) : null, hasMore: scan.hasMore })
   }
 
 // ── EFW 测量解析与 Hadlock 纯计算 ──
@@ -1072,17 +1156,15 @@ if (action === 'efw.list') {
   const limit = Math.min(Math.max(Number.isInteger(limitRaw) ? limitRaw : PAGE_DEFAULT, 1), PAGE_MAX)
   const cursor = (typeof event.cursor === 'string' && event.cursor) || null
   const cmd = db.command
-  const where = { familyId: fid }
-  if (cursor) where.sortKey = cmd.lt(cursor)
-  // 软废弃默认排除（超取+过滤+截断——与 contraction.list 同款策略）
-  const fetchLimit = event.includeDiscarded === true ? limit + 1 : Math.min(limit * 3, 300)
-  const res = await db.collection(EFW).where(where).orderBy('sortKey', 'desc').limit(fetchLimit).get()
-  let rows = (res && res.data) || []
-  if (event.includeDiscarded !== true) rows = rows.filter(r => r.status !== 'discarded')
-  const page = rows.slice(0, limit)
-  const last = page[page.length - 1]
-  const nextCursor = rows.length > limit && last ? last.sortKey : null
-  return ok({ records: page.map(viewEfw), nextCursor, hasMore: Boolean(nextCursor) })
+  // R3：扫描游标分页（scanFilteredList，与 contraction.list 同款契约）——
+  // 软废弃为后置过滤；连续墓碑不因超取窗口提前 hasMore:false；预算用尽返回可继续游标
+  const pred = event.includeDiscarded === true ? () => true : r => r.status !== 'discarded'
+  const scope = listCursorScope(['efw.list', fid, EFW, event.includeDiscarded === true ? '1' : '0'])
+  const dec = decodeListCursor(scope, cursor)
+  if (dec.error) return fail('cursor-scope-mismatch', '游标与当前查询范围不匹配（家庭/集合/过滤参数变化或旧格式）——请从首页重新拉取')
+  const scan = await scanFilteredList(db, EFW, { familyId: fid }, dec.sortKey, pred, limit, cmd)
+  if (scan.error) return fail('scan-unstable', '列表扫描游标未前进（数据/排序完整性异常）——本次已中止未返回部分结果，请刷新重试')
+  return ok({ records: scan.page.map(viewEfw), nextCursor: scan.nextCursor ? encodeListCursor(scope, scan.nextCursor) : null, hasMore: scan.hasMore })
 }
 
   // ══ E3 饮食/行为安全速查 + AI 代理网关 ══
@@ -1145,6 +1227,11 @@ if (action === 'efw.list') {
     if (!provider) {
       return ok({ enabled: false, message: '报告自动 OCR / DeepSeek 解读服务未配置；请以原始检验单与主治医生诊断为准' })
     }
+    // R2 输入快照：发起分析时捕获 revision + 实际 prompt 输入摘要——AI/OCR/视觉在途期间
+    // 报告被编辑（note/附件/日期/类型或任何推进版本的变更）时，保存事务按快照 CAS
+    // 受控拒绝，绝不把旧输入的结果写成新"有效"分析。
+    const baseRevision = report.revision || 0
+    const inputDigest = reportInputDigest(report)
     // Phase G 视觉直读阶段（规格 docs/PHASE_G_VISION_DIRECT_SPEC.md）：默认开启（恰 '0' 关闭）
     // 且有附件 → 整体绕过 OCR（零 printedText 调用），图片直送 deepseek-flash。
     // flash 是白名单内唯一原生视觉模型——模型不符 fail-closed 明确拒绝，不静默降级 OCR/元数据。
@@ -1229,24 +1316,56 @@ if (action === 'efw.list') {
         ...(visionImages ? { images: visionImages } : {})
       })
     } catch (e) {
-      return fail('ai-call-failed', 'AI 服务调用失败，请稍后重试或以原始检验单为准', { errMsg: String((e && e.message) || e).slice(0, 120) })
+      // R2 受控失败映射：截断/过滤是"模型明确未完整终止"，与一般调用失败区分——
+      // 均不保存新结果、不消耗语义上的成功
+      const m = String((e && e.message) || '')
+      if (m === 'ai-truncated') {
+        return fail('ai-truncated', 'AI 回答因输出长度限制被截断，本次未保存为有效解读——请稍后重试', { errMsg: m })
+      }
+      if (m === 'ai-content-filtered') {
+        return fail('ai-content-filtered', 'AI 回答被内容过滤拦截，本次未保存——请稍后重试或以原始检验单为准', { errMsg: m })
+      }
+      return fail('ai-call-failed', 'AI 服务调用失败，请稍后重试或以原始检验单为准', { errMsg: m.slice(0, 120) })
     }
     const text = String(answer)
+    // R2 覆盖范围 provenance：实际送入分析的附件（视觉=直读页；OCR=提取文本页；
+    // 元数据模式=0）与未分析附件清单——结果与页面据此披露"已分析 x/y"，
+    // 未覆盖/未知覆盖不得显示为完整分析。mode 标注本次分析形态（R2 审核 3：
+    // 元数据模式未覆盖的原因是"未读取附件"，不是页数上限——页面按 mode 如实表述）。
+    const analyzedFileIds = (visionImages ? visionPageFileIds : (ocrIncluded ? ocrPageFileIds : [])).map(String)
+    const coverageMode = visionImages ? 'vision' : (ocrIncluded ? 'ocr' : 'metadata')
+    const coverage = {
+      analyzedCount: analyzedFileIds.length,
+      totalAttachments: atts,
+      analyzedFileIds,
+      skippedFileIds: attachments.map(a => String((a && a.fileId) || '')).filter(id => !analyzedFileIds.includes(id)),
+      mode: coverageMode
+    }
     // 回写 mc_reports.ai_result（事务 CAS——revision 推进，迟到旧写冲突拒）
+    // R2：CAS 锚定 = 发起快照（baseRevision + 输入摘要）——在途编辑使旧结果失效
     const now = Date.now()
     const t = await db.startTransaction()
     try {
       const fresh = await getDocMaybe(t, REPORTS, reportId)
       if (!fresh || fresh.familyId !== fid || fresh.deleted === true) { await t.rollback(); return fail('report-not-found', '报告不存在或已删除') }
+      if ((fresh.revision || 0) !== baseRevision || reportInputDigest(fresh) !== inputDigest) {
+        await t.rollback()
+        return fail('ai-input-changed', '报告在分析期间已被修改（备注/附件/日期/类型或其他编辑），本次结果未保存——请重新分析', {
+          currentRevision: fresh.revision || 0, baseRevision
+        })
+      }
       const merged = { ...stripId(fresh) }
-      merged.ai_result = { text, model: provider.kind, generatedAt: now }
+      merged.ai_result = { text, model: provider.kind, generatedAt: now, inputDigest, baseRevision, coverage }
       if (ocrIncluded) {
-        // ocr_result 仅在实际提取（或复用）时写入；元数据模式不动旧值
-        merged.ocr_result = { text: ocrText, included: true, provider: ocrProviderKind, generatedAt: ocrGeneratedAt || now, pageFileIds: ocrPageFileIds }
+        // ocr_result 仅在实际提取（或复用）时写入；元数据模式不动旧值。
+        // inputDigest/baseRevision 溯源本次输入快照（R2 审核 2）：读侧据此判断提取内容
+        // 是否属于当前结果——跨输入（改附件后）残留的旧 OCR 不得当成本次"原文提取"。
+        merged.ocr_result = { text: ocrText, included: true, provider: ocrProviderKind, generatedAt: ocrGeneratedAt || now, pageFileIds: ocrPageFileIds, inputDigest, baseRevision }
       }
       if (visionImages) {
-        // vision_result 仅在视觉直读时写入（与 ocr_result 互斥——视觉模式整体跳过 OCR）
-        merged.vision_result = { included: true, pageCount: visionPageCount, generatedAt: now, pageFileIds: visionPageFileIds }
+        // vision_result 仅在视觉直读时写入（与 ocr_result 互斥——视觉模式整体跳过 OCR）；
+        // 同样带输入快照溯源（R2 审核 2）
+        merged.vision_result = { included: true, pageCount: visionPageCount, generatedAt: now, pageFileIds: visionPageFileIds, inputDigest, baseRevision }
       }
       merged.revision = (fresh.revision || 0) + 1
       merged.updatedAt = now
@@ -1257,7 +1376,11 @@ if (action === 'efw.list') {
       try { await t.rollback() } catch (e) { /* 已回滚 */ }
       return txFailed(err)
     }
-    return ok({ enabled: true, answer: text, disclaimer: AI_DISCLAIMER, model: provider.kind, ocrIncluded, ocrText: ocrIncluded ? ocrText : '', visionIncluded: Boolean(visionImages), reportRevision: (report.revision || 0) + 1 })
+    // reportRevision = 实际提交版本（CAS 保证 = baseRevision+1）；携带快照与覆盖供客户端展示
+    return ok({
+      enabled: true, answer: text, disclaimer: AI_DISCLAIMER, model: provider.kind, ocrIncluded, ocrText: ocrIncluded ? ocrText : '',
+      visionIncluded: Boolean(visionImages), reportRevision: baseRevision + 1, baseRevision, inputDigest, coverage
+    })
   }
 
   return fail('invalid-action', `未知 action: ${String(action)}`)

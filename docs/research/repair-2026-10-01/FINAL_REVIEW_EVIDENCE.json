@@ -1,0 +1,1236 @@
+{
+  "reviewed_at_utc": "2026-10-01T10:56:51.054732+00:00",
+  "workspace": "/Volumes/solid hard disk/github/rxylinux/MomCare",
+  "head": "22be7b3ce3853ea4d0f49a6393b3793143904258",
+  "implementation_and_test_executor": "Local ZCode desktop client",
+  "verification_session": "sess_28337e86-55d1-4744-bd09-4b62779e7198",
+  "reviewer": "Codex: source, existing logs, and SHA256 review only; no test execution",
+  "runtime": {
+    "exec_path": "/Users/daijianbo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "version": "v24.19.0",
+    "arch": "arm64",
+    "parameters": [],
+    "provenance": "RUNTIME=/Users/daijianbo/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node VERSION=v24.19.0 ARCH=arm64"
+  },
+  "result": {
+    "scripts": 74,
+    "nonzero_exits": 0,
+    "passed": 1123,
+    "failed": 0,
+    "skipped_scenarios": 10,
+    "inventory_matches_current_tests": true
+  },
+  "frozen_business_aux_and_real_state": [
+    {
+      "path": ".trial-release-state.json",
+      "baseline_sha256": "daf434e140d3a1e50035dea8b3abee1d79b59339a88c039b8aa44c7935f1b08d",
+      "current_sha256": "daf434e140d3a1e50035dea8b3abee1d79b59339a88c039b8aa44c7935f1b08d"
+    },
+    {
+      "path": "cloud/DEPLOY.md",
+      "baseline_sha256": "fd1aeb37b5e6b2b176bf281bd1022207ba3f0c8d5b320202fef4bd5fdc4bb913",
+      "current_sha256": "fd1aeb37b5e6b2b176bf281bd1022207ba3f0c8d5b320202fef4bd5fdc4bb913"
+    },
+    {
+      "path": "cloud/assemble.mjs",
+      "baseline_sha256": "f37231ae3fa757190cecf82f55bd4f4f4d38e2fa2d2728d967bae97e048df5a0",
+      "current_sha256": "f37231ae3fa757190cecf82f55bd4f4f4d38e2fa2d2728d967bae97e048df5a0"
+    },
+    {
+      "path": "cloud/functions/mc-daily-push/index.js",
+      "baseline_sha256": "c80772b7262e5a4267bbebf74420fca111817a8d357e4dc5770eacb096e1e897",
+      "current_sha256": "c80772b7262e5a4267bbebf74420fca111817a8d357e4dc5770eacb096e1e897"
+    },
+    {
+      "path": "cloud/functions/mc-restore/index.js",
+      "baseline_sha256": "053072f98f14ee9c0c9a9b3881236b3661bcf45e018704ccaa8d44c7dc3a05af",
+      "current_sha256": "053072f98f14ee9c0c9a9b3881236b3661bcf45e018704ccaa8d44c7dc3a05af"
+    },
+    {
+      "path": "cloud/functions/mc-tools/food-safety-data.js",
+      "baseline_sha256": "32a5d67234bfcffa6da24756941b4b8d4aacdc7bb943d8879aff068a378d624c",
+      "current_sha256": "32a5d67234bfcffa6da24756941b4b8d4aacdc7bb943d8879aff068a378d624c"
+    },
+    {
+      "path": "cloud/functions/mc-tools/index.js",
+      "baseline_sha256": "2a3f37b9355c142bc7593c69658e17216b3d7f7fe9992965689da6820bc28218",
+      "current_sha256": "2a3f37b9355c142bc7593c69658e17216b3d7f7fe9992965689da6820bc28218"
+    },
+    {
+      "path": "manifest.json",
+      "baseline_sha256": "c0027a141f41e40df80cd4c1e163596d7833178f1a4d682773aebd15e6832bfe",
+      "current_sha256": "c0027a141f41e40df80cd4c1e163596d7833178f1a4d682773aebd15e6832bfe"
+    },
+    {
+      "path": "pages/archives/ai-result.vue",
+      "baseline_sha256": "64f18fc7bdd4b831aca01e812b22b57924b74aeabd48765bae5c4465b7e6e82f",
+      "current_sha256": "64f18fc7bdd4b831aca01e812b22b57924b74aeabd48765bae5c4465b7e6e82f"
+    },
+    {
+      "path": "pages/archives/detail.vue",
+      "baseline_sha256": "13e9de4792e1ec077b793e9af6e0e07db03e14717a2b3d9c4f0c7284aadd9b3b",
+      "current_sha256": "13e9de4792e1ec077b793e9af6e0e07db03e14717a2b3d9c4f0c7284aadd9b3b"
+    },
+    {
+      "path": "pages/tools/contraction-timer.vue",
+      "baseline_sha256": "71628942bd6facc0dd189e293de4647c0fed3942c3ea5053c688a1892567c1bf",
+      "current_sha256": "71628942bd6facc0dd189e293de4647c0fed3942c3ea5053c688a1892567c1bf"
+    },
+    {
+      "path": "pages/tools/fetal-timer.vue",
+      "baseline_sha256": "cc1e1a5380f170b05b6513215031593dfda27b07f5b9a5a582310218c77e044f",
+      "current_sha256": "cc1e1a5380f170b05b6513215031593dfda27b07f5b9a5a582310218c77e044f"
+    },
+    {
+      "path": "scripts/.r4-real-table.mjs",
+      "baseline_sha256": "6af1c69fb9b322e64644f24a3a29a0ca1776af0ac876c30018fe3df56a8f1a97",
+      "current_sha256": "6af1c69fb9b322e64644f24a3a29a0ca1776af0ac876c30018fe3df56a8f1a97"
+    },
+    {
+      "path": "scripts/gen-daily-content.mjs",
+      "baseline_sha256": "0b83ea626a7d67a9bfefd235510c5a43e80d39bfe25496251d40a610dfeb9bfa",
+      "current_sha256": "0b83ea626a7d67a9bfefd235510c5a43e80d39bfe25496251d40a610dfeb9bfa"
+    },
+    {
+      "path": "scripts/gen-food-safety.mjs",
+      "baseline_sha256": "f100c693e94e21ab81521b4d43a0de5bd5b288b569f00fdc20ee6c0e4c064924",
+      "current_sha256": "f100c693e94e21ab81521b4d43a0de5bd5b288b569f00fdc20ee6c0e4c064924"
+    },
+    {
+      "path": "scripts/release-dependency-closure.mjs",
+      "baseline_sha256": "b0841b6bea2c25315d1c40a92a088d50da1f8fb051774a765f15aec13989a334",
+      "current_sha256": "b0841b6bea2c25315d1c40a92a088d50da1f8fb051774a765f15aec13989a334"
+    },
+    {
+      "path": "scripts/release-trial.mjs",
+      "baseline_sha256": "31781aebac1ca0a8530fdc3959c4da81fc0edcd8e3195c2a56799d08929dc454",
+      "current_sha256": "31781aebac1ca0a8530fdc3959c4da81fc0edcd8e3195c2a56799d08929dc454"
+    },
+    {
+      "path": "services/aiReportView.js",
+      "baseline_sha256": "66cb4fa2e62d39342fb71d5103550edc14465c9da4a55d28478dbaeb28b60efd",
+      "current_sha256": "66cb4fa2e62d39342fb71d5103550edc14465c9da4a55d28478dbaeb28b60efd"
+    },
+    {
+      "path": "services/mcpkgExportService.js",
+      "baseline_sha256": "f3be4e4b34e1386a570885b852b44c6f9f0d3121f2be7cb488710cd7d920ba96",
+      "current_sha256": "f3be4e4b34e1386a570885b852b44c6f9f0d3121f2be7cb488710cd7d920ba96"
+    },
+    {
+      "path": "services/toolsStore.js",
+      "baseline_sha256": "c7bca51006909d738a62181881a290ad81169cc8a643c521b00cdb84342d8a2b",
+      "current_sha256": "c7bca51006909d738a62181881a290ad81169cc8a643c521b00cdb84342d8a2b"
+    },
+    {
+      "path": "stores/report.js",
+      "baseline_sha256": "cba90bfe847d2fda45bbb4baec86536fd1bf6c2c3e37dabd79e87253c804c35a",
+      "current_sha256": "cba90bfe847d2fda45bbb4baec86536fd1bf6c2c3e37dabd79e87253c804c35a"
+    }
+  ],
+  "changed_preexisting_tests": [
+    {
+      "path": "tests/phase-i-detail-upload-time.regress.cjs",
+      "before_sha256": "cb91d78a7bd078550df0548a8311b7aa27a6d4b87eed6654a1869207656d2779",
+      "after_sha256": "d1d54e32ed7a1e3d75a222b3fdd9334458b5fb73ec14f2e0b8e3c80d30cb1300"
+    }
+  ],
+  "reviewed_documents": [
+    {
+      "path": "docs/REPAIR_PLAN_2026-10-01.md",
+      "sha256": "5df291feae2cc5b723c7c32aae8f63901911cd39dc94ec16cd2b4f998efab43a"
+    },
+    {
+      "path": "docs/REPAIR_DESIGN_2026-10-01.md",
+      "sha256": "7138bef8876bee32f483f10e6ab74d5ab802d272877b9a4dbbc0bbb2c594576c"
+    },
+    {
+      "path": "docs/research/repair-2026-10-01/FINAL_VERIFICATION.md",
+      "sha256": "68428e485985345eaca46981c645e7c549bd56a7afd067d28c1c4b8d82490fcc"
+    }
+  ],
+  "test_results": [
+    {
+      "path": "tests/phase-a.regress.cjs",
+      "sha256": "b08147c39ef19afd2b756f9d9c15385277c527e9b12d4fa68e215b85295c8eca",
+      "command": [
+        "node",
+        "tests/phase-a.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 72,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-a.log",
+      "log_sha256": "6e83815b156e57d02c469a3edd1be05fb216877ea260f2ea5c110ce7397f8d95"
+    },
+    {
+      "path": "tests/phase-b1.regress.cjs",
+      "sha256": "bf5d1717af8274bd43dbc447b25ad50e3770fa59a17ed22cbeed6b70b1a16b55",
+      "command": [
+        "node",
+        "tests/phase-b1.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 42,
+      "failed": 0,
+      "skipped_scenarios": [
+        "B1-页面：冲突路径读取顶层 currentRevision 不再 TypeError，输入保留（Item7）",
+        "B1-页面：共享保存成功只清共享草稿字段（Item7）",
+        "B1-页面：成员缓存先行离线恢复 + 云端刷新（Item7）",
+        "R2-页面：身份切换清理敏感输入（Codex canary 复现）",
+        "R2-页面：明确拒绝时清理敏感输入",
+        "R2-页面竞态：私人保存跨身份切换，草稿留在原成员、零 UI 污染（Item6 复现）",
+        "R2-页面竞态：共享保存跨身份切换同样零污染",
+        "R2-页面：瞬时离线确认保留未保存输入",
+        "R2-页面：业务身份拒绝立即锁定清屏（不依赖下一次确认）",
+        "R2-页面：暂存失败如实上报，不声称已保存本机（Item6 探针2）"
+      ],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b1.log",
+      "log_sha256": "aab209a9ac53f72606349ddff10cc681a7ddd85e7e863541cb2581428bb711e0"
+    },
+    {
+      "path": "tests/phase-b2a.regress.cjs",
+      "sha256": "9609dfbad4c8efedc6c5468849646c2f6e4c832e3effaca0e2d87a235ab77f7d",
+      "command": [
+        "node",
+        "tests/phase-b2a.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 48,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b2a.log",
+      "log_sha256": "c7bf5a60f8c7561da4218af0e5af9d128a671e25b4c4a0394d4368b970ef4300"
+    },
+    {
+      "path": "tests/phase-b2b1.regress.cjs",
+      "sha256": "b14cd03be61737580d5ce2a0eec57042e51386d36cb3b3ecfb84172480004114",
+      "command": [
+        "node",
+        "tests/phase-b2b1.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 63,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b2b1.log",
+      "log_sha256": "ddd7d08ec66bfb4d5529e1b57968e079a2f2065e667c762fa2b701d70f3c4b83"
+    },
+    {
+      "path": "tests/phase-b2b2.regress.cjs",
+      "sha256": "2edad41d5633b8a797b532848b3fec357054540a169f952f256aff6b46b50fe0",
+      "command": [
+        "node",
+        "tests/phase-b2b2.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 35,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b2b2.log",
+      "log_sha256": "93609cd204edadd2f475a785db258a2a4f291c2ee64788268f1fbdccef3f8ad1"
+    },
+    {
+      "path": "tests/phase-b3a-archive.regress.cjs",
+      "sha256": "1fbf94b3146929fd9ddf01a92b3b1bee02b6f91242c76cb681666a3209a481cf",
+      "command": [
+        "node",
+        "tests/phase-b3a-archive.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3a-archive.log",
+      "log_sha256": "9901f6245b95640ba17cf3cfa5f2bed1ecfea4ad4c17445924203ea13b7b38d7"
+    },
+    {
+      "path": "tests/phase-b3a-page.regress.cjs",
+      "sha256": "3a1e2e68805e3731de881fba991be76f085abd6f366c4b9fecfff9d9d5541692",
+      "command": [
+        "node",
+        "tests/phase-b3a-page.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 18,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3a-page.log",
+      "log_sha256": "f8c70ee39fc4082a0b5aaae00ed392ad53f384d9f34a5f2ea39ff7d7c93e12c5"
+    },
+    {
+      "path": "tests/phase-b3a-privacy-reports.regress.cjs",
+      "sha256": "5e49676642b4ea480386f2239e76cb995816b4226bce937c9ff3f5afb38c96d5",
+      "command": [
+        "node",
+        "tests/phase-b3a-privacy-reports.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3a-privacy-reports.log",
+      "log_sha256": "e767934479b4b0b0f7a7d075d6a0f86cd1206967424382f28129c127cefbb4c5"
+    },
+    {
+      "path": "tests/phase-b3a.regress.cjs",
+      "sha256": "37791677d213e27da2c1460f50497eb0f4369e96d0d2e900c79caa6ede3bf2b7",
+      "command": [
+        "node",
+        "tests/phase-b3a.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3a.log",
+      "log_sha256": "c1c178b15252ed8912e943326165d6746c7e1fccd5388fbdd661ce38a7c2d162"
+    },
+    {
+      "path": "tests/phase-b3b-stage1.regress.cjs",
+      "sha256": "0244ba099b8f300c8fa866d83cf9993fcc65837a189d0592e5c0f55a557f9a4b",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage1.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 82,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage1.log",
+      "log_sha256": "bb8b73ed44ee8ffcb71b415b88b5f847cbec4fec5b746604ff03e162bc1abfd7"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-commit-verify-abandon.regress.cjs",
+      "sha256": "06d03013ca3c5b5d7b57912e9f82f41d4d3d735d2b2973ca230c9cab09a9a302",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-commit-verify-abandon.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-commit-verify-abandon.log",
+      "log_sha256": "6971d849467480b4dd2c268606b1ae8714a2deaebed060028ebb5cdbc262d5ec"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-d25firstmap.regress.cjs",
+      "sha256": "9a506f3580c8026c23c18e5c4355a76513cde940f115db131de8831aa8e8feb5",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-d25firstmap.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-d25firstmap.log",
+      "log_sha256": "dbb8ccb174e728310570d84dded4cb9e490acb8bcd728537dddb251f8672247f"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-v20conc-adv.regress.cjs",
+      "sha256": "5b2e61ee43a5d7a935b5ccb74728f5eb4c0690103ddf1c5616d907c48fee56fb",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-v20conc-adv.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-v20conc-adv.log",
+      "log_sha256": "b77b89f02d06c24f2151e88a5075393a9cf4eecfb0a8edfd0b2d5615c906eb7a"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-v20consume-frag.regress.cjs",
+      "sha256": "214b50876f7f3576bdc6ef05e9e88467f479404b3117624a6dc26a220251cb6a",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-v20consume-frag.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-v20consume-frag.log",
+      "log_sha256": "e6e8165a540c8274cf25c92395bb77ba29a8904a9397d04c871b601879a27309"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-v20consume-r12.regress.cjs",
+      "sha256": "de45e8551626beb768bb4baca1292ba469087f18d599437a2afb1123d5d802c9",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-v20consume-r12.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-v20consume-r12.log",
+      "log_sha256": "bf14ddf0cbf2d463f4eb86c5fac958b8ddee25ee7b63fe7c01d90a97f3ca6410"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-v20consume-sec.regress.cjs",
+      "sha256": "586c95f9eaa0840fdea6d88b1b2725bbe26911da63eeee2e34ad54bd7c022be0",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-v20consume-sec.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-v20consume-sec.log",
+      "log_sha256": "f21e325e71273f9ba282c2381673ce89e658cc15af0f184b46952549f2eda8e5"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-v20consume.regress.cjs",
+      "sha256": "a51d85c85d26f97787646ccc672aa9ae198b784ac714c74fa04547b150022627",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-v20consume.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-v20consume.log",
+      "log_sha256": "cf6a42211383284cd1117253fbab5fed273a5a9068de1aae3caf200729b91a56"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-v20finalize.regress.cjs",
+      "sha256": "3ed182aa2343a56f0a9264ad65a868592a9efdc579faa58fcc58bb22a1726688",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-v20finalize.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 16,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-v20finalize.log",
+      "log_sha256": "5c02bc9095805b6b855fad9ab8ae717e502a14d1af363846d110a8cae5de9864"
+    },
+    {
+      "path": "tests/phase-b3b-stage2-v20wire-adv.regress.cjs",
+      "sha256": "d3030f005632dfa32f1531c9cc52475c91725a5b0c7fc6bcbb98a5b6d7de2ac3",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2-v20wire-adv.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 16,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2-v20wire-adv.log",
+      "log_sha256": "af788b6f892e22729b148444fdd817b39fb4c7759201c5b4cbee64362c09d554"
+    },
+    {
+      "path": "tests/phase-b3b-stage2.regress.cjs",
+      "sha256": "9bf40e6b0a623412e43b6edbf94978f284eb6fdb2b8d562b2737b5a5353fce61",
+      "command": [
+        "node",
+        "tests/phase-b3b-stage2.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 85,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-stage2.log",
+      "log_sha256": "1e18cfb72c13db87d540a3b76ae94bd196c66db6e00fd042a35585202dd0cc35"
+    },
+    {
+      "path": "tests/phase-b3b-v20-amba.regress.cjs",
+      "sha256": "7b19c0bd3a31482ea70d90c699874bcf4a171020de93df65e1c18fd6bc847909",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-amba.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-amba.log",
+      "log_sha256": "1c854dc044c8b6acc0ea22559ca33c3fe74b2d3319c20a1aabedf2354954c4f9"
+    },
+    {
+      "path": "tests/phase-b3b-v20-dualshort.regress.cjs",
+      "sha256": "c486ae7c15a9f9fb74c924b8e02b0eb97bdd4b020b5d17777f5b5cf3e318f225",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-dualshort.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-dualshort.log",
+      "log_sha256": "a30ee22e20ea4b7010429ebcaec0ddd4a8292dd416550754595220a25c34b787"
+    },
+    {
+      "path": "tests/phase-b3b-v20-dupemptyshape.regress.cjs",
+      "sha256": "82662a73444930a84bc1e1bc7c31f4667910e55b7dbc5ce58903bd185528a911",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-dupemptyshape.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-dupemptyshape.log",
+      "log_sha256": "54e476ab4daf2eb2623ab5731aa3c0200991690fa5e1e86026e04b97deb901a3"
+    },
+    {
+      "path": "tests/phase-b3b-v20-dupid.regress.cjs",
+      "sha256": "489c4bd001c7fc2e56fa33a935433480a0c333c24bd178583955074a1db93d34",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-dupid.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-dupid.log",
+      "log_sha256": "aeab34732f433691c241dd56527f07524aecf6e31d28e985d284ac871cd503ac"
+    },
+    {
+      "path": "tests/phase-b3b-v20-forgedcanonical.regress.cjs",
+      "sha256": "4f38a3cffdd0c442b4dfe1c264a5a54be1cc9a0e63a34bf6ee3f9cb23e9bd7aa",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-forgedcanonical.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-forgedcanonical.log",
+      "log_sha256": "5bb5f82c07c9b1f7cc8d36ed0872e1242b3dbbb3acdc8a7656ad2c0f17a93249"
+    },
+    {
+      "path": "tests/phase-b3b-v20-giantid.regress.cjs",
+      "sha256": "6c20c699affbe727c5752fa9097312ab97b27fe780d84049590241d432a61424",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-giantid.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-giantid.log",
+      "log_sha256": "3cb81f9dc6d47f64973f169b87c1eb240cf4ec547f2eceddad72eadce9f3c8f8"
+    },
+    {
+      "path": "tests/phase-b3b-v20-interop.regress.cjs",
+      "sha256": "bc02ba8c8870646fb9598cd1137cbcca4777e8aa5dd52474ce6e5cf2fde46ba5",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-interop.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-interop.log",
+      "log_sha256": "2edbd04d6a1742fbe0599c475d1686143747a8deda5ad3e6b65c9d9f27edec3e"
+    },
+    {
+      "path": "tests/phase-b3b-v20-module.regress.cjs",
+      "sha256": "8e7724d01e25d13b6097ab3b4ec7415de7176ffc75a795add6a7428480393175",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-module.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 23,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-module.log",
+      "log_sha256": "06b27ac49dac2088358d67c60c6d178f91572b7fe962e6b1f84f561f37317b21"
+    },
+    {
+      "path": "tests/phase-b3b-v20-nonarray.regress.cjs",
+      "sha256": "e3e35a053485e13bcc8beed85080ceb802ec08a952e2f671f8c4f1eb575c20aa",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-nonarray.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-nonarray.log",
+      "log_sha256": "9160171ac6fd855e877c63e34de070765f34fb6ee36c9205a664ee1640a49a61"
+    },
+    {
+      "path": "tests/phase-b3b-v20-protokey.regress.cjs",
+      "sha256": "5a2945e522db62758f8929e052eeb6e67ea3fe4847031ee10add303596c10c9e",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-protokey.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 15,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-protokey.log",
+      "log_sha256": "7ebafa5d62f8ebcec8640a2181d2de9cdb75a24f06c24b3bd32b7da1e3875da5"
+    },
+    {
+      "path": "tests/phase-b3b-v20-vbread-neg.regress.cjs",
+      "sha256": "1675e5f27abe7e6cecb449bafc3ea3420333c512b80184b9b71b3b66ccd2eece",
+      "command": [
+        "node",
+        "tests/phase-b3b-v20-vbread-neg.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-b3b-v20-vbread-neg.log",
+      "log_sha256": "099378a3fb6d4e759781cdf7ae98e63ae2813beddc4dac5b95ac8a975ce469e5"
+    },
+    {
+      "path": "tests/phase-c-client.regress.cjs",
+      "sha256": "0e965aae98f6ff6488da222539217c8fff64f8a0475e05f2b6a8cdcb481f04f7",
+      "command": [
+        "node",
+        "tests/phase-c-client.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-c-client.log",
+      "log_sha256": "8d6b0e3fc6b79fc14e7ede4444f75d71c3f255147f4105ec13d56527b515c49f"
+    },
+    {
+      "path": "tests/phase-c-page.regress.cjs",
+      "sha256": "0459fd27bc0d63ab17a1a31b68bc5c5591798beb8c849039e23ff814572979c1",
+      "command": [
+        "node",
+        "tests/phase-c-page.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-c-page.log",
+      "log_sha256": "42f51cc3724f7c102deb0705883f0427fd22f437b6de5f94f822d1d9bf5ba687"
+    },
+    {
+      "path": "tests/phase-c-server.regress.cjs",
+      "sha256": "d59424dc55f425fac7b5e82f4dcd5330480cad2e2e26b3839127599d38e80e7b",
+      "command": [
+        "node",
+        "tests/phase-c-server.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 20,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-c-server.log",
+      "log_sha256": "dde4305a9c32f6d89731679b2489e3785726db0e627a33758f39c4e7ed1ad556"
+    },
+    {
+      "path": "tests/phase-d-release-prep.regress.cjs",
+      "sha256": "13a8f2e1e640da572f6fab2591eea16886d2d9a370d2e66df3ea4512d96e5aea",
+      "command": [
+        "node",
+        "tests/phase-d-release-prep.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-d-release-prep.log",
+      "log_sha256": "9d5f42719bd9b51fbd2ebd0c27cca555dd49ea6624029a479d588d12b5b8b471"
+    },
+    {
+      "path": "tests/phase-e1-client.regress.cjs",
+      "sha256": "58a05bbca26e68014650364f6b67f5845a1b7acdf8a226f8ed051852fdd65314",
+      "command": [
+        "node",
+        "tests/phase-e1-client.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e1-client.log",
+      "log_sha256": "dcfb5f82869d576e8499d9d43883c8817ea04e2adc8663bb7f96a383a75b94f9"
+    },
+    {
+      "path": "tests/phase-e1-page.regress.cjs",
+      "sha256": "36e6f863080278f05a04845e2e68aba4703961efd191d1ced243057edb794ae0",
+      "command": [
+        "node",
+        "tests/phase-e1-page.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e1-page.log",
+      "log_sha256": "247d8fb4a4eda6f12406ff68ad034fa1bcbeedf1fd07f3d2225d20425871b8d2"
+    },
+    {
+      "path": "tests/phase-e1-server.regress.cjs",
+      "sha256": "ba9ecebc10c2b197d70a00f72d0f496ded895f688cfa52b6ad876faf24a959ca",
+      "command": [
+        "node",
+        "tests/phase-e1-server.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e1-server.log",
+      "log_sha256": "46dbc5c3ab8de14860e8dca8b4eb4c96e80ebf152935aea7dd4af39b0ea3e17d"
+    },
+    {
+      "path": "tests/phase-e2-client.regress.cjs",
+      "sha256": "f95c8db2653b20a2ccef4d49fc4cf6559a25156534ecb474b086a30185131df8",
+      "command": [
+        "node",
+        "tests/phase-e2-client.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e2-client.log",
+      "log_sha256": "9ee046515630e8dad165a2af7fdad6a6fa1ef3033af3d23e8f7de232b0eed8c9"
+    },
+    {
+      "path": "tests/phase-e2-page.regress.cjs",
+      "sha256": "83bea48a6a1998835806d2bb2c72546a2404e617280d6cee6c8776c44c938c51",
+      "command": [
+        "node",
+        "tests/phase-e2-page.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e2-page.log",
+      "log_sha256": "bf2ec5bbed8431c606d1f9aa7143f384a9f1645d0c2cf80455dc73ae98745bac"
+    },
+    {
+      "path": "tests/phase-e2-server.regress.cjs",
+      "sha256": "5aa3177d9f4cb359d2584d3b0b5414ea4757e3a93f0fe0bfb4a37a35322afa21",
+      "command": [
+        "node",
+        "tests/phase-e2-server.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e2-server.log",
+      "log_sha256": "56fdc8e1bb25fe0061465b5c9576b2c60e5b8df4485673c84fa8b4d5ff0ab7ad"
+    },
+    {
+      "path": "tests/phase-e3-client.regress.cjs",
+      "sha256": "00c9fe0f34ecad5ba885f8962bf452b7575b63fc359be438f25dce2c50d6409e",
+      "command": [
+        "node",
+        "tests/phase-e3-client.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e3-client.log",
+      "log_sha256": "5da3add5ff76bb233556bbeb2577beeddad8f4d7cf0b17810a9797cbd42756d1"
+    },
+    {
+      "path": "tests/phase-e3-page.regress.cjs",
+      "sha256": "6a060227b028a15ffaec9f171e1e454be063af7774e68d845c075ffeb3a4e158",
+      "command": [
+        "node",
+        "tests/phase-e3-page.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e3-page.log",
+      "log_sha256": "db2a3c8eb3d7adefcc9795eea7259caa7fc7051a01fed7a0757de7292dc9612d"
+    },
+    {
+      "path": "tests/phase-e3-server.regress.cjs",
+      "sha256": "e2701092cea0d884d6119ea1ab38fb701c997d39bbe18ec52d3ed50e1869e226",
+      "command": [
+        "node",
+        "tests/phase-e3-server.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-e3-server.log",
+      "log_sha256": "e8025b03319375ce3c88e2b8af4ff8b9d32b0bdc66e008d65f429e0badc08199"
+    },
+    {
+      "path": "tests/phase-f-audit.regress.cjs",
+      "sha256": "eb6429f8b16332a1c3e97bc6e9b62dddb3ac345d47162d610d986253313ed472",
+      "command": [
+        "node",
+        "tests/phase-f-audit.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-f-audit.log",
+      "log_sha256": "f166e25bbaf3a489b7438fa3f39cd103e471df6f50189939c6ce74c084ea39f8"
+    },
+    {
+      "path": "tests/phase-g-flash-migration.regress.cjs",
+      "sha256": "7580815f09e5177cae7dd9b0ed84210405b6911ad1b0bdc79a300aded4e9d46d",
+      "command": [
+        "node",
+        "tests/phase-g-flash-migration.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-g-flash-migration.log",
+      "log_sha256": "1b82d0c0363b4e534331648a8c859cff4270d29dc7f442ec3286f5f51d514ab6"
+    },
+    {
+      "path": "tests/phase-g-server.regress.cjs",
+      "sha256": "32e7a2da9d54644564c653ab812a3aea5f140383c96df2062f97454aea44d1c7",
+      "command": [
+        "node",
+        "tests/phase-g-server.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 14,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-g-server.log",
+      "log_sha256": "b1540468953b3fef1661ab6a952c3907b8b6469b5d1c6526b4d13f13ca4e90f0"
+    },
+    {
+      "path": "tests/phase-g-vision.regress.cjs",
+      "sha256": "ba773a5b8c9de579a1b6eab9626ad33b4ecffa844e06e415759afb7d25c14cb6",
+      "command": [
+        "node",
+        "tests/phase-g-vision.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 15,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-g-vision.log",
+      "log_sha256": "75ec07af87d47405533b7b107771d5392c29cfe4c20708fa2217801558502e10"
+    },
+    {
+      "path": "tests/phase-g2-local-migrate.regress.cjs",
+      "sha256": "ca49f4c2d81bda90ea2a8fb8e709f93812e21a4c42f1f44dc0f736d190d231cc",
+      "command": [
+        "node",
+        "tests/phase-g2-local-migrate.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-g2-local-migrate.log",
+      "log_sha256": "554806b5b22420a7db7e09c1166b43c2b176b05187e3641486ef6f820112c7a2"
+    },
+    {
+      "path": "tests/phase-h-recheck-race.regress.cjs",
+      "sha256": "2c889b1928e1a1776bc4ef8d6f30bf7dc951bad289d6b8dc699e9e8c08a3bc53",
+      "command": [
+        "node",
+        "tests/phase-h-recheck-race.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 18,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-h-recheck-race.log",
+      "log_sha256": "887106c0895b1218a1fb1cf7d4377c6643fd159c120377cc4ff3e7d5f3bb559c"
+    },
+    {
+      "path": "tests/phase-i-archives-delete-refresh.regress.cjs",
+      "sha256": "8ff132fc68a1505b09085b6d3309b02d370f7ab74c8ec428b838976459dcd16e",
+      "command": [
+        "node",
+        "tests/phase-i-archives-delete-refresh.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-i-archives-delete-refresh.log",
+      "log_sha256": "a7539999e8431f62012bab2701621ff798a00438461572e14d7280bd5169ceba"
+    },
+    {
+      "path": "tests/phase-i-components.regress.cjs",
+      "sha256": "4009b407d5ce9ddde235dbe03e4716aaaca995d7482144c9a1884afbff09f010",
+      "command": [
+        "node",
+        "tests/phase-i-components.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 33,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-i-components.log",
+      "log_sha256": "114cb807441711aa8dc9d8a76e345d729751fee65f7d988616daf86fe1322063"
+    },
+    {
+      "path": "tests/phase-i-detail-upload-time.regress.cjs",
+      "sha256": "d1d54e32ed7a1e3d75a222b3fdd9334458b5fb73ec14f2e0b8e3c80d30cb1300",
+      "command": [
+        "node",
+        "tests/phase-i-detail-upload-time.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-i-detail-upload-time.log",
+      "log_sha256": "256076270f33e29c80a88bf20adc0b9401fe19002eb3a7e16d10f720fb2a6d2c"
+    },
+    {
+      "path": "tests/phase-i-profile-archive-card.regress.cjs",
+      "sha256": "15b80a2a71a0b195403c72641ad0a86ed28c3a9788cca2a19bcb16dfbe92058a",
+      "command": [
+        "node",
+        "tests/phase-i-profile-archive-card.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-i-profile-archive-card.log",
+      "log_sha256": "53a15df317649d5c4043dc95032194104b8ae228f384b33d360e1ab153371b70"
+    },
+    {
+      "path": "tests/phase-i-release-script.regress.cjs",
+      "sha256": "4a48782e4e338b672f562d3a0c24b5cd9e16b7b72fc9040cfb3243554a1746e4",
+      "command": [
+        "node",
+        "tests/phase-i-release-script.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-i-release-script.log",
+      "log_sha256": "8ef2b43f089fd8894daa450daccf33f005539b10837dbde2e72bb224412878a5"
+    },
+    {
+      "path": "tests/phase-iv-r1.regress.cjs",
+      "sha256": "b4dacd1f9f890043984021e11a61dbdf6dafba138eb7a2d89ec5341f3514ccdb",
+      "command": [
+        "node",
+        "tests/phase-iv-r1.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r1.log",
+      "log_sha256": "41bc84a92883bcd7531bfd4472586ccf56dab016e651a5245c9f05bd2cd73337"
+    },
+    {
+      "path": "tests/phase-iv-r1b.regress.cjs",
+      "sha256": "f30a310371fbe2a1c437205397f9c8d7ce5a91b3832f6ba41c7fd6b77687dbe0",
+      "command": [
+        "node",
+        "tests/phase-iv-r1b.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r1b.log",
+      "log_sha256": "f15d48cd8311745b0353bec9b80f00cd0f7a53338bf54547dc0e15f978c89f18"
+    },
+    {
+      "path": "tests/phase-iv-r2.regress.cjs",
+      "sha256": "5fa3e732b4a39f4d2cf2bbf7a5462d79dc307c4850e42ccfe6ce206f899d7b91",
+      "command": [
+        "node",
+        "tests/phase-iv-r2.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r2.log",
+      "log_sha256": "ae547f6977d8b9a1ba77fe6fc23d93a35d4ee42b872550b35e64801d17501502"
+    },
+    {
+      "path": "tests/phase-iv-r2b.regress.cjs",
+      "sha256": "f553f9765ed348729b2bdadeac24483e087b64c5049ff9e08e59c6e0c78c1e8f",
+      "command": [
+        "node",
+        "tests/phase-iv-r2b.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r2b.log",
+      "log_sha256": "1b4bfef93acc47cd8621beab37d34999ccb2294307b0d4d35159f2c57bed753d"
+    },
+    {
+      "path": "tests/phase-iv-r3.regress.cjs",
+      "sha256": "35494d210240e5803b299f6174e994f830e256d2502b5532cc1179f44e2d181c",
+      "command": [
+        "node",
+        "tests/phase-iv-r3.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r3.log",
+      "log_sha256": "becc024e8208a63e9530c99775f6e386c49ec9c970610e81925b452b468dc83a"
+    },
+    {
+      "path": "tests/phase-iv-r3b.regress.cjs",
+      "sha256": "16afce4edf97d3719d4dfff64c9690a2b9131a6e419cf1b4c4e4f91fb57bf471",
+      "command": [
+        "node",
+        "tests/phase-iv-r3b.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r3b.log",
+      "log_sha256": "cb26706af96d502c014a97c5e4b37d9730533baab9d52ce793a9e4430b73852f"
+    },
+    {
+      "path": "tests/phase-iv-r4.regress.cjs",
+      "sha256": "33d4a79fd6c392fbeb6bed3e770a93a9b20efa63f73fd0606f786ecb4b103850",
+      "command": [
+        "node",
+        "tests/phase-iv-r4.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r4.log",
+      "log_sha256": "8d1aed655f387818fd84897cecf66d2985eff379a24be9c66edc328b4cad46f3"
+    },
+    {
+      "path": "tests/phase-iv-r4b.regress.cjs",
+      "sha256": "92fde9d0442014f940e08be7fc8b4100cf84c73ff7c05c603cec31aeb9a5bb19",
+      "command": [
+        "node",
+        "tests/phase-iv-r4b.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-iv-r4b.log",
+      "log_sha256": "50b385a565f15f18642ba5401d0ea5cdc293bc74902bdb682b43bda5d491b287"
+    },
+    {
+      "path": "tests/phase-j-pending-fixes.regress.cjs",
+      "sha256": "a5a85e700787c082afafecf38ab0b1ef6d07b09c99291c4e676c5fd7b449c1a6",
+      "command": [
+        "node",
+        "tests/phase-j-pending-fixes.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 7,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-j-pending-fixes.log",
+      "log_sha256": "71c3f6860977e8fe7bb36264193ccb8acba19821c20322b4d3829343c94054a4"
+    },
+    {
+      "path": "tests/phase-l-daily-tip-core.regress.cjs",
+      "sha256": "141a7681f59639fe7ec3faf2c2b79c76737b955b24b1d4f9a29d789036cdcc52",
+      "command": [
+        "node",
+        "tests/phase-l-daily-tip-core.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 28,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-l-daily-tip-core.log",
+      "log_sha256": "12d2467fa1e4baac66fd906bbbce1bbec3dfc0f2695c6f389ea9710a889ee11f"
+    },
+    {
+      "path": "tests/phase-m-guide-week-fix.regress.cjs",
+      "sha256": "186c2e2d8a4f468812801401a64ffc0bed9af64af9acb79f643005955ab6f4d9",
+      "command": [
+        "node",
+        "tests/phase-m-guide-week-fix.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-m-guide-week-fix.log",
+      "log_sha256": "a7984b20c46b4cf9194125b43bbc3e428425c5a371af69e12476b8a11759ac7d"
+    },
+    {
+      "path": "tests/phase-n-daily-push.regress.cjs",
+      "sha256": "ad6b129f71f011ce12d66e3f5c1e45c4d9fe0b55cdaf3c8ac078a8069b2e867a",
+      "command": [
+        "node",
+        "tests/phase-n-daily-push.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 31,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-n-daily-push.log",
+      "log_sha256": "da054a83b4a23a5b0323ce3a36586fdb90cb5126ab7a8b7d53716cab240687f8"
+    },
+    {
+      "path": "tests/phase-o-content-library.regress.cjs",
+      "sha256": "a54f940331c4506d462f474265ca43b07d730ef2fd1d3d081140de03ef74401c",
+      "command": [
+        "node",
+        "tests/phase-o-content-library.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-o-content-library.log",
+      "log_sha256": "5deaca49deb3bdcda6dc21d90d28830551d4c7b619bce67d5958bae48b16ef8b"
+    },
+    {
+      "path": "tests/phase-p-food-dictionary.regress.cjs",
+      "sha256": "ca830cd42a50cc40b112ff79319a561045be561a34be61b1de65dc22b57bdca6",
+      "command": [
+        "node",
+        "tests/phase-p-food-dictionary.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-p-food-dictionary.log",
+      "log_sha256": "5158a2ca5e83cadd9b1fd74b6923ed670ae39f6b5de827aa2e02b84dbf994fc0"
+    },
+    {
+      "path": "tests/phase-r1-push.regress.cjs",
+      "sha256": "d92a2d227e1f11bf7a241d213d9a324e916efc2302c0aa1b076aa032b66d104c",
+      "command": [
+        "node",
+        "tests/phase-r1-push.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-r1-push.log",
+      "log_sha256": "d0fb3ec2233172576f214565f0a82510182876f1e9defe999d1b07803ddb7ca0"
+    },
+    {
+      "path": "tests/phase-r1-tools.regress.cjs",
+      "sha256": "269efe58baacf006ae13a0350a02201a3cd30f58b6ff11f21295daf429754e0f",
+      "command": [
+        "node",
+        "tests/phase-r1-tools.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 29,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-r1-tools.log",
+      "log_sha256": "063e3cd39c9632111531a5be7e984fe92da8b99e978b711596a5074a1b5b71f8"
+    },
+    {
+      "path": "tests/phase-r2-ai.regress.cjs",
+      "sha256": "7fba7d528978998a84945334d473305ae98034312d4231ba158a81a2241cfd77",
+      "command": [
+        "node",
+        "tests/phase-r2-ai.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 12,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-r2-ai.log",
+      "log_sha256": "5184e5780bed7e1b239969d3f03fdfa49d8776917b7baa09cd0ba4d03ac853df"
+    },
+    {
+      "path": "tests/phase-r3.regress.cjs",
+      "sha256": "93898395ecd4755cf78a156cb00a5598347479f3c47364ec2a1a2174d248136b",
+      "command": [
+        "node",
+        "tests/phase-r3.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 21,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-r3.log",
+      "log_sha256": "86795b4a86ef228c7312974394e0adb62bfab0e3acf2c76300e4207eb9cf5e3a"
+    },
+    {
+      "path": "tests/phase-r4.regress.cjs",
+      "sha256": "4362a96c1ea161972395959c277d28dbad4ed0244a1e35d3561bfa144b38ec79",
+      "command": [
+        "node",
+        "tests/phase-r4.regress.cjs"
+      ],
+      "exit_code": 0,
+      "passed": 24,
+      "failed": 0,
+      "skipped_scenarios": [],
+      "log": "/tmp/momcare-independent-20261001/suite-logs4/phase-r4.log",
+      "log_sha256": "d3e2c66df60e4f83b43833f5a1a6bbd2993f47198198fc013318fac7ec77f826"
+    }
+  ],
+  "build_and_static_logs": [
+    {
+      "path": "/tmp/momcare-independent-20261001/build-assemble.log",
+      "sha256": "cf7978fd97831d7f63737ab3398fb2004d1af7290c725fc7cad41f7931f5d34a"
+    },
+    {
+      "path": "/tmp/momcare-independent-20261001/build-mp-weixin.log",
+      "sha256": "3f09024d671057fe305ae3303e3dcecfcc9021750fc9f3b705259166f969216b"
+    },
+    {
+      "path": "/tmp/momcare-independent-20261001/build-h5.log",
+      "sha256": "3829bea154ec84984e65f325f2d573068a3f4eff0555ca1bb6f8d3d1dd2ffca4"
+    },
+    {
+      "path": "/tmp/momcare-independent-20261001/static-checks.log",
+      "sha256": "4bf0eaf47201471c96b1fea7179b5fc45e134b4b003ce64dfeff6ef30ae9ad0c"
+    },
+    {
+      "path": "/tmp/momcare-independent-20261001/sweep4-console.log",
+      "sha256": "a56cc2925bc27ffeedada84d1e0e07c5cc2e522629ec7b7f16559da27e2ff05f"
+    },
+    {
+      "path": "/tmp/momcare-independent-20261001/suite-summary-v4.tsv",
+      "sha256": "ff8fda673d57a6e7a8d15125bd3360a66916bb3bd513d4322bf2e07526bc1b82"
+    },
+    {
+      "path": "/tmp/momcare-independent-20261001/final-round4-per-script.tsv",
+      "sha256": "f02b649117e10ebfca250750baf4dfc6faa8f62c83a33b254081bdfb0d12ce42"
+    }
+  ],
+  "remaining_gates": [
+    "Timer source identity is unverified and timer invocations remain fail closed",
+    "V8 GC SIGSEGV occurred on both v24.12.0 and v24.19.0; cause and stability remain unverified",
+    "Real DB legacy ordering, real AI provider, real CLI, trigger configuration and deployment are unverified",
+    "Full restore write semantics and explicit contraction conflict resolution UI are outside this accepted local scope"
+  ]
+}

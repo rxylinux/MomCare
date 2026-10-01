@@ -167,6 +167,24 @@ mc-health { action:'mood.get', schemaVersion:1, dateKey:'2026-09-20' }
 定时触发每日 8 点照跑但明确返回 `push-template-missing`（fail-closed 不静默），
 客户端点按挂点整体 no-op 不弹窗——功能处于"装好待启用"状态。
 
+> **2026-10-01 R4 发布脚本最终语义（scripts/release-trial.mjs，详见 docs/research/repair-2026-10-01/R4_HANDOFF.md）：**
+> - **云函数部署基线 = `.trial-release-state.json` 的 `deployedDigests[fn]`（64hex 组装产物摘要）+ `deployedEnv`（部署目标 envId）**——上传 commit 不是部署证据；收据缺 `deployedEnv`/摘要缺项/换环境（cloudConfig envId 变更）都视为无基线：唯一安全发布方式是 `--functions all`（完整集合），`functions:[]` 在无基线时会被阻止。不存在 `--allow-incomplete` 之类例外开关。
+> - **CLI 成功判定按输出契约**（upload 须含 "upload success"；函数部署须 console.table 表中该函数行的 success 列为真值且退出码 0）：退出 0 空输出、无目标表行、业务错误字样（errCode 等）一律不记 deployed/不标 uploaded——部署后以控制台函数状态复核为准。
+> - **dry-run 保守**：未执行 assemble 无法证明 dist 新鲜——计划中的 selected 是保守估计，实际发布会在 assemble 后重核对并可能补入更多必需函数。
+> - **收据时序**：任何外部上传前先耐久落盘本次计划（upload:pending/partial:true）——上传中断后磁盘保留本次 pending 事实（可能已发出），不是旧次完成态；部署逐项确认后更新 deployed+摘要；全部确认才 partial=false；git 提交在最终收据之后。
+> - **触发器验收门槛**：收据 `triggers.status='unverified'`——部署 mc-daily-push 后控制台人工核对两个定时触发器（cron 9:00/21:30），平台 API 不提供配置确认。
+
+> **⚠️ 2026-10-01 R1 入口身份修复后的部署门槛（未验收）：**
+> event 的 `Type`/`TriggerName` 一律不构成授权（可伪造）。本机无 wx-server-sdk/
+> CloudBase SDK 源码证据证明平台为定时触发提供 per-invocation 可信身份
+> （`getWXContext` 的 SOURCE 读 `process.env`，存在跨调用遗留风险）——**定时入口
+> fail-closed：真实定时触发器会被白名单认证如实拒绝（`unauthenticated`），定时的
+> 9:00 日常/21:30 前夜推送当前不可用。** 唯一可用入口 = 家庭成员白名单
+> `{action:'sendNow'}`（可带 `kind:'eve'`）手动试发。部署前必须补：可信定时身份证据
+> （SDK 源码/官方文档，或独立 scheduler worker + 平台权限规则实测），并在真实环境
+> 验收两个触发器；在此之前下文 8.4 的第 4/5 步（自动触发验收）不可执行。详见
+> `docs/research/repair-2026-10-01/R1_HANDOFF.md` §九。
+
 ### 8.1 组装产物（assemble 自动处理，无需手工）
 
 - `index.js` + `config.json`（`subscribeMessage.send` 云调用权限 + 定时触发器

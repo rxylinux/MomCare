@@ -441,9 +441,11 @@ async function main() {
     assert.equal(done.ai_result.overall_summary, '解读正文：整体与孕周相符。', '正文进 overall_summary')
     assert.deepEqual(done.ai_result.suggestions, [view.AI_SUGGESTION_LINE], '固定提示行与 triggerAiPipeline wrapper 一致')
     assert.equal(done.ocr_text, '', '无 ocr_result → 空串（OCR 块不渲染）')
-    // OCR 模式记录：ocr_result 原文透传
+    // OCR 模式记录（R2 二审后契约）：无 digest 的历史对同源不可证明——不标本次原文，
+    // 走独立"历史提取（来源未确认）"通道（历史字段保留；旧断言"无 digest 就透传"已废弃）
     const ocr = view.familyAiView({ deleted: false, ai_result: { text: 'x' }, ocr_result: { text: '双顶径 8.4cm', included: true } })
-    assert.equal(ocr.ocr_text, '双顶径 8.4cm', 'OCR 原文透传')
+    assert.equal(ocr.ocr_text, '', '无 digest 不标本次原文（来源不可证明）')
+    assert.deepEqual(ocr.ocr_history, { text: '双顶径 8.4cm', unverified: true }, '历史提取独立通道保留')
     // 未解读 / 删除 / 空记录 / 纯空白文本 → pending 空态
     for (const [name, rec] of [
       ['无 ai_result', { deleted: false }],
