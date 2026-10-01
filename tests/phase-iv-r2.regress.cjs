@@ -341,7 +341,7 @@ async function main() {
     // 旧结果（无 provenance）：不判过期、覆盖未知
     const legacy = view.familyAiView({ deleted: false, revision: 5, attachments: [{ fileId: 'h1' }], ai_result: { text: '旧文本', model: 'deepseek-v4-pro', generatedAt: 1 } })
     assert.equal(legacy.ai_stale, false, '旧结果无法判定不谎称过期')
-    assert.deepEqual(legacy.ai_coverage, { analyzed: null, total: 1, complete: false, unknown: true, mode: null })
+    assert.deepEqual(legacy.ai_coverage, { analyzed: null, total: 1, complete: false, unknown: true, mode: null, ocrTruncated: false }) // F3 新增字段：无截断证据恒 false
   })
 
   await scenario('A14 真实解析路径 finish_reason=length（带 usage 的完整供应商形状）：ai-truncated、零写入、https 恰 1 次', async () => {
