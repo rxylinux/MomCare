@@ -1,17 +1,26 @@
 'use strict'
 
-// mc-daily-push：每日提醒推送（2026-09 方案落地；2026-10-01 R1 入口身份修复 + 审核修正）。
+// mc-daily-push：每日提醒推送（2026-09 方案落地；2026-10-01 R1 入口身份修复；
+// 2026-10-01 晚定时热修——R1 期"定时一律禁用"的结论按官方证据纠正，见下）。
 //
-// 入口（R1 后的契约，A01–A03）：
+// 入口契约（R1 + 定时热修后，A01–A03）：
 // - 手动试发 {action:'sendNow'}（可带 kind:'eve' 试前夜文案）：仅限家庭成员白名单
-//   （resolveCaller 可信上下文）——这是唯一放行路径；kind 语义只在认证后生效。
-// - 定时入口 fail-closed：event 是不可信业务输入，Type/TriggerName 一律不构成授权，
-//   也不改变语义（伪造 timer 不增加任何权限）。本机 wx-server-sdk / CloudBase SDK
-//   源码缺席，无法证明平台为定时触发提供 per-invocation 可信身份（getWXContext 的
-//   SOURCE 读自 process.env，存在跨调用遗留风险，不能当逐次凭据；不依赖容器内
-//   上次请求遗留状态）。在取得 SDK/官方文档证据并在部署阶段验收前，一律不认定时
-//   触发——真实定时器会被下方白名单认证如实拒绝。部署门槛记录于 cloud/DEPLOY.md
-//   与 docs/research/repair-2026-10-01/R1_HANDOFF.md。
+//   （resolveCaller 可信上下文）；kind 语义只在认证后生效。
+// - **定时触发（热修恢复）**：官方判定 = 每次调用同步读取 SDK 的 getWXContext()，
+//   其 SOURCE 字段**精确等于 'wx_trigger'** 才是云函数定时触发器调用（官方文档
+//   triggers 页原文："可以通过 getWXContext().SOURCE === 'wx_trigger' 判断调用来源
+//   是触发器"；证据存档 /tmp/momcare-timer-hotfix-20261001/ 与 TIMER_HOTFIX_TASK.md）。
+//   R1 期以"SDK 内部经 process.env 实现"推断来源不可信而全部禁用——该推断过度，
+//   已纠正：SOURCE 是平台对**本次调用**的来源声明，官方明确以精确相等判定定时；
+//   SDK 实现细节不推翻平台 API 契约。仍然不做 includes/前缀/逗号链宽松匹配
+//   （链式调用如 'wx_client,scf' 不算定时）；不缓存、不从 event/process.env 拼造
+//   身份；getWXContext 读取失败/来源缺失不授予定时权。
+//   可信定时来源下，event.TriggerName 只选择业务语义（不授予身份）：daily-reminder
+//   =日常、checkup-eve-reminder=前夜；event.kind/action 不改变定时语义；未知名称/
+//   畸形事件/矛盾 action 在读库与发送前明确拒绝。
+// - 非定时来源（wx_client / wx_client,scf / wx_devtools / wx_http / wx_unknown /
+//   scf / 缺失 / 读取失败）：event 是不可信业务输入，Type/TriggerName/SOURCE 等
+//   字段一律不构成授权（伪造 timer 零权限），唯一放行 = 白名单 sendNow。
 //
 // 数据与内容：
 // - 孕周/文案全部来自共用核心单源 shared/dailyTipCore（assemble 从 utils/dailyTipCore.js
@@ -175,12 +184,57 @@ exports.main = async function main(event) {
     return fail('not-configured', '云函数未配置成员白名单（MC_APPID/MC_FAMILY_ID/MC_MEMBER_*_OPENID）')
   }
 
-  // 唯一放行路径：家庭成员白名单认证（A01–A03）。event 的 Type/TriggerName/kind
-  // 均不构成授权；定时入口在平台身份可证明前 fail-closed（拒绝发生在读库/外呼前）。
-  const caller = resolveCaller(cloud, config, event)
-  if (!caller.ok) return fail(caller.code, caller.message)
-  if (!event || event.action !== 'sendNow') {
-    return fail('bad-action', '手动调用仅支持 {action:"sendNow"}')
+  // 入口身份分流（A01–A03 + 2026-10-01 定时热修）：
+  // 每次调用同步读取 SDK 当前上下文（官方注意事项：须在 exports.main 内读取，此时
+  // 才有本次调用上下文；不缓存跨请求、不从 event/process.env 拼造）。SOURCE 为官方
+  // "本次调用来源"枚举字段——**精确等于 'wx_trigger'** 才进入定时分支（官方判定）；
+  // 其余一切来源（含来源缺失/读取失败/链式逗号值）都走白名单手动路径。
+  let ctx = null
+  try {
+    ctx = cloud && typeof cloud.getWXContext === 'function' ? cloud.getWXContext() : null
+  } catch (e) {
+    ctx = null
+  }
+  const source = ctx && typeof ctx.SOURCE === 'string' ? ctx.SOURCE : ''
+  const isTimerCall = source === 'wx_trigger'
+
+  let isEve
+  let kind
+  if (isTimerCall) {
+    // 可信定时来源（身份已由 SOURCE 证明）。TriggerName 只选择业务语义——不授予
+    // 身份；官方定时 payload（腾讯云文档 583/9708）含 Type/TriggerName/Time/Message，
+    // 除 TriggerName 外不要求任何其他字段（勿臆造必需字段导致真定时被拒）。
+    if (!event || typeof event !== 'object' || Array.isArray(event)) {
+      return fail('timer-malformed-event', '定时事件格式畸形（非对象）——本次推送中止')
+    }
+    if (event.action === 'sendNow') {
+      // 官方定时负载不含 action——定时来源携带 action 属矛盾输入（疑似伪造残留），拒绝
+      return fail('timer-malformed-event', '定时负载携带 action（矛盾输入）——本次推送中止')
+    }
+    const triggerName = typeof event.TriggerName === 'string' ? event.TriggerName : ''
+    if (!triggerName) {
+      return fail('timer-malformed-event', '定时事件缺少 TriggerName（官方 payload 必含）——本次推送中止')
+    }
+    if (triggerName === 'daily-reminder') {
+      isEve = false
+    } else if (triggerName === 'checkup-eve-reminder') {
+      isEve = true
+    } else {
+      return fail('timer-unknown-trigger', `未配置的定时触发器名称：${triggerName}（允许 daily-reminder / checkup-eve-reminder）——本次推送中止`)
+    }
+    // 定时语义下 event.kind 无效（不能把日常变前夜）
+    kind = isEve ? 'timer-eve' : 'timer-daily'
+  } else {
+    // 非定时来源：唯一放行 = 家庭成员白名单认证 + {action:'sendNow'}（A01–A03）。
+    // event 的 Type/TriggerName/SOURCE/kind 均不构成授权；伪造 timer 零权限、零语义。
+    const caller = resolveCaller(cloud, config, event)
+    if (!caller.ok) return fail(caller.code, caller.message)
+    if (!event || event.action !== 'sendNow') {
+      return fail('bad-action', '手动调用仅支持 {action:"sendNow"}')
+    }
+    // 手动试发用 kind:'eve' 试前夜文案（TriggerName 不参与手动语义判定）
+    isEve = event.kind === 'eve'
+    kind = isEve ? 'sendNow-eve' : 'sendNow'
   }
 
   const templateId = process.env.MC_PUSH_TEMPLATE_ID
@@ -190,11 +244,6 @@ exports.main = async function main(event) {
   if (!core || typeof core.buildPushContent !== 'function' || typeof core.buildEveReminder !== 'function') {
     return fail('core-missing', 'shared/dailyTipCore 缺失（或不完整）——重新运行 assemble 组装并部署')
   }
-
-  // 前夜 or 日常：sendNow 用 kind:'eve' 试前夜文案。TriggerName 不参与判定——
-  // 伪造 timer 字段不改变语义（认证后的 sendNow 也只是 sendNow）。
-  const isEve = event.kind === 'eve'
-  const kind = isEve ? 'sendNow-eve' : 'sendNow'
 
   // 单一时钟快照：本次调用全程（内容构建/明日匹配/回复日期）使用同一 today/tomorrow
   const snap = dateSnapshot(Date.now())

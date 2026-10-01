@@ -20,7 +20,7 @@
 |---|---|
 | A01 | outsider + Type:Timer 或 TriggerName 或混合字段，拒绝且 DB/send 调用数为 0 |
 | A02 | 白名单 sendNow 正常；未认证 sendNow 拒绝；伪造 timer 不增加权限 |
-| A03 | 有证据的可信 timer 只接受允许名称；未知/缺失/上次请求遗留来源拒绝。若 timer 不可证明，保留真实失败与部署门槛 |
+| A03 | 有证据的可信 timer 只接受允许名称；未知/缺失/上次请求遗留来源拒绝。若 timer 不可证明，保留真实失败与部署门槛。**（2026-10-01 晚纠正：官方文档已提供证据——`getWXContext().SOURCE === 'wx_trigger'` 即官方定时判定；热修按此恢复定时入口，语义白名单=两个触发器名。R1 期一律禁用的推断过度，保留为历史。见 TIMER_HOTFIX_TASK/HANDOFF）** |
 | A04 | 存储配额异常 + 离线，胎动和宫缩均明确未保存，草稿保留，不能返回 offline-pending |
 | A05 | 正常离线保存、重启可恢复；部分写失败/不可读缓存不伪装成功 |
 | A06 | mama → logout → papa → 另一家庭，不显示旧胎动/宫缩笔记、不上传旧 pending |

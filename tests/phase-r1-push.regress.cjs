@@ -1,6 +1,7 @@
 // R1 推送入口回归（2026-10-01 修复，A01–A03 + A09/A10 + 审核第 1/2/3 条）：
 // - 唯一放行路径 = 家庭成员白名单 sendNow；Type/TriggerName 伪造 timer 零授权零语义；
-//   定时入口 fail-closed（本机无 SDK 证据）——伪造 timer 在读库/外呼前被拒；
+//   非定时来源一律白名单（伪造 timer 在读库/外呼前被拒；2026-10-01 定时热修后
+//   官方 SOURCE==='wx_trigger' 定时入口已恢复——正向与伪造矩阵见 phase-timer-hotfix）；
 // - 前夜精确匹配"明日有效 pending"（dateKey 下推查询）：过期 overdue 不遮蔽、
 //   无明日记录安静跳过；
 // - sortKey 升序游标分页遍历墓碑（>100 条同页掩埋仍可读到）；缺 sortKey 的旧记录
@@ -205,14 +206,14 @@ async function main() {
     }
   })
 
-  await scenario('A03 timer fail-closed：无平台凭据一律按认证拒绝（部署门槛记录于 DEPLOY/HANDOFF）', async () => {
+  await scenario('A03 非定时来源一律白名单拒绝：无凭据/环境残留按认证拒绝（热修后 wx_trigger 定时另有专门套件）', async () => {
     withEnv()
-    // 真实定时器形状（无调用者上下文）——与伪造无法区分，一律拒绝
+    // 无 SOURCE/无凭据形状（热修语境：非官方 wx_trigger 来源的 timer 字段=伪造，仍一律拒绝）
     const { cloud, sends, counters } = makeMockCloud({ callerOpenid: '' })
     const fn = requireHandler(); fn.__setCloud(cloud)
     const res = await fn.main({ Type: 'Timer', TriggerName: 'daily-reminder' })
     assert.equal(res.ok, false)
-    assert.equal(res.code, 'unauthenticated', 'fail-closed：定时身份未证明前按未认证拒绝')
+    assert.equal(res.code, 'unauthenticated', '非 wx_trigger 来源的 timer 形状=未认证拒绝')
     assert.equal(sends.length, 0)
     assert.equal(counters.pregnancyReads, 0)
     // 上次请求遗留 process.env 不得授权：注入残留环境变量仍拒绝

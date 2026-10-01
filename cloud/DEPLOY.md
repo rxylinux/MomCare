@@ -174,16 +174,26 @@ mc-health { action:'mood.get', schemaVersion:1, dateKey:'2026-09-20' }
 > - **收据时序**：任何外部上传前先耐久落盘本次计划（upload:pending/partial:true）——上传中断后磁盘保留本次 pending 事实（可能已发出），不是旧次完成态；部署逐项确认后更新 deployed+摘要；全部确认才 partial=false；git 提交在最终收据之后。
 > - **触发器验收门槛**：收据 `triggers.status='unverified'`——部署 mc-daily-push 后控制台人工核对两个定时触发器（cron 9:00/21:30），平台 API 不提供配置确认。
 
-> **⚠️ 2026-10-01 R1 入口身份修复后的部署门槛（未验收）：**
-> event 的 `Type`/`TriggerName` 一律不构成授权（可伪造）。本机无 wx-server-sdk/
-> CloudBase SDK 源码证据证明平台为定时触发提供 per-invocation 可信身份
-> （`getWXContext` 的 SOURCE 读 `process.env`，存在跨调用遗留风险）——**定时入口
-> fail-closed：真实定时触发器会被白名单认证如实拒绝（`unauthenticated`），定时的
-> 9:00 日常/21:30 前夜推送当前不可用。** 唯一可用入口 = 家庭成员白名单
-> `{action:'sendNow'}`（可带 `kind:'eve'`）手动试发。部署前必须补：可信定时身份证据
-> （SDK 源码/官方文档，或独立 scheduler worker + 平台权限规则实测），并在真实环境
-> 验收两个触发器；在此之前下文 8.4 的第 4/5 步（自动触发验收）不可执行。详见
-> `docs/research/repair-2026-10-01/R1_HANDOFF.md` §九。
+> **⚠️ 2026-10-01 R1 入口身份修复 → 同日晚“定时热修”纠正（当前状态）：**
+> - **R1 期结论（已纠正，保留为历史）**：当时以“getWXContext 的 SOURCE 由 SDK 经
+>   `process.env` 实现、存在跨调用遗留风险”推断定时来源不可信，定时入口 fail-closed
+>   全部拒绝。该推断**过度**——造成 1.1.25 发布后自动定时推送线上退化。
+> - **纠正依据（官方文档，Codex 实读原网页存档 `/tmp/momcare-timer-hotfix-20261001/`）**：
+>   官方 triggers 文档原文“可以通过 `getWXContext().SOURCE === 'wx_trigger'` 判断调用
+>   来源是触发器”；getWXContext 文档定义 SOURCE 为**本次调用**来源枚举（wx_trigger=
+>   云函数定时触发器调用，链式调用为逗号值如 `wx_client,scf`）。SDK 内部实现不推翻
+>   平台 API 契约。
+> - **热修后契约（待重新部署生效——当前线上 1.1.25 仍是禁用版）**：入口每次调用同步
+>   读 `getWXContext()`，SOURCE **精确等于** `'wx_trigger'` 才走定时分支（不做
+>   includes/前缀/逗号链宽松匹配）；TriggerName 只选语义（`daily-reminder`=日常、
+>   `checkup-eve-reminder`=前夜，event.kind/action 无效），未知/畸形/矛盾 action 在
+>   读库与发送前拒绝；其余一切来源仍白名单 `{action:'sendNow'}`（伪造 timer 零权限）。
+>   回归：`tests/phase-timer-hotfix.regress.cjs`（正向/伪造/边界/连续调用 10 场景）。
+> - **触发器配置冲突（上线前必须核查）**：官方 triggers 文档写明 **triggers 数组目前
+>   仅支持一个触发器**，而本地 `config.json` 配了两条（daily-reminder 9:00 +
+>   checkup-eve-reminder 21:30）。**不以本地两条记录宣称云端两条都有效。** 核查与
+>   迁移方案见 `docs/research/repair-2026-10-01/TIMER_HOTFIX_HANDOFF.md` §触发器配置。
+> - 8.4 的第 4/5 步（自动触发验收）在热修版本重新部署 + 触发器核查后恢复可执行。
 
 ### 8.1 组装产物（assemble 自动处理，无需手工）
 

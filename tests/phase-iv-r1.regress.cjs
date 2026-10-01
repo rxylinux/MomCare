@@ -347,7 +347,7 @@ async function main() {
     }
   })
 
-  await scenario('A03 定时 fail-closed：无凭据/环境残留/成功调用之后均拒绝（无跨调用授权遗留）', async () => {
+  await scenario('A03 非定时来源一律白名单拒绝：无凭据/环境残留/成功调用之后均拒绝（wx_trigger 正向见 phase-timer-hotfix）', async () => {
     withEnv()
     // ① 合法调用成功后紧接 timer 形状 → 仍拒绝（无容器状态遗留）
     const { cloud, sends, counters } = makeMockCloud({ callerOpenid: TEST_ENV.MC_MEMBER_MAMA_OPENID, checkups: [pending(shDay(4), 'iv-a03')] })
@@ -356,7 +356,7 @@ async function main() {
     assert.equal(okRes.ok, true)
     assert.equal(sends.length, 2)
     const before = sends.length
-    // 切换为无上下文（模拟下一次调用是定时器）
+    // 切换为无 SOURCE 上下文（伪造的 timer 形状——真实定时=SOURCE wx_trigger，另有专门套件）
     cloud.getWXContext = () => ({})
     const timerRes = await fn.main({ Type: 'Timer', TriggerName: 'daily-reminder' })
     assert.equal(timerRes.ok, false)

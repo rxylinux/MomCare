@@ -3,8 +3,8 @@
 // ① 共用核心 buildPushContent（utils/dailyTipCore.js 单源：孕周+产检动态主行、
 //    阶段/营养/当季水果提示行、≤20 字裁剪、按天轮换确定性、无档案 null）；
 // ② 云函数 mc-daily-push（临时 DIST=函数+shared+转译核心【镜像 assemble 投放】，
-//    mock cloud 注入 __setCloud；定时入口双人发送、43101 配额跳过如实、sendNow
-//    白名单、fail-closed（模板未配/核心缺失/无档案）、最早 pending 产检滤墓碑、
+//    mock cloud 注入 __setCloud；白名单 sendNow 双人发送、43101 配额跳过如实、
+//    伪造 timer 拒绝、fail-closed（模板未配/核心缺失/无档案）、最早 pending 产检滤墓碑、
 //    config.json 触发器形状）；
 // ③ 客户端攒配额 utils/pushSubscribe.js（模板空 no-op、accept 后当日不限流静默攒、
 //    当日未接受不再弹、fail 也计入当日；pushConfig 经 esbuild 插件重定向注入非空模板）；
