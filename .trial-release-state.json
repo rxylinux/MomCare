@@ -1,43 +1,22 @@
 {
-  "version": "1.1.25",
-  "desc": "R1-R4 修复：推送身份fail-closed/工具可靠保存/AI快照CAS/导出分页/发布闭包与收据",
-  "commit": "d74c050301db2158cccae44dde94a60488761af6",
+  "version": "1.1.26",
+  "desc": "F1-F3功能修复：旧计时数据找回/按域恢复闸+EFW反馈/OCR截断覆盖披露；含定时热修",
+  "commit": "0c4f8e86ef6bada8b90abe77bad42947a092b8b5",
   "functions": [],
-  "releasedAt": "2026-10-01T12:08:42.561Z",
-  "baseline": "44772fdc16a7d0326dcbdb4f7fb5c2f309fc38f8",
+  "releasedAt": "2026-10-01T14:43:13.167Z",
+  "baseline": "d74c050301db2158cccae44dde94a60488761af6",
   "closureReasons": {
-    "mc-collab": [
-      "函数 mc-collab 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
     "mc-daily-push": [
-      "函数 mc-daily-push 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
-    "mc-files": [
-      "函数 mc-files 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
-    "mc-health": [
-      "函数 mc-health 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
-    "mc-identity": [
-      "函数 mc-identity 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
-    "mc-private-notes": [
-      "函数 mc-private-notes 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
-    "mc-reports": [
-      "函数 mc-reports 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
+      "函数文件变更：cloud/functions/mc-daily-push/index.js",
+      "当前组装产物摘要 ≠ 已确认部署摘要（aff2f23e… → 5b6861eb…）"
     ],
     "mc-restore": [
-      "函数 mc-restore 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
-    "mc-schedule": [
-      "函数 mc-schedule 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
-    ],
-    "mc-shared-records": [
-      "函数 mc-shared-records 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
+      "函数文件变更：cloud/functions/mc-restore/index.js",
+      "当前组装产物摘要 ≠ 已确认部署摘要（f5bb509f… → be2c7e1e…）"
     ],
     "mc-tools": [
-      "函数 mc-tools 无有效已确认摘要（缺失/非 64hex）——必需部署（R4二1）"
+      "函数文件变更：cloud/functions/mc-tools/index.js",
+      "当前组装产物摘要 ≠ 已确认部署摘要（7140f2b7… → 0a24e899…）"
     ]
   },
   "built": [
@@ -54,48 +33,32 @@
     "mc-tools"
   ],
   "selected": [
-    "mc-collab",
     "mc-daily-push",
-    "mc-files",
-    "mc-health",
-    "mc-identity",
-    "mc-private-notes",
-    "mc-reports",
     "mc-restore",
-    "mc-schedule",
-    "mc-shared-records",
     "mc-tools"
   ],
   "deployed": [
-    "mc-collab",
     "mc-daily-push",
-    "mc-files",
-    "mc-health",
-    "mc-identity",
-    "mc-private-notes",
-    "mc-reports",
     "mc-restore",
-    "mc-schedule",
-    "mc-shared-records",
     "mc-tools"
   ],
   "deployedDigests": {
     "mc-collab": "acbae438d197b635ca55bc727a2e5df87e0f06400fe9cf1f8ceff6de267d30ac",
-    "mc-daily-push": "aff2f23ed00d9a886465883b0bc93d248d826d23d4d2c802366f9fd6bd47e124",
+    "mc-daily-push": "5b6861ebf11c8db67d57fde316d1f966cf0dad8fc1cad47c05a5348f1091f28f",
     "mc-files": "9b90965a84ba5423b2f28b4f2b6564a7da5d7454280199c90a6af668462a637e",
     "mc-health": "49ad37b49a1f024be52d49be4731621114b84aa0d6d9188837d3c952e61f040f",
     "mc-identity": "2e122dd39051438553e698ce9d1950447339aa4feb18098640fedb1cf0a0d8f2",
     "mc-private-notes": "9e6cbefdc690a5ca62c200d97c45f92a71cdf021400e70f13e77330041ec6365",
     "mc-reports": "37784ff72a5846ef49e476eb5445ec0fe191338bac3d631fecb48f74bb06f647",
-    "mc-restore": "f5bb509fbfdc22af12c07ba69224bc9529395289085bddc4277297b8eb1d8902",
+    "mc-restore": "be2c7e1ec952e44b156649df49ca84d3932cb5fbdd2b7cbd25da82b09bd3c7f1",
     "mc-schedule": "7357d45dd6e848d18146b77abd5dce60491dab0ab303fb49b4b24b2f2c179db3",
     "mc-shared-records": "54eee419fd20ad5163b7e1a57bf7de4cbdda88d774c37b6af84d0515acb5af8f",
-    "mc-tools": "7140f2b77c54034f254cba396d67da1a77a07c987896465bb49df8519066a019"
+    "mc-tools": "0a24e899b8af7f0d4f12bcac6334cc6622911e5fc8f666854d58e10c9851be35"
   },
   "deployedEnv": "rxylinux-momcare-d2eoh6t493c2168",
   "upload": {
     "status": "uploaded",
-    "version": "1.1.25"
+    "version": "1.1.26"
   },
   "triggers": {
     "status": "unverified"
@@ -103,29 +66,21 @@
   "partial": false,
   "plannedDigests": {
     "mc-collab": "acbae438d197b635ca55bc727a2e5df87e0f06400fe9cf1f8ceff6de267d30ac",
-    "mc-daily-push": "aff2f23ed00d9a886465883b0bc93d248d826d23d4d2c802366f9fd6bd47e124",
+    "mc-daily-push": "5b6861ebf11c8db67d57fde316d1f966cf0dad8fc1cad47c05a5348f1091f28f",
     "mc-files": "9b90965a84ba5423b2f28b4f2b6564a7da5d7454280199c90a6af668462a637e",
     "mc-health": "49ad37b49a1f024be52d49be4731621114b84aa0d6d9188837d3c952e61f040f",
     "mc-identity": "2e122dd39051438553e698ce9d1950447339aa4feb18098640fedb1cf0a0d8f2",
     "mc-private-notes": "9e6cbefdc690a5ca62c200d97c45f92a71cdf021400e70f13e77330041ec6365",
     "mc-reports": "37784ff72a5846ef49e476eb5445ec0fe191338bac3d631fecb48f74bb06f647",
-    "mc-restore": "f5bb509fbfdc22af12c07ba69224bc9529395289085bddc4277297b8eb1d8902",
+    "mc-restore": "be2c7e1ec952e44b156649df49ca84d3932cb5fbdd2b7cbd25da82b09bd3c7f1",
     "mc-schedule": "7357d45dd6e848d18146b77abd5dce60491dab0ab303fb49b4b24b2f2c179db3",
     "mc-shared-records": "54eee419fd20ad5163b7e1a57bf7de4cbdda88d774c37b6af84d0515acb5af8f",
-    "mc-tools": "7140f2b77c54034f254cba396d67da1a77a07c987896465bb49df8519066a019"
+    "mc-tools": "0a24e899b8af7f0d4f12bcac6334cc6622911e5fc8f666854d58e10c9851be35"
   },
   "stagedDigests": {
-    "mc-collab": "acbae438d197b635ca55bc727a2e5df87e0f06400fe9cf1f8ceff6de267d30ac",
-    "mc-daily-push": "aff2f23ed00d9a886465883b0bc93d248d826d23d4d2c802366f9fd6bd47e124",
-    "mc-files": "9b90965a84ba5423b2f28b4f2b6564a7da5d7454280199c90a6af668462a637e",
-    "mc-health": "49ad37b49a1f024be52d49be4731621114b84aa0d6d9188837d3c952e61f040f",
-    "mc-identity": "2e122dd39051438553e698ce9d1950447339aa4feb18098640fedb1cf0a0d8f2",
-    "mc-private-notes": "9e6cbefdc690a5ca62c200d97c45f92a71cdf021400e70f13e77330041ec6365",
-    "mc-reports": "37784ff72a5846ef49e476eb5445ec0fe191338bac3d631fecb48f74bb06f647",
-    "mc-restore": "f5bb509fbfdc22af12c07ba69224bc9529395289085bddc4277297b8eb1d8902",
-    "mc-schedule": "7357d45dd6e848d18146b77abd5dce60491dab0ab303fb49b4b24b2f2c179db3",
-    "mc-shared-records": "54eee419fd20ad5163b7e1a57bf7de4cbdda88d774c37b6af84d0515acb5af8f",
-    "mc-tools": "7140f2b77c54034f254cba396d67da1a77a07c987896465bb49df8519066a019"
+    "mc-daily-push": "5b6861ebf11c8db67d57fde316d1f966cf0dad8fc1cad47c05a5348f1091f28f",
+    "mc-restore": "be2c7e1ec952e44b156649df49ca84d3932cb5fbdd2b7cbd25da82b09bd3c7f1",
+    "mc-tools": "0a24e899b8af7f0d4f12bcac6334cc6622911e5fc8f666854d58e10c9851be35"
   },
-  "uploadPackageDigest": "e4fd855a0a9c7223002053e74e2d3ff28ee84ef4fdf4e1ab4df857eebd0f892f"
+  "uploadPackageDigest": "8442d986edd63763171151f8f595087337e2737e99383cae6d7bf6e18ae95fc6"
 }
