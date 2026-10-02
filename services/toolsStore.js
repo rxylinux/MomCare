@@ -46,8 +46,100 @@ import { familyCall, getSessionState, captureSession, isSameSession, subscribeSe
 import { CLOUD_CONFIG } from '@/utils/cloudConfig.js'
 import { useFamilyStore } from '@/services/familyStore.js'
 import foodSafetyJson from '@/static/data/food-safety.json'
+import pregnancyRecipesJson from '@/static/data/pregnancy-recipes.json'
 
 export const FOOD_SAFETY_ENTRIES = Array.isArray(foodSafetyJson) ? foodSafetyJson : []
+
+// ── 孕期食谱（纯函数区：页面渲染层不藏逻辑，全部可测；数据构建期 import 全离线）──
+export const RECIPE_DATA = pregnancyRecipesJson && Array.isArray(pregnancyRecipesJson.recipes)
+  ? pregnancyRecipesJson
+  : { version: '', nutrients: [], stages: [], recipes: [] }
+export const RECIPE_NUTRIENTS = RECIPE_DATA.nutrients
+export const RECIPE_STAGES = RECIPE_DATA.stages
+export const RECIPE_ENTRIES = RECIPE_DATA.recipes
+
+// 周数 → 周段（1–12/13–19/20–27/28–35/36–40；非有限数按 1 处理，越界 clamp）
+export function getStageByWeek(week) {
+  const w = Number.isFinite(week) ? Math.min(40, Math.max(1, Math.round(week))) : 1
+  if (w <= 12) return 'early'
+  if (w <= 19) return 'mid1'
+  if (w <= 27) return 'mid2'
+  if (w <= 35) return 'late1'
+  return 'late2'
+}
+
+// 周段 → {stage, nutrients}：priority 顺序解析成完整营养素对象（页面胶囊数据源）
+export function getStageFocus(stageKey) {
+  const stage = RECIPE_STAGES.find(s => s.key === stageKey) || null
+  if (!stage) return null
+  const byKey = Object.fromEntries(RECIPE_NUTRIENTS.map(n => [n.key, n]))
+  return { stage, nutrients: stage.nutrientPriority.map(k => byKey[k]).filter(Boolean) }
+}
+
+// 段内菜谱（跨段菜按 stages 数组包含；不传 = 全量）
+export function listRecipes(stageKey) {
+  if (!stageKey) return RECIPE_ENTRIES.slice()
+  return RECIPE_ENTRIES.filter(r => Array.isArray(r.stages) && r.stages.includes(stageKey))
+}
+
+// 检索：菜名+食材名子串匹配（与 searchSafetyDictionary 同口径：本地、未命中返回空数组）
+export function searchRecipes({ keyword = '', stageKey = '', nutrientKey = '', mealType = '', bentoOnly = false } = {}) {
+  const kw = String(keyword || '').trim().toLowerCase()
+  return RECIPE_ENTRIES.filter(r => {
+    if (stageKey && !(Array.isArray(r.stages) && r.stages.includes(stageKey))) return false
+    if (mealType && !(Array.isArray(r.mealType) && r.mealType.includes(mealType))) return false
+    if (bentoOnly && !r.bentoFriendly) return false
+    if (nutrientKey && !(Array.isArray(r.nutrients) && r.nutrients.some(n => n.key === nutrientKey))) return false
+    if (!kw) return true
+    const hay = [r.name, ...(r.ingredients || []).map(i => i.name)].join(' ').toLowerCase()
+    return hay.includes(kw)
+  })
+}
+
+// 今日三餐（无状态确定性轮换）：同 seed 永远同组合、次日自然换；
+// 周一~五午餐走带饭友好池、周六日走现做全池（对齐"带饭口径"）；
+// 午餐优先命中段第一优先营养、晚餐第二优先（池空回退全段池如实展示）；
+// 频率受限菜（rotation:'excluded'——猪肝/海带/腌制高钠/早茶）永不自动入选。
+const STAGE_SEED_OFFSET = { early: 0, mid1: 977, mid2: 2741, late1: 4409, late2: 6271 }
+const DAY_OF_YEAR_CUM = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+function dayOfYearOf(dateKey) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey || ''))
+  if (!m) return 1
+  const month = Number(m[2]); const day = Number(m[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return 1
+  return (DAY_OF_YEAR_CUM[month - 1] || 0) + day
+}
+function pickFromPool(pool, seed, primaryNutrient) {
+  if (!pool.length) return null
+  const sorted = pool.slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  const focusPool = primaryNutrient
+    ? sorted.filter(r => Array.isArray(r.nutrients) && r.nutrients.some(n => n.key === primaryNutrient && n.weight === 'primary'))
+    : []
+  const use = focusPool.length ? focusPool : sorted
+  return use[seed % use.length]
+}
+export function buildDailyMeals({ dateKey = '', week = 1, weekday = 1, shuffleOffset = 0 } = {}) {
+  const stageKey = getStageByWeek(week)
+  const focus = getStageFocus(stageKey)
+  const weekend = weekday === 0 || weekday === 6
+  const base = RECIPE_ENTRIES.filter(r => r.rotation !== 'excluded' && Array.isArray(r.stages) && r.stages.includes(stageKey))
+  const seed = dayOfYearOf(dateKey) + (STAGE_SEED_OFFSET[stageKey] || 0) + shuffleOffset
+  const breakfast = pickFromPool(base.filter(r => r.mealType.includes('breakfast')), seed)
+  // 工作日优先带饭友好池；该段无带饭菜（如 early）时回退全池如实展示（口径靠页面提示）
+  const lunchAll = base.filter(r => r.mealType.includes('lunch'))
+  const bentoPool = lunchAll.filter(r => r.bentoFriendly)
+  const lunchPool = weekend || !bentoPool.length ? lunchAll : bentoPool
+  const lunch = pickFromPool(lunchPool, seed + 1, focus && focus.stage.nutrientPriority[0])
+  const dinnerPool = base.filter(r => r.mealType.includes('dinner') && (!lunch || r.id !== lunch.id))
+  const dinner = pickFromPool(dinnerPool, seed + 2, focus && focus.stage.nutrientPriority[1])
+  const snack = pickFromPool(base.filter(r => r.mealType.includes('snack')), seed + 3)
+  const focusTags = []
+  if (focus) {
+    if (lunch && lunch.nutrients.some(n => n.weight === 'primary' && n.key === focus.stage.nutrientPriority[0])) focusTags.push(focus.stage.nutrientPriority[0])
+    if (dinner && dinner.nutrients.some(n => n.weight === 'primary' && n.key === focus.stage.nutrientPriority[1])) focusTags.push(focus.stage.nutrientPriority[1])
+  }
+  return { dateKey: String(dateKey || ''), stageKey, mode: weekend ? 'weekend' : 'weekday', breakfast, lunch, dinner, snack, focusTags }
+}
 
 // R1 前旧固定键（无身份作用域）——隔离保留（A08：不自动并入任何成员），但自 F1 起
 // 提供"检测存在 → 待确认入口 → 显式归属确认（有云端 ID 先验归属）/原始字节导出保留

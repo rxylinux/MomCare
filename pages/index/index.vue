@@ -478,7 +478,8 @@ const TOOL_ENTRIES = [
 	{ name: '胎动计时', icon: '👣', url: '/pages/tools/fetal-timer' },
 	{ name: '宫缩计时', icon: '⏱️', url: '/pages/tools/contraction-timer' },
 	{ name: 'B 超估重', icon: '📏', url: '/pages/tools/ultrasound-weight' },
-	{ name: '饮食速查', icon: '🥗', url: '/pages/tools/food-safety' }
+	{ name: '饮食速查', icon: '🥗', url: '/pages/tools/food-safety' },
+	{ name: '孕期食谱', icon: '🍲', url: '/pages/tools/recipes' }
 ]
 function goToolPage(url) {
 	uni.navigateTo({ url })

@@ -25,3 +25,6 @@ worker/
 !.env.example
 .zcode/
 .zcodeignore
+
+# 营养指南参考资料（105MB 外部 PDF，本地留存即可，不入库）
+docs/research/nutrition-2026-10/

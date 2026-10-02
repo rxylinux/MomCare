@@ -1,0 +1,5299 @@
+{
+ "version": "1.0",
+ "generatedFrom": "docs/recipe-draft.md（2026-10-02 审定版：92 道/11 营养素/5 周段；DRIs 2023 核对+指南全文校验）",
+ "nutrients": [
+  {
+   "key": "folate",
+   "name": "叶酸",
+   "why": "预防神经管缺陷，孕早期最关键",
+   "sources": [
+    "深绿叶菜",
+    "豆类",
+    "强化谷物"
+   ],
+   "reference": "600 μgDFE/d 全孕期（DRIs 2023 核对：与 2013 一致）",
+   "foodGuide": "每天 400g 蔬菜、过半深绿叶菜 + 豆制品；孕前 3 个月起每天补叶酸 400μg（指南明确推荐）"
+  },
+  {
+   "key": "iodine",
+   "name": "碘",
+   "why": "甲状腺激素合成，影响胎儿脑发育；孕期缺碘的后果比过量更明确",
+   "sources": [
+    "加碘盐",
+    "紫菜",
+    "海带",
+    "海鱼",
+    "贝类"
+   ],
+   "reference": "230 μg/d（DRIs 2023 核对：与 2013 一致）；甲状腺疾病孕妇的碘摄入遵医嘱",
+   "foodGuide": "加碘盐家庭：常规炒菜 + 每周 1~2 次海带/紫菜即可（干紫菜 2.5g 或鲜海带 100g ≈ 110μg）；无碘盐家庭：海产每周 2~3 次打底；先看盐袋配料表确认是否加碘"
+  },
+  {
+   "key": "carb",
+   "name": "碳水（孕吐专题）",
+   "why": "孕吐期保证至少 130g/d 碳水防酮症",
+   "sources": [
+    "粥",
+    "面条",
+    "燕麦",
+    "烤面包片"
+   ],
+   "reference": "≥130 g/d 孕吐期（膳食指南 2022）",
+   "foodGuide": "孕吐期每天至少 3 小碗粥/面类主食保底；吃不下时糖水/蜂蜜快速补糖，吐得严重进食少需就医"
+  },
+  {
+   "key": "calcium",
+   "name": "钙",
+   "why": "胎儿骨骼牙齿发育，母体骨密度维护",
+   "sources": [
+    "豆腐",
+    "绿叶菜",
+    "芝麻酱",
+    "无乳糖奶",
+    "酸奶/奶酪"
+   ],
+   "reference": "孕期统一 800 mg/d（DRIs 2023，取消孕中晚期加量；UL 2000）；膳食指南 2022 食物量口径仍按孕中晚 1000 设计，按高线吃同样安全",
+   "foodGuide": "豆制品每餐有 + 绿叶菜（耐受者加奶 500ml）；虾皮、芝麻酱点缀"
+  },
+  {
+   "key": "protein",
+   "name": "优质蛋白",
+   "why": "胎体生长 + 母体组织扩充",
+   "sources": [
+    "鱼禽蛋瘦肉",
+    "豆制品"
+   ],
+   "reference": "孕中期起奶增至 500g/d（+200g）；鱼禽蛋瘦肉孕中 +50g/d、孕晚再 +75g（合计较孕前多 125g）；每周 2~3 次深海鱼（膳食指南口径；乳糖不耐者奶以豆制品/蛋/瘦肉折算）",
+   "foodGuide": "每餐一掌心肉/鱼/蛋；孕中期起加量"
+  },
+  {
+   "key": "vita",
+   "name": "维生素A（植物源）",
+   "why": "胎儿发育必需；动物源过量有致畸上限，植物胡萝卜素是安全通道（体内按需转化）",
+   "sources": [
+    "胡萝卜",
+    "南瓜",
+    "红薯",
+    "深绿叶菜"
+   ],
+   "reference": "孕早 700 → 孕中晚 770 μgRAE/d（DRIs 2023 核对：维持）；植物源不受 UL（3000）约束",
+   "foodGuide": "橙黄蔬菜（胡萝卜/南瓜/红薯）每周 3~4 次 + 每天绿叶菜"
+  },
+  {
+   "key": "vitd",
+   "name": "维生素D",
+   "why": "促钙吸收，食物来源少",
+   "sources": [
+    "日照",
+    "蛋黄",
+    "脂肪鱼"
+   ],
+   "reference": "15 μg/d（600 IU，DRIs 2023 上调，原 10）；UL 50 μg/d",
+   "foodGuide": "每天晒 20~30 分钟太阳 + 每周 2~3 次鱼类"
+  },
+  {
+   "key": "iron",
+   "name": "铁",
+   "why": "血容量大增，缺铁性贫血影响母婴",
+   "sources": [
+    "红肉",
+    "动物肝血",
+    "配维C促吸收"
+   ],
+   "reference": "孕早 18 → 孕中 24 → 孕晚 29 mg/d（DRIs 2023：孕早期随育龄女性基线下调，中晚期维持）",
+   "foodGuide": "孕中晚期每天加 20~50g 红肉 + 每周 1~2 次猪肝/鸭血（每次 20~50g）；配彩椒/番茄促吸收"
+  },
+  {
+   "key": "dha",
+   "name": "DHA",
+   "why": "胎儿大脑和视网膜发育主力",
+   "sources": [
+    "三文鱼",
+    "鲈鱼",
+    "鳕鱼",
+    "黄花鱼",
+    "鲳鱼"
+   ],
+   "reference": "孕中晚期 200 mg/d（中国营养学会孕产妇 DHA 共识 AI；2023 版 DRIs 沿用）",
+   "foodGuide": "每周 2~3 次鱼、每次一掌心（本阶段鱼菜轮着做）"
+  },
+  {
+   "key": "zinc",
+   "name": "锌",
+   "why": "生长发育 + 免疫 + 分娩准备",
+   "sources": [
+    "牡蛎（全熟）",
+    "红肉",
+    "坚果"
+   ],
+   "reference": "9.5 mg/d（DRIs 2023 核对：维持——孕中晚期较成年女 7.5 加 2）",
+   "foodGuide": "红肉坚果日常已覆盖大半；牡蛎偶尔（务必全熟）"
+  },
+  {
+   "key": "glucose",
+   "name": "控糖控体重",
+   "why": "孕晚期 GDM 风险管理、巨大儿预防",
+   "sources": [
+    "低GI主食",
+    "杂粮"
+   ],
+   "reference": "非营养素，管理型条目：少精制糖、主食粗细搭配",
+   "foodGuide": "白米饭一半换杂粮；含糖饮料和甜点先砍掉"
+  }
+ ],
+ "stages": [
+  {
+   "key": "early",
+   "range": [
+    1,
+    12
+   ],
+   "label": "孕1–12周",
+   "nutrientPriority": [
+    "folate",
+    "iodine",
+    "carb"
+   ],
+   "stageNote": "神经管发育关键期；孕吐期以清淡适口、保证主食为先"
+  },
+  {
+   "key": "mid1",
+   "range": [
+    13,
+    19
+   ],
+   "label": "孕13–19周",
+   "nutrientPriority": [
+    "calcium",
+    "protein",
+    "vitd"
+   ],
+   "stageNote": "骨骼发育启动、血容量上升，钙源以豆制品/鱼虾/芝麻酱为主（菜品默认非奶设计）"
+  },
+  {
+   "key": "mid2",
+   "range": [
+    20,
+    27
+   ],
+   "label": "孕20–27周",
+   "nutrientPriority": [
+    "iron",
+    "dha",
+    "calcium"
+   ],
+   "stageNote": "贫血筛查窗口期，铁升为首位；胎儿脑发育加速"
+  },
+  {
+   "key": "late1",
+   "range": [
+    28,
+    35
+   ],
+   "label": "孕28–35周",
+   "nutrientPriority": [
+    "dha",
+    "iron",
+    "calcium"
+   ],
+   "stageNote": "脑发育高峰期"
+  },
+  {
+   "key": "late2",
+   "range": [
+    36,
+    40
+   ],
+   "label": "孕36–40周",
+   "nutrientPriority": [
+    "glucose",
+    "zinc",
+    "iron"
+   ],
+   "stageNote": "血糖/体重管理，为哺乳做储备"
+  }
+ ],
+ "recipes": [
+  {
+   "id": "r-001",
+   "name": "菠菜瘦肉杂粮粥",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "breakfast"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "大米+小米+燕麦（或糙米）混煮，菠菜焯水切碎、瘦肉末入粥",
+   "ingredients": [
+    {
+     "name": "大米",
+     "amount": "50g"
+    },
+    {
+     "name": "小米",
+     "amount": "30g"
+    },
+    {
+     "name": "燕麦",
+     "amount": "20g"
+    },
+    {
+     "name": "菠菜",
+     "amount": "100g"
+    },
+    {
+     "name": "瘦肉末",
+     "amount": "50g"
+    },
+    {
+     "name": "姜丝",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "杂粮提前浸泡 30 分钟，加水大火煮开转小火 30 分钟",
+    "瘦肉末用少许淀粉抓匀，菠菜焯水 10 秒切碎",
+    "粥将好时下肉末搅散煮至变色，再下菠菜碎滚 1 分钟，点盐即成"
+   ],
+   "nutritionNote": "菠菜叶酸+瘦肉蛋白，一道粥打开叶酸的日常通道。",
+   "cautions": [
+    "菠菜焯水去草酸",
+    "杂粮提前泡、煮软烂；孕吐严重期可先加大米比例过渡"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-002",
+   "name": "芦笋炒虾仁",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "芦笋是叶酸含量最高的常见蔬菜之一，配虾仁",
+   "ingredients": [
+    {
+     "name": "芦笋",
+     "amount": "200g"
+    },
+    {
+     "name": "鲜虾仁",
+     "amount": "150g"
+    },
+    {
+     "name": "蒜",
+     "amount": "2瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "芦笋削掉老根、斜切段，焯水 30 秒",
+    "虾仁开背去线，中火炒至完全变红盛出",
+    "余油煸蒜，下芦笋大火快炒 1 分钟，回锅虾仁翻匀调味出锅"
+   ],
+   "nutritionNote": "芦笋叶酸密度高，虾仁优质蛋白低脂。",
+   "cautions": [
+    "芦笋削老根、焯水",
+    "虾仁务必炒至全熟（变红再炒透）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-003",
+   "name": "芦笋炒鸡腿肉",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "与芦笋炒虾仁同系列，换鸡腿肉更家常",
+   "ingredients": [
+    {
+     "name": "芦笋",
+     "amount": "200g"
+    },
+    {
+     "name": "去骨鸡腿肉",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜",
+     "amount": "2瓣"
+    },
+    {
+     "name": "生抽/淀粉",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鸡腿肉切块，生抽+淀粉腌 10 分钟",
+    "芦笋削老根切段焯水 30 秒",
+    "热锅少油下鸡块大火炒至全熟，下芦笋翻匀出锅"
+   ],
+   "nutritionNote": "同系列换肉版，鸡腿肉更耐放、更适合家常采购。",
+   "cautions": [
+    "芦笋削老根、焯水",
+    "鸡肉炒至全熟无血丝"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-004",
+   "name": "蒜蓉西兰花",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "西兰花叶酸+维C，焯水后快炒保持脆嫩",
+   "ingredients": [
+    {
+     "name": "西兰花",
+     "amount": "300g"
+    },
+    {
+     "name": "蒜",
+     "amount": "4瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "西兰花掰小朵洗净，沸水焯 1 分钟捞出",
+    "蒜切末，热锅少油煸香",
+    "下西兰花大火快炒 1 分钟调味出锅"
+   ],
+   "nutritionNote": "西兰花是叶酸和维C 双高的十字花科代表。",
+   "cautions": [
+    "焯水 1 分钟再炒，别久煮（叶酸怕热）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-005",
+   "name": "花菜炒大虾",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "花菜叶酸密度高，配大虾双补",
+   "ingredients": [
+    {
+     "name": "花菜",
+     "amount": "300g"
+    },
+    {
+     "name": "鲜大虾",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜/姜",
+     "amount": "适量"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "花菜掰小朵盐水泡 10 分钟，焯水 1 分钟",
+    "大虾去须开背，中火炒至完全变红",
+    "下花菜大火同炒 2 分钟，调味出锅"
+   ],
+   "nutritionNote": "花菜（菜花）叶酸含量在常见蔬菜里靠前。",
+   "cautions": [
+    "虾彻底炒熟",
+    "花菜掰小朵易熟透"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-006",
+   "name": "五香煮毛豆",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "毛豆叶酸密度高，加餐一把",
+   "ingredients": [
+    {
+     "name": "鲜毛豆",
+     "amount": "300g"
+    },
+    {
+     "name": "八角",
+     "amount": "1个"
+    },
+    {
+     "name": "香叶",
+     "amount": "1片"
+    },
+    {
+     "name": "盐",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "毛豆洗净剪去两头（更入味）",
+    "水开下八角香叶和毛豆，中火煮 8~10 分钟",
+    "捞出沥凉当加餐"
+   ],
+   "nutritionNote": "毛豆同时是叶酸和植物蛋白的浓缩来源。",
+   "cautions": [
+    "彻底煮熟",
+    "少放盐（钠考量）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-007",
+   "name": "白灼菜心",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "深绿叶菜日常主力，粤式白灼少油",
+   "ingredients": [
+    {
+     "name": "菜心",
+     "amount": "350g"
+    },
+    {
+     "name": "蒸鱼豉油",
+     "amount": "1勺"
+    },
+    {
+     "name": "姜丝/葱丝",
+     "amount": "少许"
+    },
+    {
+     "name": "油",
+     "amount": "半勺"
+    }
+   ],
+   "steps": [
+    "菜心洗净，沸水加几滴油焯 40 秒捞出摆盘",
+    "姜丝葱丝铺面，淋半勺热油激香",
+    "上桌前淋少许蒸鱼豉油即成"
+   ],
+   "nutritionNote": "深绿色叶菜每天都要有——白灼是最省事的做法。",
+   "cautions": [
+    "白灼汁（豉油）偏咸，少淋"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；词典口径\"深绿色叶菜每天都要有\"",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-008",
+   "name": "上汤豆苗",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "豆苗叶酸密度高的嫩绿叶",
+   "ingredients": [
+    {
+     "name": "豌豆苗",
+     "amount": "300g"
+    },
+    {
+     "name": "瘦肉片",
+     "amount": "50g"
+    },
+    {
+     "name": "蒜",
+     "amount": "2瓣"
+    },
+    {
+     "name": "盐",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "瘦肉片用淀粉抓匀",
+    "蒜片煸香，加水或清汤煮开下肉片",
+    "下豆苗滚 20 秒即出（久煮变色）"
+   ],
+   "nutritionNote": "豆苗嫩绿叶，叶酸密度高于多数结球蔬菜。",
+   "cautions": [
+    "不放皮蛋（饮食安全词典\"皮蛋\"条目 avoid），改清汤或瘦肉汤底"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；皮蛋规避挂饮食安全词典条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-009",
+   "name": "蒜蓉苋菜",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "南方春夏当造，叶酸+钙+铁",
+   "ingredients": [
+    {
+     "name": "苋菜",
+     "amount": "350g"
+    },
+    {
+     "name": "蒜",
+     "amount": "4瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "苋菜择洗，沸水焯 10 秒（去草酸）",
+    "热锅少油煸香蒜末",
+    "下苋菜大火翻炒 1 分钟调味出锅"
+   ],
+   "nutritionNote": "苋菜钙含量在叶菜里名列前茅，铁也不少。",
+   "cautions": [
+    "焯水去草酸（同菠菜）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-010",
+   "name": "蒜蓉炒空心菜",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "夏天当造，梗叶分先后下锅更脆嫩",
+   "ingredients": [
+    {
+     "name": "空心菜",
+     "amount": "350g"
+    },
+    {
+     "name": "蒜",
+     "amount": "4瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "空心菜择段洗净，梗叶分开",
+    "热锅多蒜爆香，先下菜梗炒 30 秒",
+    "再下菜叶大火快炒 30 秒调味即出"
+   ],
+   "nutritionNote": "夏季深绿叶菜主力，便宜当造。",
+   "cautions": [
+    "大火快炒断生即出",
+    "腐乳/虾酱版高钠，不作默认做法"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-011",
+   "name": "蒜蓉炒地瓜叶",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "vita",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "红薯叶叶酸+胡萝卜素，秋冬春当造",
+   "ingredients": [
+    {
+     "name": "地瓜叶（红薯叶）",
+     "amount": "350g"
+    },
+    {
+     "name": "蒜",
+     "amount": "4瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "地瓜叶摘掉老梗，洗净",
+    "热锅少油爆香蒜末",
+    "下地瓜叶大火快炒 1 分半调味出锅"
+   ],
+   "nutritionNote": "红薯叶的叶酸和胡萝卜素双高，被低估的国民绿叶菜。",
+   "cautions": [
+    "摘掉老梗，大火快炒"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-012",
+   "name": "香菇炒油菜",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "vitd",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "上海青配干香菇（晒制维D），家常经典",
+   "ingredients": [
+    {
+     "name": "油菜（上海青）",
+     "amount": "350g"
+    },
+    {
+     "name": "干香菇",
+     "amount": "5朵"
+    },
+    {
+     "name": "蒜",
+     "amount": "2瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "干香菇提前泡发切片（泡菇水留用）",
+    "油菜对半切洗净",
+    "热锅爆香蒜和香菇，下油菜大火炒 1 分钟，加少许泡菇水焖 30 秒出锅"
+   ],
+   "nutritionNote": "干香菇晒制生成维D，配油菜叶酸，一道菜两个通道。",
+   "cautions": [
+    "干香菇提前泡发",
+    "大火快炒"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-013",
+   "name": "蒜蓉炒茼蒿",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "vita",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "茼蒿胡萝卜素在叶菜里数一数二，冬春当造",
+   "ingredients": [
+    {
+     "name": "茼蒿",
+     "amount": "350g"
+    },
+    {
+     "name": "蒜",
+     "amount": "4瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "茼蒿择洗沥干",
+    "热锅爆香蒜末",
+    "下茼蒿大火快炒 40 秒（蔫软即出，久炒发苦）"
+   ],
+   "nutritionNote": "茼蒿的胡萝卜素含量在叶菜里名列前茅。",
+   "cautions": [
+    "快炒不过火，蔫软即出"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-014",
+   "name": "蒜蓉小白菜",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "小白菜钙含量在常见叶菜里名列前茅",
+   "ingredients": [
+    {
+     "name": "小白菜",
+     "amount": "350g"
+    },
+    {
+     "name": "蒜",
+     "amount": "4瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "小白菜洗净沥水",
+    "热锅爆香蒜末",
+    "下小白菜大火快炒 1 分钟调味出锅"
+   ],
+   "nutritionNote": "小白菜钙含量高于大白菜数倍，快炒更保叶酸。",
+   "cautions": [
+    "与\"小白菜炖豆腐\"同材轮换，快炒更保叶酸"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-015",
+   "name": "上汤芥菜",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "folate",
+     "weight": "primary"
+    }
+   ],
+   "summary": "南方冬天的苦甘开胃汤菜",
+   "ingredients": [
+    {
+     "name": "大芥菜",
+     "amount": "350g"
+    },
+    {
+     "name": "瘦肉片",
+     "amount": "50g"
+    },
+    {
+     "name": "姜",
+     "amount": "2片"
+    },
+    {
+     "name": "盐",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "芥菜洗净切段，沸水焯 20 秒去部分苦味",
+    "瘦肉片淀粉抓匀，姜水煮开下肉片",
+    "下芥菜滚 1 分钟调味即成"
+   ],
+   "nutritionNote": "冬天当造的深绿叶菜，苦甘开胃。",
+   "cautions": [
+    "汤底用瘦肉/清汤，不用咸蛋版（高钠）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-016",
+   "name": "海带黄豆排骨汤",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iodine",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "海带+黄豆补碘兼植物蛋白，排骨提鲜",
+   "ingredients": [
+    {
+     "name": "鲜海带",
+     "amount": "100g"
+    },
+    {
+     "name": "黄豆",
+     "amount": "50g"
+    },
+    {
+     "name": "排骨",
+     "amount": "250g"
+    },
+    {
+     "name": "姜",
+     "amount": "2片"
+    }
+   ],
+   "steps": [
+    "黄豆提前泡 4 小时；排骨焯水去沫",
+    "排骨+黄豆+姜片加水煮开转小火 60 分钟",
+    "下海带再煮 15 分钟，少盐调味"
+   ],
+   "nutritionNote": "无碘盐家庭的补碘主力汤；加碘盐家庭适量喝。",
+   "cautions": [
+    "海带类合计频率：加碘盐家庭每周1~2次（防碘过量），无碘盐家庭可增至2~3次",
+    "黄豆提前泡发",
+    "别久煲（≤1.5h）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "curated",
+   "source": "通行家常做法整理；碘口径见营养素条目（先确认加碘盐）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-017",
+   "name": "凉拌海带丝",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iodine",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "海带丝煮熟后蒜末+醋+少许生抽香油凉拌，常备小菜",
+   "ingredients": [
+    {
+     "name": "海带丝",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜",
+     "amount": "3瓣"
+    },
+    {
+     "name": "生抽/醋/香油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "海带丝（干品提前泡发）沸水煮 5 分钟至透",
+    "捞出过凉开水沥干",
+    "加蒜末、少许生抽、醋、香油拌匀"
+   ],
+   "nutritionNote": "补碘常备小菜，配粥配饭都行。",
+   "cautions": [
+    "海带丝焯透煮熟再拌（不生拌）",
+    "海带类频率与海带汤合计（加碘盐每周1~2次/无碘盐 2~3 次）",
+    "凉拌汁控酱油量"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "curated",
+   "source": "用户审定（2026-10-02）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-018",
+   "name": "番茄鸡蛋面",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "carb",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "孕吐期开胃主食，番茄炒出汁下面",
+   "ingredients": [
+    {
+     "name": "面条",
+     "amount": "150g"
+    },
+    {
+     "name": "番茄",
+     "amount": "2个"
+    },
+    {
+     "name": "鸡蛋",
+     "amount": "1个"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "番茄去皮切块，鸡蛋炒熟盛出",
+    "少油下番茄炒出汁，加水煮开",
+    "下面条煮软，回锅鸡蛋，调味即成"
+   ],
+   "nutritionNote": "孕吐期碳水保底经典：酸甜开胃+主食给足。",
+   "cautions": [
+    "面条量给足（碳水保底）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；孕吐期≥130g/d 碳水口径（膳食指南 2022）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-019",
+   "name": "豆浆燕麦糊",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "breakfast",
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "carb",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "无糖豆浆调燕麦，孕吐期温和碳水+植物蛋白",
+   "ingredients": [
+    {
+     "name": "无糖豆浆",
+     "amount": "300ml"
+    },
+    {
+     "name": "即食燕麦",
+     "amount": "40g"
+    }
+   ],
+   "steps": [
+    "无糖豆浆彻底煮沸",
+    "冲入燕麦搅拌，静置 2 分钟至糊化",
+    "温热食用"
+   ],
+   "nutritionNote": "孕吐期温和碳水，豆香盖过豆腥更容易入口。",
+   "cautions": [
+    "豆浆必须彻底煮沸（见饮食安全词典\"豆浆\"条目——生豆浆含皂苷）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；豆浆煮沸挂饮食安全词典条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-020",
+   "name": "南瓜小米粥",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "breakfast",
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "carb",
+     "weight": "primary"
+    }
+   ],
+   "summary": "小米粥+南瓜块同煮，软糯微甜好入口",
+   "ingredients": [
+    {
+     "name": "小米",
+     "amount": "80g"
+    },
+    {
+     "name": "南瓜",
+     "amount": "150g"
+    }
+   ],
+   "steps": [
+    "小米淘洗，南瓜去皮切块",
+    "加水煮开转小火 25 分钟至南瓜融化",
+    "粥面出油膜即成"
+   ],
+   "nutritionNote": "孕吐期友好：软糯微甜自带天然甜味。",
+   "cautions": [
+    "南瓜自带甜不再加糖"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；孕吐期碳水保底口径",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-021",
+   "name": "绿豆汤",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "carb",
+     "weight": "primary"
+    }
+   ],
+   "summary": "夏季解暑甜水，绿豆煮至开花",
+   "ingredients": [
+    {
+     "name": "绿豆",
+     "amount": "80g"
+    },
+    {
+     "name": "冰糖",
+     "amount": "少许（可选）"
+    }
+   ],
+   "steps": [
+    "绿豆洗净，加水大火煮开",
+    "转小火煮 30~40 分钟至开花",
+    "少糖或无糖，温饮"
+   ],
+   "nutritionNote": "夏季加餐甜水，补水又补碳水。",
+   "cautions": [
+    "\"绿豆寒凉伤胎\"无据（澄清口径）",
+    "别冰镇（肠胃）",
+    "少放糖"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；\"寒凉\"说法按词典澄清口径处理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-022",
+   "name": "蒸玉米",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "breakfast",
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "carb",
+     "weight": "primary"
+    }
+   ],
+   "summary": "五分钟快手粗粮，与蒸红薯组成快早餐双雄",
+   "ingredients": [
+    {
+     "name": "甜玉米",
+     "amount": "1根"
+    }
+   ],
+   "steps": [
+    "玉米洗净留最内层薄衣（保水汽）",
+    "蒸锅上汽蒸 8~10 分钟",
+    "稍凉切段即食"
+   ],
+   "nutritionNote": "快手粗粮碳水，早餐加餐两相宜。",
+   "cautions": [
+    "中GI 一次一根",
+    "控糖期不超量"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-023",
+   "name": "清蒸鲈鱼",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "dha",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鲈鱼低汞高DHA，姜丝清蒸8分钟",
+   "ingredients": [
+    {
+     "name": "鲈鱼",
+     "amount": "1条（约500g）"
+    },
+    {
+     "name": "姜丝",
+     "amount": "适量"
+    },
+    {
+     "name": "蒸鱼豉油",
+     "amount": "1勺"
+    },
+    {
+     "name": "葱丝",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "鲈鱼处理干净，两面各划两刀，塞姜丝",
+    "水开上锅大火蒸 8 分钟",
+    "弃蒸汁，铺葱丝淋少许热油和蒸鱼豉油"
+   ],
+   "nutritionNote": "低汞高DHA 的白肉鱼，全孕期适用的蛋白主力。",
+   "cautions": [
+    "彻底蒸熟（筷子插入最厚处无阻力）",
+    "鱼类选择与词典口径一致（避免高汞鱼）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；低汞鱼口径见鱼类选择口径（草稿第三节）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-024",
+   "name": "菠萝炒鸡腿肉",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "菠萝酸甜开胃（维C促铁吸收），孕吐没胃口时尤其合适",
+   "ingredients": [
+    {
+     "name": "菠萝",
+     "amount": "150g"
+    },
+    {
+     "name": "去骨鸡腿肉",
+     "amount": "250g"
+    },
+    {
+     "name": "彩椒",
+     "amount": "半个"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鸡腿肉切块腌制 10 分钟，菠萝切块泡盐水 10 分钟",
+    "鸡块大火炒至全熟",
+    "下菠萝彩椒翻匀 1 分钟出锅"
+   ],
+   "nutritionNote": "菠萝的维C 帮助同餐铁吸收，酸甜口开胃。",
+   "cautions": [
+    "对菠萝过敏者不吃",
+    "炒制后致敏性下降"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-025",
+   "name": "番茄龙利鱼",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "dha",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "无刺肉厚好消化，番茄酸甜开胃（孕吐期友好）",
+   "ingredients": [
+    {
+     "name": "龙利鱼柳",
+     "amount": "300g"
+    },
+    {
+     "name": "番茄",
+     "amount": "2个"
+    },
+    {
+     "name": "番茄酱",
+     "amount": "1勺"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鱼柳切块，少许盐和淀粉抓匀",
+    "番茄去皮炒出汁，加水煮开",
+    "下鱼块煮 3~4 分钟至全熟（变白不透明）"
+   ],
+   "nutritionNote": "无刺好消化的白肉鱼，孕吐期也能接受的清淡酸口。",
+   "cautions": [
+    "买正规龙利鱼柳（半滑舌鳎），警惕巴沙鱼冒充",
+    "全熟（变白不透明）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；龙利/巴沙辨别说明随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-026",
+   "name": "银鱼跑蛋",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "dha",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "小银鱼连骨整吃，钙+DHA 一道快菜",
+   "ingredients": [
+    {
+     "name": "小银鱼",
+     "amount": "100g"
+    },
+    {
+     "name": "鸡蛋",
+     "amount": "3个"
+    },
+    {
+     "name": "葱花",
+     "amount": "少许"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "银鱼洗净沥干；鸡蛋加盐打散",
+    "银鱼拌入蛋液",
+    "热锅少油，倒入蛋液中小火煎至两面全熟，撒葱花"
+   ],
+   "nutritionNote": "连骨整吃的小鱼是钙的浓缩来源。",
+   "cautions": [
+    "银鱼洗净沥干",
+    "蛋液炒至全熟"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；连骨小鱼补钙口径",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-027",
+   "name": "丝瓜蛋汤",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "清淡快手汤，水分+纤维",
+   "ingredients": [
+    {
+     "name": "丝瓜",
+     "amount": "1根"
+    },
+    {
+     "name": "鸡蛋",
+     "amount": "1个"
+    },
+    {
+     "name": "姜丝",
+     "amount": "少许"
+    },
+    {
+     "name": "盐/香油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "丝瓜去皮滚刀块",
+    "姜丝水煮开下丝瓜煮 2 分钟",
+    "淋蛋液成蛋花，点盐和香油出锅"
+   ],
+   "nutritionNote": "十分钟快手汤，补水补纤维。",
+   "cautions": [
+    "丝瓜发苦整根弃掉（葫芦素风险）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；苦味瓜葫芦素风险提示",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-028",
+   "name": "鸡蛋蔬菜三明治",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "breakfast"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "全麦面包+全熟煎蛋+生菜番茄，快手固体早餐",
+   "ingredients": [
+    {
+     "name": "全麦面包",
+     "amount": "2片"
+    },
+    {
+     "name": "鸡蛋",
+     "amount": "1个"
+    },
+    {
+     "name": "生菜",
+     "amount": "2片"
+    },
+    {
+     "name": "番茄",
+     "amount": "2片"
+    },
+    {
+     "name": "沙拉酱",
+     "amount": "少许（可选）"
+    }
+   ],
+   "steps": [
+    "鸡蛋小火煎至全熟",
+    "面包略烤，铺生菜番茄和煎蛋",
+    "对折压实，切半即食"
+   ],
+   "nutritionNote": "快手固体早餐：主食+蛋白+蔬果三角齐两角半。",
+   "cautions": [
+    "生菜番茄洗净（词典生食蔬果口径）",
+    "蛋全熟"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；早餐三角口径（草稿第三节）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-029",
+   "name": "虾皮蒸蛋羹",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "breakfast",
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "蛋液兑温水蒸，起锅撒碾碎的虾皮",
+   "ingredients": [
+    {
+     "name": "鸡蛋",
+     "amount": "2个"
+    },
+    {
+     "name": "温水",
+     "amount": "约150ml（1:1.5）"
+    },
+    {
+     "name": "低钠虾皮",
+     "amount": "1小撮"
+    },
+    {
+     "name": "香油/葱花",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "鸡蛋打散兑温水搅匀，过筛去泡",
+    "盖保鲜膜扎孔，水开中小火蒸 10 分钟",
+    "出锅撒碾碎的虾皮和葱花，点香油"
+   ],
+   "nutritionNote": "虾皮+鸡蛋的钙蛋白组合，非奶补钙的早餐款。",
+   "cautions": [
+    "全熟不溏心",
+    "虾皮选低钠款、碾碎撒表面少许即可（钠考量）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-030",
+   "name": "芝麻酱拌菠菜",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "焯水菠菜+两勺芝麻酱",
+   "ingredients": [
+    {
+     "name": "菠菜",
+     "amount": "300g"
+    },
+    {
+     "name": "芝麻酱",
+     "amount": "2勺"
+    },
+    {
+     "name": "生抽/香油",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "菠菜沸水焯 15 秒捞出挤水切段",
+    "芝麻酱用温水澥开，加少许生抽香油",
+    "浇在菠菜上拌匀"
+   ],
+   "nutritionNote": "芝麻酱是钙密度最高的常见调味，拌一切深绿叶菜。",
+   "cautions": [
+    "芝麻酱热量高，每次2勺",
+    "菠菜焯水去草酸"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-031",
+   "name": "鲫鱼豆腐汤",
+   "stages": [
+    "mid1",
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "北豆腐+鲫鱼炖至奶白",
+   "ingredients": [
+    {
+     "name": "鲫鱼",
+     "amount": "1条（约400g）"
+    },
+    {
+     "name": "北豆腐",
+     "amount": "300g"
+    },
+    {
+     "name": "姜片",
+     "amount": "3片"
+    },
+    {
+     "name": "盐/葱花",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鲫鱼煎至两面微黄",
+    "冲入开水（汤白的关键），下姜片豆腐",
+    "中火炖 20 分钟至汤奶白，少盐调味"
+   ],
+   "nutritionNote": "北豆腐才是这道汤的钙主力；汤白来自乳化的脂肪不是钙。",
+   "cautions": [
+    "鲫鱼刺多，喝汤吃豆腐为主，吃鱼仔细挑刺",
+    "别久煲（≤1.5h）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；\"骨汤补钙\"误区按营养事实处理（钙在豆腐不在汤）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-032",
+   "name": "黑芝麻核桃糊",
+   "stages": [
+    "mid1",
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "iron",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "无糖黑芝麻糊冲调+核桃碎，非奶补钙加餐",
+   "ingredients": [
+    {
+     "name": "无糖黑芝麻糊粉",
+     "amount": "30g"
+    },
+    {
+     "name": "核桃仁",
+     "amount": "2颗"
+    }
+   ],
+   "steps": [
+    "核桃仁压碎",
+    "黑芝麻糊粉用热水冲调搅匀",
+    "撒核桃碎即食"
+   ],
+   "nutritionNote": "非奶补钙加餐，兼有铁和健康脂肪。",
+   "cautions": [
+    "一次一小碗（热量密度高）",
+    "选无糖款"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-033",
+   "name": "香干炒芹菜",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    }
+   ],
+   "summary": "非奶钙源主打：香干（豆腐干）钙密度高，配芹菜膳食纤维",
+   "ingredients": [
+    {
+     "name": "香干",
+     "amount": "200g"
+    },
+    {
+     "name": "芹菜",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜",
+     "amount": "2瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "香干切条，芹菜撕去老筋切段焯水 30 秒",
+    "热锅少油煸香蒜片",
+    "下香干煎炒 1 分钟，再下芹菜大火翻匀调味出锅"
+   ],
+   "nutritionNote": "香干的钙密度是北豆腐的近两倍，被低估的钙源。",
+   "cautions": [
+    "香干买正规卤味香干（钠较高，少放盐）"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-034",
+   "name": "客家酿豆腐",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "北豆腐酿肉馅，钙+蛋白一道成",
+   "ingredients": [
+    {
+     "name": "北豆腐",
+     "amount": "400g"
+    },
+    {
+     "name": "猪肉末",
+     "amount": "150g"
+    },
+    {
+     "name": "香菇末",
+     "amount": "2朵量"
+    },
+    {
+     "name": "生抽/淀粉/葱花",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "北豆腐切厚块，中间挖小洞（豆腐碎拌入肉馅）",
+    "肉末+香菇末+豆腐碎加调料搅拌上劲，酿回豆腐块",
+    "少油煎至两面金黄，加半碗水焖 5 分钟收汁撒葱花"
+   ],
+   "nutritionNote": "一道菜把豆制品钙和肉蛋白都齐了。",
+   "cautions": [
+    "用北豆腐（卤水/石膏点，钙高于内酯豆腐）",
+    "煎至定型再焖熟（肉馅全熟）"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-035",
+   "name": "白菜炖豆腐",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    }
+   ],
+   "summary": "大白菜+北豆腐清淡炖菜，冬季家常",
+   "ingredients": [
+    {
+     "name": "大白菜",
+     "amount": "300g"
+    },
+    {
+     "name": "北豆腐",
+     "amount": "300g"
+    },
+    {
+     "name": "姜片",
+     "amount": "2片"
+    },
+    {
+     "name": "盐/香油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "白菜切段，豆腐切厚块可先煎至微黄",
+    "姜片水煮开下白菜煮 2 分钟",
+    "下豆腐再炖 8 分钟，少盐点香油出锅"
+   ],
+   "nutritionNote": "冬季清淡炖菜；钙靠北豆腐，大白菜负责水分纤维维C。",
+   "cautions": [
+    "大白菜属浅色蔬菜（非深绿叶菜），钙靠北豆腐"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；大白菜按浅色蔬菜诚实归类（草稿覆盖度说明）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-036",
+   "name": "杂菌菇豆腐汤",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "市售杂菌（金针菇/平菇/白玉菇等）+北豆腐，鲜味天然、少放盐",
+   "ingredients": [
+    {
+     "name": "杂菌菇（金针菇/平菇/白玉菇）",
+     "amount": "共300g"
+    },
+    {
+     "name": "北豆腐",
+     "amount": "250g"
+    },
+    {
+     "name": "姜丝",
+     "amount": "少许"
+    },
+    {
+     "name": "盐",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "杂菌去根撕开洗净，豆腐切块",
+    "姜丝水煮开，下菌菇煮 3 分钟",
+    "下豆腐再煮 3 分钟，天然鲜味只加少许盐"
+   ],
+   "nutritionNote": "菌菇的天然鲜味让这道汤少盐也好喝。",
+   "cautions": [
+    "只用市售常见品种，不食野生菌（野生菌中毒无特效解药）",
+    "菌菇煮熟透"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "用户审定（2026-10-02）；野生菌红线与词典生食/中毒口径一致",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-037",
+   "name": "黄豆焖鸡腿",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "iron",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "黄豆+鸡腿动植物双蛋白，一锅焖",
+   "ingredients": [
+    {
+     "name": "鸡腿",
+     "amount": "2个（切块）"
+    },
+    {
+     "name": "黄豆",
+     "amount": "60g"
+    },
+    {
+     "name": "姜片",
+     "amount": "3片"
+    },
+    {
+     "name": "生抽/老抽",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "黄豆提前泡 4 小时以上",
+    "鸡腿块焯水去沫",
+    "全部材料入锅加水没过，煮开转小火焖 40 分钟至豆肉皆软"
+   ],
+   "nutritionNote": "动植物双蛋白一锅出，黄豆还带植物铁。",
+   "cautions": [
+    "黄豆提前泡4小时以上、彻底焖软",
+    "别久焖过 1.5h"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-038",
+   "name": "葱油鸡",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "白切思路淋葱油，鸡肉细嫩",
+   "ingredients": [
+    {
+     "name": "鸡腿或半只鸡",
+     "amount": "约500g"
+    },
+    {
+     "name": "小葱",
+     "amount": "1把"
+    },
+    {
+     "name": "姜",
+     "amount": "3片"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "整鸡/鸡腿冷水下锅加姜片，水开转小火浸煮 15~18 分钟至全熟",
+    "捞出过冰水斩件",
+    "小葱切碎，热油淋成葱油，加少许盐浇在鸡件上"
+   ],
+   "nutritionNote": "细嫩好消化的禽肉蛋白，比煎炸少油。",
+   "cautions": [
+    "葱油淋一半减油",
+    "鸡肉全熟（最厚处无血丝）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-039",
+   "name": "豉汁蒸排骨",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "豆豉蒸排骨，粤式家常",
+   "ingredients": [
+    {
+     "name": "肋排",
+     "amount": "400g"
+    },
+    {
+     "name": "豆豉",
+     "amount": "1勺"
+    },
+    {
+     "name": "蒜末",
+     "amount": "1勺"
+    },
+    {
+     "name": "生抽/淀粉",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "排骨斩小段洗净沥干",
+    "豆豉蒜末剁细，与生抽淀粉拌入排骨腌 20 分钟",
+    "水开上锅大火蒸 25 分钟至骨肉易离骨"
+   ],
+   "nutritionNote": "粤式蒸菜：不上火、不油炸的蛋白做法。",
+   "cautions": [
+    "豆豉偏咸，酱量减半（钠考量）",
+    "蒸至骨肉离骨全熟"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-040",
+   "name": "焗乳鸽",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "乳鸽肉细嫩易消化",
+   "ingredients": [
+    {
+     "name": "乳鸽",
+     "amount": "1只"
+    },
+    {
+     "name": "姜片",
+     "amount": "3片"
+    },
+    {
+     "name": "生抽/蚝油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "乳鸽处理干净，调料内外抹匀腌 30 分钟",
+    "砂锅少油爆香姜片，乳鸽入锅",
+    "中小火加盖焗 20 分钟，中途翻面至全熟"
+   ],
+   "nutritionNote": "乳鸽肉细嫩、结缔组织少，好消化的禽肉。",
+   "cautions": [
+    "务必焗至全熟（大腿最厚处无血水）",
+    "鸽肉无孕期禁忌依据"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-041",
+   "name": "全麦馒头+无糖豆浆",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "breakfast"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "carb",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "快手组合：全麦馒头+现煮无糖豆浆",
+   "ingredients": [
+    {
+     "name": "全麦馒头",
+     "amount": "1个"
+    },
+    {
+     "name": "无糖豆浆",
+     "amount": "300ml"
+    }
+   ],
+   "steps": [
+    "豆浆彻底煮沸",
+    "馒头加热（蒸 5 分钟或微波）",
+    "同食即成"
+   ],
+   "nutritionNote": "五分钟完成的早餐三角两角：全麦碳水+植物蛋白。",
+   "cautions": [
+    "豆浆彻底煮沸（词典\"豆浆\"条目）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；早餐三角口径",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-042",
+   "name": "早茶拼盘（虾饺/烧卖）",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "breakfast",
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "喝早茶场景：全熟虾馅没问题",
+   "ingredients": [
+    {
+     "name": "虾饺",
+     "amount": "3~4只"
+    },
+    {
+     "name": "烧卖",
+     "amount": "3~4只"
+    },
+    {
+     "name": "茶",
+     "amount": "一壶"
+    }
+   ],
+   "steps": [
+    "茶楼或预制品彻底蒸热（中心热透）",
+    "配一壶淡茶慢慢叹"
+   ],
+   "nutritionNote": "早茶蛋白点心，全熟虾馅安全。",
+   "cautions": [
+    "适量——虾饺烧卖钠偏高、烧卖糯米+肥馅",
+    "配淡茶（浓茶抑制铁吸收）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "curated",
+   "source": "通行早茶场景整理；外食适量口径",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-043",
+   "name": "香菇滑鸡",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "vitd",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "干香菇（晒制生成维生素D）+鸡腿肉滑炒",
+   "ingredients": [
+    {
+     "name": "干香菇",
+     "amount": "6朵"
+    },
+    {
+     "name": "鸡腿肉",
+     "amount": "300g"
+    },
+    {
+     "name": "姜丝",
+     "amount": "适量"
+    },
+    {
+     "name": "生抽/淀粉/蚝油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "干香菇泡发切片，泡菇水留用",
+    "鸡腿肉切块，生抽淀粉抓腌 15 分钟",
+    "热锅下姜丝香菇煸香，下鸡块滑炒至全熟，加少许泡菇水收汁"
+   ],
+   "nutritionNote": "干香菇晒制生成维D——食物里少有的维D 来源。",
+   "cautions": [
+    "维D食物来源天然少，同时靠日晒（条目口径）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；干香菇维D 口径见营养素条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-044",
+   "name": "花菇炒猪颈肉",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "vitd",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "干花菇（晒制生成维生素D）+猪颈肉",
+   "ingredients": [
+    {
+     "name": "干花菇",
+     "amount": "5朵"
+    },
+    {
+     "name": "猪颈肉",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    },
+    {
+     "name": "生抽",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "花菇提前泡发切片",
+    "猪颈肉切薄片",
+    "少油煸蒜片，下花菇炒出香味，再下肉片大火炒至全熟调味"
+   ],
+   "nutritionNote": "花菇=厚肉冬菇干品，晒制维D，同干香菇逻辑。",
+   "cautions": [
+    "猪颈肉偏肥，油自然少放",
+    "菌菇炒熟透"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-045",
+   "name": "玉米胡萝卜马蹄排骨汤",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "vita",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "β-胡萝卜素是维A 安全通道（植物源不受上限约束），加马蹄更清甜，老火汤经典",
+   "ingredients": [
+    {
+     "name": "排骨",
+     "amount": "300g"
+    },
+    {
+     "name": "玉米",
+     "amount": "1根"
+    },
+    {
+     "name": "胡萝卜",
+     "amount": "1根"
+    },
+    {
+     "name": "马蹄",
+     "amount": "8个"
+    },
+    {
+     "name": "姜片",
+     "amount": "2片"
+    }
+   ],
+   "steps": [
+    "排骨焯水去沫",
+    "全部材料加水煮开，转小火 60 分钟",
+    "少盐调味，撇去浮油"
+   ],
+   "nutritionNote": "胡萝卜素走植物通道，按需转化不蓄积，孕期维A 安全方案。",
+   "cautions": [
+    "别久煲（≤1.5h）",
+    "玉米带甜控糖期少吃玉米段",
+    "浮油撇掉",
+    "马蹄去皮煮熟（水生植物生食有寄生虫风险，挂词典生食蔬果条目）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；由\"胡萝卜玉米排骨汤\"升级（2026-10-02 用户审定）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-046",
+   "name": "莲藕排骨汤",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "carb",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "莲藕维C+淀粉，炖汤南方经典",
+   "ingredients": [
+    {
+     "name": "排骨",
+     "amount": "300g"
+    },
+    {
+     "name": "莲藕",
+     "amount": "400g"
+    },
+    {
+     "name": "姜片",
+     "amount": "2片"
+    },
+    {
+     "name": "盐",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "排骨焯水，莲藕去皮切滚刀块",
+    "全部材料加水煮开转小火 60 分钟",
+    "少盐调味"
+   ],
+   "nutritionNote": "粉藕带淀粉，汤菜两吃顶半份主食。",
+   "cautions": [
+    "莲藕淀粉不低，控糖期计入主食量",
+    "别久煲（≤1.5h）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-047",
+   "name": "霸王花猪骨汤",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "粤式清润汤（控时长版）：霸王花+猪骨+蜜枣",
+   "ingredients": [
+    {
+     "name": "干霸王花",
+     "amount": "50g"
+    },
+    {
+     "name": "猪骨",
+     "amount": "400g"
+    },
+    {
+     "name": "蜜枣",
+     "amount": "1个"
+    },
+    {
+     "name": "姜片",
+     "amount": "2片"
+    }
+   ],
+   "steps": [
+    "干霸王花泡发 20 分钟，反复捏洗去碎屑",
+    "猪骨焯水",
+    "全部材料加水煮开转小火 60 分钟，少盐"
+   ],
+   "nutritionNote": "清润不油腻的粤式经典，蜜枣给一点天然甜。",
+   "cautions": [
+    "别久煲（≤1.5h）",
+    "吃汤渣（肉才是蛋白主力）",
+    "后放盐"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行粤式汤水整理；喝汤口径（草稿第三节）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-048",
+   "name": "木瓜花生鱼尾汤",
+   "stages": [
+    "mid1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "dha",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "熟木瓜+花生+鲩鱼尾，温润家常汤",
+   "ingredients": [
+    {
+     "name": "鲩鱼尾",
+     "amount": "1个（约300g）"
+    },
+    {
+     "name": "熟木瓜",
+     "amount": "半个"
+    },
+    {
+     "name": "花生",
+     "amount": "50g"
+    },
+    {
+     "name": "姜片",
+     "amount": "3片"
+    }
+   ],
+   "steps": [
+    "花生提前泡 1 小时；鱼尾煎至两面微黄",
+    "冲入开水，下花生姜片炖 30 分钟",
+    "下木瓜块再炖 15 分钟，少盐"
+   ],
+   "nutritionNote": "温润下奶口碑汤，孕期当常规蛋白汤喝。",
+   "cautions": [
+    "鲩鱼尾 DHA 不及海鱼（DHA 主力看海鱼池）",
+    "用熟木瓜——\"青木瓜\"顾虑仅动物实验级，熟木瓜适量无碍（澄清口径）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行粤式汤水整理；木瓜澄清口径按词典式处理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-049",
+   "name": "彩椒炒牛肉",
+   "stages": [
+    "mid2",
+    "mid1",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "牛里脊+彩椒（维C促铁吸收的教科书搭配）",
+   "ingredients": [
+    {
+     "name": "牛里脊",
+     "amount": "200g"
+    },
+    {
+     "name": "红黄彩椒",
+     "amount": "各半个"
+    },
+    {
+     "name": "蒜",
+     "amount": "2瓣"
+    },
+    {
+     "name": "生抽/淀粉/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "牛里脊逆纹切薄片，生抽+淀粉抓匀腌 10 分钟",
+    "彩椒去籽切块，蒜切片",
+    "热锅少油，下牛肉片大火快炒至完全变色",
+    "余油煸蒜，下彩椒炒至断生，回锅牛肉翻匀出锅"
+   ],
+   "nutritionNote": "牛肉富含血红素铁，彩椒的维C 可将铁吸收率提高数倍——补铁餐的经典搭配。",
+   "cautions": [
+    "牛肉务必炒至全熟（孕期不吃五分熟，见饮食安全词典）",
+    "本餐不配浓茶，鞣酸抑制铁吸收"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；营养关联标注依据《中国居民膳食指南》孕期分册",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-050",
+   "name": "猪肝菠菜汤",
+   "stages": [
+    "mid2",
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "猪肝薄片汆烫+菠菜",
+   "ingredients": [
+    {
+     "name": "猪肝",
+     "amount": "50g（约2~3片）"
+    },
+    {
+     "name": "菠菜",
+     "amount": "150g"
+    },
+    {
+     "name": "姜/香油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "猪肝流水冲净切薄片，清水再泡 10 分钟去血水",
+    "菠菜焯水 10 秒捞出（去草酸）",
+    "姜片水烧开，下猪肝片汆至完全变色（无血丝）",
+    "下菠菜滚 10 秒，点香油出锅"
+   ],
+   "nutritionNote": "猪肝是铁和叶酸的浓缩来源，一道汤同时补两样；但维A 含量极高，靠频率控制安全。",
+   "cautions": [
+    "猪肝类合计每周≤1~2次、每次小块（与猪肝瘦肉杂粮粥合计计频；维A 上限，见饮食安全词典\"动物肝脏\"）",
+    "猪肝必须彻底汆熟，颜色完全变深无血丝"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "curated",
+   "source": "通行家常做法整理；频率上限与饮食安全词典\"动物肝脏\"条目同源",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-051",
+   "name": "鸭血豆腐汤",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鸭血是血红素铁优质来源",
+   "ingredients": [
+    {
+     "name": "鸭血",
+     "amount": "200g"
+    },
+    {
+     "name": "北豆腐",
+     "amount": "200g"
+    },
+    {
+     "name": "姜丝/葱花",
+     "amount": "适量"
+    },
+    {
+     "name": "盐/香油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鸭血切厚片，沸水焯 30 秒定型",
+    "姜丝水煮开，下豆腐块煮 3 分钟",
+    "下鸭血再煮 3 分钟至全熟，少盐点香油"
+   ],
+   "nutritionNote": "血红素铁吸收率远高于植物铁，配上豆腐钙。",
+   "cautions": [
+    "鸭血务必来自正规渠道且彻底煮熟"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-052",
+   "name": "杂粮饭卤牛肉",
+   "stages": [
+    "mid2",
+    "mid1",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "carb",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "杂粮饭替代白米饭+卤牛腱切片",
+   "ingredients": [
+    {
+     "name": "卤牛腱",
+     "amount": "150g"
+    },
+    {
+     "name": "大米",
+     "amount": "60g"
+    },
+    {
+     "name": "小米/糙米/燕麦",
+     "amount": "共60g"
+    },
+    {
+     "name": "卤料（八角/桂皮/生抽）",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "杂粮提前泡 30 分钟，与大米同煮成杂粮饭",
+    "牛腱冷水下锅焯水，加卤料小火卤 60 分钟",
+    "牛腱切薄片盖在杂粮饭上"
+   ],
+   "nutritionNote": "补铁+低GI 主食一份打包，控糖期与补铁期通吃。",
+   "cautions": [
+    "粗细搭配控GI，为晚期打底"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；带饭口径（草稿第三节）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-053",
+   "name": "黑胡椒牛肉杏鲍菇",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "牛肉铁+杏鲍菇饱腹纤维",
+   "ingredients": [
+    {
+     "name": "牛里脊",
+     "amount": "200g"
+    },
+    {
+     "name": "杏鲍菇",
+     "amount": "200g"
+    },
+    {
+     "name": "黑胡椒",
+     "amount": "适量"
+    },
+    {
+     "name": "蒜片/生抽/蚝油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "牛肉逆纹切片腌制；杏鲍菇手撕成条",
+    "杏鲍菇干锅煸至微黄出香",
+    "下油爆香蒜片，牛肉大火炒至全熟，回锅杏鲍菇，黑椒调味翻匀"
+   ],
+   "nutritionNote": "杏鲍菇厚实耐嚼，一半\"肉感\"一半纤维。",
+   "cautions": [
+    "牛肉全熟",
+    "黑椒按肠胃耐受"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-054",
+   "name": "鹿茸菇炒牛肉",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鹿茸菇是食用菌（与药材鹿茸无关）配牛肉",
+   "ingredients": [
+    {
+     "name": "鲜鹿茸菇",
+     "amount": "200g"
+    },
+    {
+     "name": "牛里脊",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    },
+    {
+     "name": "生抽/淀粉",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鹿茸菇去根洗净撕条",
+    "牛肉切片腌制 10 分钟",
+    "热锅煸蒜，下鹿茸菇炒 2 分钟至熟透",
+    "下牛肉大火快炒至全熟，调味出锅"
+   ],
+   "nutritionNote": "鹿茸菇脆嫩挂汁，和牛肉是口感互补的一对。",
+   "cautions": [
+    "鹿茸菇是食用菌（与药材鹿茸无关）",
+    "菌菇炒熟透"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；\"与药材无关\"说明防误解",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-055",
+   "name": "花菇炒牛肉",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "vitd",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "干花菇维D+牛肉铁",
+   "ingredients": [
+    {
+     "name": "干花菇",
+     "amount": "5朵"
+    },
+    {
+     "name": "牛里脊",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "2瓣"
+    },
+    {
+     "name": "生抽/淀粉",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "花菇提前泡发切片（泡菇水留用）",
+    "牛肉切片腌制 10 分钟",
+    "热锅煸蒜和花菇出香，下牛肉大火炒至全熟，少许泡菇水收汁"
+   ],
+   "nutritionNote": "铁+维D 一道菜双通道，晒制花菇贡献维D。",
+   "cautions": [
+    "花菇提前泡发、炒熟",
+    "牛肉全熟"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-056",
+   "name": "油麦菜炒牛肉",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "绿叶菜轮换主力：油麦菜+牛肉",
+   "ingredients": [
+    {
+     "name": "油麦菜",
+     "amount": "300g"
+    },
+    {
+     "name": "牛里脊",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    },
+    {
+     "name": "生抽/淀粉",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "油麦菜洗净切段；牛肉切片腌制",
+    "牛肉大火快炒至全熟盛出",
+    "余油煸蒜，下油麦菜大火炒 40 秒，回锅牛肉翻匀出锅"
+   ],
+   "nutritionNote": "铁和叶酸同盘，绿叶菜轮换的主力组合。",
+   "cautions": [
+    "大火快炒（油麦菜易出水）",
+    "牛肉全熟"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-057",
+   "name": "番茄土豆牛尾汤",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "牛尾+番茄（维C促铁）+土豆，汤肉两吃",
+   "ingredients": [
+    {
+     "name": "牛尾",
+     "amount": "400g"
+    },
+    {
+     "name": "番茄",
+     "amount": "2个"
+    },
+    {
+     "name": "土豆",
+     "amount": "1个"
+    },
+    {
+     "name": "姜片",
+     "amount": "2片"
+    }
+   ],
+   "steps": [
+    "牛尾焯水去沫",
+    "牛尾+姜片加水煮开转小火 60 分钟",
+    "下番茄土豆块再煮 20 分钟至软，撇浮油少盐"
+   ],
+   "nutritionNote": "番茄的维C 帮牛尾的铁吸收，汤肉两吃。",
+   "cautions": [
+    "牛尾油脂多撇浮油",
+    "别久煲（≤1.5h）"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；喝汤口径",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-058",
+   "name": "猪肝瘦肉杂粮粥",
+   "stages": [
+    "mid2",
+    "early",
+    "mid1"
+   ],
+   "mealType": [
+    "breakfast"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "广东早餐王牌的杂粮版：大米+小米+糙米打底，猪肝薄片+瘦肉末入粥，补铁接进早餐",
+   "ingredients": [
+    {
+     "name": "大米",
+     "amount": "50g"
+    },
+    {
+     "name": "小米",
+     "amount": "30g"
+    },
+    {
+     "name": "糙米",
+     "amount": "20g"
+    },
+    {
+     "name": "猪肝",
+     "amount": "40g"
+    },
+    {
+     "name": "瘦肉末",
+     "amount": "50g"
+    },
+    {
+     "name": "姜丝",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "杂粮提前泡 30 分钟煮成粥底",
+    "猪肝冲净切薄片泡水去血水，瘦肉末淀粉抓匀",
+    "粥好前 3 分钟下肉末和猪肝片，煮至完全变色无血丝，点姜丝少盐"
+   ],
+   "nutritionNote": "把 mid2 以后的补铁任务接进早餐，杂粮底控升糖。",
+   "cautions": [
+    "猪肝类合计每周≤1~2次（与猪肝菠菜汤合计计频）",
+    "猪肝汆熟无血丝",
+    "杂粮提前泡、煮软烂"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "curated",
+   "source": "通行粤式早餐整理；杂粮底升级（2026-10-02 用户审定）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-059",
+   "name": "牛肉汤河粉",
+   "stages": [
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "breakfast",
+    "lunch"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "carb",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "粉店经典在家版：牛肉薄片烫熟+河粉",
+   "ingredients": [
+    {
+     "name": "河粉",
+     "amount": "200g"
+    },
+    {
+     "name": "牛里脊",
+     "amount": "150g"
+    },
+    {
+     "name": "豆芽/生菜",
+     "amount": "适量"
+    },
+    {
+     "name": "清汤/葱花",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "牛肉逆纹切极薄片，淀粉抓匀",
+    "清汤煮开，河粉烫 30 秒捞碗",
+    "牛肉片入汤烫至完全变色（约30秒）铺粉上，浇汤撒葱花配豆芽生菜"
+   ],
+   "nutritionNote": "一碗兼顾铁与主食，早餐午餐两用。",
+   "cautions": [
+    "牛肉全熟",
+    "汤少喝（钠集中在汤里）",
+    "河粉是精米制品升糖快，控糖期少粉、多肉多菜"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行粉店做法在家版整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-060",
+   "name": "蒜蓉豉汁焗鲈鱼",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鲈鱼低汞高DHA，豉汁焗入味",
+   "ingredients": [
+    {
+     "name": "鲈鱼",
+     "amount": "1条（约500g）"
+    },
+    {
+     "name": "豆豉",
+     "amount": "1勺"
+    },
+    {
+     "name": "蒜末",
+     "amount": "1勺"
+    },
+    {
+     "name": "生抽/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鲈鱼划刀，豆豉蒜末生抽抹匀腌 15 分钟",
+    "砂锅少油爆香，鱼入锅",
+    "中小火加盖焗 12 分钟（中途晃锅防粘）"
+   ],
+   "nutritionNote": "豉汁版清蒸的浓味替换，DHA 同源。",
+   "cautions": [
+    "焗至筷子能轻松插入鱼背最厚处（全熟判断）",
+    "豉汁偏咸少淋"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-061",
+   "name": "香煎鳕鱼配西兰花",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鳕鱼低汞，少油煎+焯西兰花",
+   "ingredients": [
+    {
+     "name": "真鳕鱼柳",
+     "amount": "250g"
+    },
+    {
+     "name": "西兰花",
+     "amount": "200g"
+    },
+    {
+     "name": "柠檬",
+     "amount": "2片"
+    },
+    {
+     "name": "盐/黑椒/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鳕鱼柳吸干水，少盐略腌",
+    "少油中火每面煎 3 分钟至全熟（变白可拆）",
+    "西兰花焯 1 分钟摆盘，挤柠檬汁"
+   ],
+   "nutritionNote": "低汞白肉鱼+维C 十字花科，一道清爽的 DHA 晚餐。",
+   "cautions": [
+    "全熟",
+    "选真鳕（大西洋鳕/太平洋鳕）——银鳕鱼汞偏高限量、油鱼常冒充鳕鱼"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；真假鳕鱼辨别说明随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-062",
+   "name": "清蒸黄花鱼",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "黄花鱼低汞家常，清蒸保DHA",
+   "ingredients": [
+    {
+     "name": "黄花鱼",
+     "amount": "1条（约400g）"
+    },
+    {
+     "name": "姜丝/葱丝",
+     "amount": "适量"
+    },
+    {
+     "name": "蒸鱼豉油",
+     "amount": "1勺"
+    }
+   ],
+   "steps": [
+    "鱼处理干净划刀塞姜丝",
+    "水开大火蒸 8~9 分钟",
+    "弃汁铺葱丝，热油+豉油即成"
+   ],
+   "nutritionNote": "小黄花便宜当造，蒸制最大限度保留 DHA。",
+   "cautions": [
+    "蒸至筷子插入鱼背最厚处无阻力",
+    "选小黄花更嫩"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；鱼类选择口径（草稿第三节）",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-063",
+   "name": "红烧鲳鱼",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鲳鱼低汞肉厚刺少，红烧下饭",
+   "ingredients": [
+    {
+     "name": "鲳鱼",
+     "amount": "1条（约400g）"
+    },
+    {
+     "name": "姜片/蒜片",
+     "amount": "适量"
+    },
+    {
+     "name": "生抽/老抽/糖",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "鲳鱼划刀，煎至两面金黄",
+    "加姜蒜和调料、半碗水，中火收 8 分钟",
+    "收汁至浓稠挂鱼身"
+   ],
+   "nutritionNote": "刺少肉厚的低汞海鱼，红烧最下饭的做法。",
+   "cautions": [
+    "彻底烧熟",
+    "酱汁偏咸少淋拌饭"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-064",
+   "name": "清蒸鳜鱼",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "与清蒸鲈鱼同法，鳜鱼蒜瓣肉细嫩",
+   "ingredients": [
+    {
+     "name": "鳜鱼",
+     "amount": "1条（约600g）"
+    },
+    {
+     "name": "姜丝/葱丝",
+     "amount": "适量"
+    },
+    {
+     "name": "蒸鱼豉油",
+     "amount": "1勺"
+    }
+   ],
+   "steps": [
+    "鳜鱼处理干净（注意背鳍尖刺），鱼腹黑膜刮净",
+    "水开大火蒸 10 分钟",
+    "弃汁铺葱丝，热油+豉油即成"
+   ],
+   "nutritionNote": "蒜瓣肉细嫩少刺，宴客级的家常蒸鱼。",
+   "cautions": [
+    "全熟",
+    "鱼腹黑膜刮净（腥味来源）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-065",
+   "name": "酱焖多宝鱼",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "多宝鱼低汞胶质厚，酱焖家常",
+   "ingredients": [
+    {
+     "name": "多宝鱼",
+     "amount": "1条（约500g）"
+    },
+    {
+     "name": "黄豆酱",
+     "amount": "1勺"
+    },
+    {
+     "name": "姜片/蒜片",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "多宝鱼处理干净切大块",
+    "少油煸姜蒜，下黄豆酱炒香",
+    "下鱼块加半碗水中火焖 10 分钟至全熟"
+   ],
+   "nutritionNote": "胶质丰厚、蒜瓣肉，低汞清单里的口感型选手。",
+   "cautions": [
+    "全熟",
+    "少油少酱版（钠考量）",
+    "选正规渠道——\"避孕药\"传闻无据，控制点在药残（见鱼类选择口径）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；多宝鱼避孕药澄清见草稿鱼类选择口径",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-066",
+   "name": "小白菜炖豆腐",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "小白菜+北豆腐，清淡双补钙",
+   "ingredients": [
+    {
+     "name": "小白菜",
+     "amount": "300g"
+    },
+    {
+     "name": "北豆腐",
+     "amount": "300g"
+    },
+    {
+     "name": "姜丝",
+     "amount": "少许"
+    },
+    {
+     "name": "盐/香油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "豆腐切块可先煎微黄",
+    "姜丝水煮开下豆腐炖 5 分钟",
+    "下小白菜再煮 2 分钟，少盐点香油"
+   ],
+   "nutritionNote": "两种平民高钙食材的直球组合。",
+   "cautions": [
+    "北豆腐（卤水/石膏点）钙高于内酯豆腐"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-067",
+   "name": "麻酱豆角",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "芝麻酱钙+豆角，焯水凉拌",
+   "ingredients": [
+    {
+     "name": "豆角",
+     "amount": "300g"
+    },
+    {
+     "name": "芝麻酱",
+     "amount": "2勺"
+    },
+    {
+     "name": "蒜/生抽/醋",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "豆角撕去老筋掰段",
+    "沸水煮 4~5 分钟至彻底熟透（无豆腥）",
+    "捞出过凉，澥开的麻酱蒜汁拌匀"
+   ],
+   "nutritionNote": "麻酱给钙，豆角给叶酸和纤维。",
+   "cautions": [
+    "豆角必须彻底焯熟（没熟有毒——四季豆毒素）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；豆角熟透为安全铁律",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-068",
+   "name": "芥末炒芥兰",
+   "stages": [
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "calcium",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "芥兰是钙含量靠前的绿叶菜",
+   "ingredients": [
+    {
+     "name": "芥兰",
+     "amount": "350g"
+    },
+    {
+     "name": "芥末酱（或芥末油数滴）",
+     "amount": "少量"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    },
+    {
+     "name": "盐/油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "芥兰去老皮斜切段",
+    "热锅爆香蒜片，下芥兰大火炒 1 分半",
+    "少量芥末酱翻匀出锅（挂一点冲味即够）"
+   ],
+   "nutritionNote": "芥兰钙含量在常见绿叶菜里名列前茅。",
+   "cautions": [
+    "芥末少量调味（同词典\"辣椒\"口径：无禁忌依据，肠胃敏感减量）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；芥末口径挂词典\"辣椒\"澄清条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-069",
+   "name": "三文鱼豆腐味噌汤",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "三文鱼DHA含量高+北豆腐",
+   "ingredients": [
+    {
+     "name": "三文鱼",
+     "amount": "200g"
+    },
+    {
+     "name": "北豆腐",
+     "amount": "200g"
+    },
+    {
+     "name": "味噌",
+     "amount": "1勺"
+    },
+    {
+     "name": "海带芽/葱花",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "豆腐切块，水开煮 3 分钟",
+    "下三文鱼块煮 3~4 分钟至全熟（变色不透明）",
+    "关火溶入味噌（不煮沸保风味），撒海带芽葱花"
+   ],
+   "nutritionNote": "DHA 含量最高的常见鱼之一，豆腐补钙。",
+   "cautions": [
+    "三文鱼可熟食不可生食（刺身忌口，词典口径）",
+    "味噌本身咸，不再加盐"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-070",
+   "name": "核桃虾仁炒西芹",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "虾仁+核桃（ALA）+芹菜",
+   "ingredients": [
+    {
+     "name": "鲜虾仁",
+     "amount": "200g"
+    },
+    {
+     "name": "核桃仁",
+     "amount": "50g"
+    },
+    {
+     "name": "西芹",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "2瓣"
+    }
+   ],
+   "steps": [
+    "西芹撕筋切段焯水 30 秒",
+    "核桃仁小火焙香，虾仁炒至全红盛出",
+    "煸蒜下西芹炒 1 分钟，回锅虾仁核桃翻匀"
+   ],
+   "nutritionNote": "核桃给植物性 α-亚麻酸（体内少量转化 DHA），虾仁给蛋白。",
+   "cautions": [
+    "虾全熟",
+    "\"虾寒凉\"说法无据（词典澄清条目口径）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；挂词典\"全熟虾/全熟螃蟹\"澄清条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-071",
+   "name": "家常烧带鱼",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "带鱼DHA含量可观、家常易得",
+   "ingredients": [
+    {
+     "name": "带鱼",
+     "amount": "400g"
+    },
+    {
+     "name": "姜片/葱段",
+     "amount": "适量"
+    },
+    {
+     "name": "生抽/老抽/醋",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "带鱼切段，刮净表面（银鳞可保留——营养所在），吸干水",
+    "煎至两面金黄",
+    "加姜葱和调料、小半碗水中火烧 8 分钟收汁"
+   ],
+   "nutritionNote": "家常易得的 DHA 海鱼，银鳞含有机铬等成分不必刮太狠。",
+   "cautions": [
+    "正规来源、彻底烧熟",
+    "表面银鳞保留（营养所在）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-072",
+   "name": "甜豆炒鱿鱼虾梅花肉",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "dha",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鱿鱼+虾+猪肉三重蛋白，鱿鱼低汞",
+   "ingredients": [
+    {
+     "name": "鲜鱿鱼",
+     "amount": "150g"
+    },
+    {
+     "name": "虾仁",
+     "amount": "100g"
+    },
+    {
+     "name": "梅花肉",
+     "amount": "100g"
+    },
+    {
+     "name": "甜豆",
+     "amount": "150g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    }
+   ],
+   "steps": [
+    "鱿鱼去膜切花刀，梅花肉切薄片腌制",
+    "甜豆焯水 1 分钟（熟透）",
+    "煸蒜，下肉片炒熟，再下鱿鱼虾仁大火炒至鱿鱼卷起变白再炒透",
+    "下甜豆翻匀调味出锅"
+   ],
+   "nutritionNote": "一道菜三种蛋白来源，口感层次丰富。",
+   "cautions": [
+    "鱿鱼彻底煮熟（发卷变白后再炒透）",
+    "甜豆炒熟透（豆类没熟有毒素）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-073",
+   "name": "番茄炖牛腩",
+   "stages": [
+    "late1",
+    "mid2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    }
+   ],
+   "summary": "牛腩炖烂+番茄维C促铁",
+   "ingredients": [
+    {
+     "name": "牛腩",
+     "amount": "400g"
+    },
+    {
+     "name": "番茄",
+     "amount": "2个"
+    },
+    {
+     "name": "姜片",
+     "amount": "3片"
+    },
+    {
+     "name": "生抽/番茄酱",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "牛腩切块焯水去沫",
+    "番茄去皮切块炒出汁，下牛腩翻炒",
+    "加水没过，小火炖 60~90 分钟至软烂（高压锅 25 分钟）"
+   ],
+   "nutritionNote": "番茄的维C 把牛腩的铁\" escort\" 进身体。",
+   "cautions": [
+    "炖至全熟",
+    "别久煲过 1.5h（控嘌呤口径）"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-074",
+   "name": "白萝卜炖羊肉",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "羊肉血红素铁，白萝卜解腻",
+   "ingredients": [
+    {
+     "name": "羊肉",
+     "amount": "400g"
+    },
+    {
+     "name": "白萝卜",
+     "amount": "半根"
+    },
+    {
+     "name": "姜片/葱段",
+     "amount": "适量"
+    },
+    {
+     "name": "盐",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "羊肉切块焯水去沫",
+    "加姜片炖 60 分钟",
+    "下白萝卜块再炖 20 分钟至透明，少盐"
+   ],
+   "nutritionNote": "秋冬暖身的血红素铁来源。",
+   "cautions": [
+    "炖至完全熟烂",
+    "秋冬尤其合适"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-075",
+   "name": "酸菜牛肉煲",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "牛肉铁打底，酸菜开胃下饭",
+   "ingredients": [
+    {
+     "name": "牛腩/牛肉片",
+     "amount": "300g"
+    },
+    {
+     "name": "酸菜",
+     "amount": "150g"
+    },
+    {
+     "name": "姜片/蒜片",
+     "amount": "适量"
+    },
+    {
+     "name": "粉丝（可选）",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "酸菜冲洗挤水切段（减盐）",
+    "牛肉焯水或腌制后炒至变色",
+    "酸菜煸香，下牛肉加水焖 20 分钟，可选粉丝"
+   ],
+   "nutritionNote": "开胃下饭的铁来源；酸菜是风味不是营养。",
+   "cautions": [
+    "酸菜属腌制品（高钠）：涮洗减盐、少量配，不作常态"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；腌制口径见注意项",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-076",
+   "name": "青瓜炒牛肉",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    }
+   ],
+   "summary": "牛肉+青瓜清爽",
+   "ingredients": [
+    {
+     "name": "牛里脊",
+     "amount": "200g"
+    },
+    {
+     "name": "青瓜",
+     "amount": "1根"
+    },
+    {
+     "name": "蒜片",
+     "amount": "2瓣"
+    },
+    {
+     "name": "生抽/淀粉",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "牛肉切片腌制 10 分钟",
+    "青瓜切薄片（可略去瓤防出水）",
+    "牛肉大火炒至全熟，下青瓜快炒 30 秒出锅"
+   ],
+   "nutritionNote": "补铁配清爽瓜蔬，夏天不腻的牛肉做法。",
+   "cautions": [
+    "牛肉全熟"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-077",
+   "name": "生焗梅花肉",
+   "stages": [
+    "late1"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "iron",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "\"生焗\"是粤式烹法（生料入热砂锅焗熟），非生食",
+   "ingredients": [
+    {
+     "name": "梅花肉",
+     "amount": "350g"
+    },
+    {
+     "name": "姜片/葱段",
+     "amount": "适量"
+    },
+    {
+     "name": "生抽/蚝油/糖",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "梅花肉切厚片腌制 20 分钟",
+    "砂锅烧热少油爆香姜葱",
+    "肉片铺入，中小火加盖焗 12~15 分钟，中途翻面"
+   ],
+   "nutritionNote": "砂锅高温锁汁，粤式\"生焗\"是烹法名不是生食。",
+   "cautions": [
+    "焗至全熟无血水（猪肉全熟铁律）",
+    "酱汁偏咸少淋"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；\"生焗\"烹法定义随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-078",
+   "name": "荞麦面鸡丝沙拉",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "glucose",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "低GI荞麦面+鸡胸丝+蔬菜",
+   "ingredients": [
+    {
+     "name": "荞麦面",
+     "amount": "100g（干）"
+    },
+    {
+     "name": "鸡胸肉",
+     "amount": "150g"
+    },
+    {
+     "name": "黄瓜/胡萝卜丝",
+     "amount": "适量"
+    },
+    {
+     "name": "油醋汁",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "鸡胸冷水下锅煮 12 分钟至全熟，撕丝",
+    "荞麦面煮 4 分钟过凉",
+    "全部材料拌匀，油醋汁（不用沙拉酱）"
+   ],
+   "nutritionNote": "低GI 主食+高蛋白低脂，控体重期一碗中餐解决。",
+   "cautions": [
+    "少放沙拉酱（隐形热量）——默认油醋汁"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-079",
+   "name": "白灼虾+杂粮饭+拌黄瓜",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "glucose",
+     "weight": "primary"
+    },
+    {
+     "key": "zinc",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "一餐组合示例：低GI+优质蛋白+蔬菜",
+   "ingredients": [
+    {
+     "name": "鲜虾",
+     "amount": "250g"
+    },
+    {
+     "name": "杂粮饭",
+     "amount": "1碗"
+    },
+    {
+     "name": "黄瓜",
+     "amount": "1根"
+    },
+    {
+     "name": "姜蓉/生抽",
+     "amount": "蘸料少许"
+    }
+   ],
+   "steps": [
+    "虾水开下锅灼 2~3 分钟至全熟弯身",
+    "杂粮饭同煮（电饭煲）",
+    "黄瓜拍碎少盐拌"
+   ],
+   "nutritionNote": "一餐三角的标准模板：杂粮碳水+白灼蛋白+爽口蔬菜。",
+   "cautions": [
+    "虾全熟"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；一餐组合模板",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-080",
+   "name": "红豆糙米饭",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "glucose",
+     "weight": "primary"
+    },
+    {
+     "key": "folate",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "红豆+糙米低GI主食，替代白米饭",
+   "ingredients": [
+    {
+     "name": "糙米",
+     "amount": "80g"
+    },
+    {
+     "name": "红豆",
+     "amount": "40g"
+    }
+   ],
+   "steps": [
+    "红豆提前泡 4 小时（或隔夜冷藏泡）",
+    "与糙米同煮，水量比白米饭多两成",
+    "电饭煲杂粮模式即成"
+   ],
+   "nutritionNote": "低GI 主食模板，红豆还带叶酸。",
+   "cautions": [
+    "红豆提前泡、煮软（孕期消化）"
+   ],
+   "bentoFriendly": true,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-081",
+   "name": "冬瓜虾仁汤",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "glucose",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "低热量高蛋白，控体重期饱腹不超卡",
+   "ingredients": [
+    {
+     "name": "冬瓜",
+     "amount": "400g"
+    },
+    {
+     "name": "虾仁",
+     "amount": "150g"
+    },
+    {
+     "name": "姜丝",
+     "amount": "少许"
+    },
+    {
+     "name": "盐/香油",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "冬瓜切薄片",
+    "姜丝水煮开下冬瓜煮 4 分钟至透明",
+    "下虾仁煮 2 分钟至全熟，少盐点香油"
+   ],
+   "nutritionNote": "热量极低、水分蛋白高——控体重期的\"填肚子\"汤。",
+   "cautions": [
+    "虾仁全熟",
+    "少油少盐"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-082",
+   "name": "蒸红薯",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "glucose",
+     "weight": "primary"
+    },
+    {
+     "key": "carb",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "主食替代：比白米饭 GI 低，纤维+钾",
+   "ingredients": [
+    {
+     "name": "红薯",
+     "amount": "1个（约150g）"
+    }
+   ],
+   "steps": [
+    "红薯洗净不用去皮",
+    "蒸锅上汽蒸 15~20 分钟至筷子轻松插入",
+    "稍凉即食"
+   ],
+   "nutritionNote": "甜味的控糖友好主食替代（控量前提下）。",
+   "cautions": [
+    "一次半个拳头（中GI 控量）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-083",
+   "name": "莲子百合银耳羹",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "snack"
+   ],
+   "nutrients": [
+    {
+     "key": "glucose",
+     "weight": "primary"
+    },
+    {
+     "key": "carb",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "无糖/少糖版——控糖期想吃甜时的替代品",
+   "ingredients": [
+    {
+     "name": "干银耳",
+     "amount": "半朵"
+    },
+    {
+     "name": "莲子",
+     "amount": "30g"
+    },
+    {
+     "name": "鲜百合",
+     "amount": "半个（或干百合20g）"
+    },
+    {
+     "name": "冰糖",
+     "amount": "少许（可选）"
+    }
+   ],
+   "steps": [
+    "银耳撕小朵泡发 30 分钟",
+    "银耳+莲子加水小火煮 40 分钟至出胶",
+    "下百合再煮 10 分钟，无糖或微糖"
+   ],
+   "nutritionNote": "出胶的银耳给饱腹感，无糖甜品替代甜点。",
+   "cautions": [
+    "无糖或微糖",
+    "银耳莲子煮透",
+    "孕晚期便秘高发期友好"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-084",
+   "name": "牡蛎豆腐汤",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "zinc",
+     "weight": "primary"
+    },
+    {
+     "key": "calcium",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "牡蛎是锌密度最高的常见食材",
+   "ingredients": [
+    {
+     "name": "鲜牡蛎",
+     "amount": "150g"
+    },
+    {
+     "name": "北豆腐",
+     "amount": "200g"
+    },
+    {
+     "name": "姜丝/葱花",
+     "amount": "适量"
+    },
+    {
+     "name": "盐/香油",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "牡蛎轻轻冲洗（别搓烂）",
+    "姜丝水煮开下豆腐 3 分钟",
+    "下牡蛎煮 3~4 分钟至完全收缩熟透，少盐点香油"
+   ],
+   "nutritionNote": "锌密度冠军食材，配豆腐钙。",
+   "cautions": [
+    "必须彻底煮熟（生食禁忌，挂词典条目）",
+    "偶尔吃（锌条目口径：红肉坚果日常已覆盖大半）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；生食禁忌挂饮食安全词典",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-085",
+   "name": "木耳山药炒肉片",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "黑木耳+山药+瘦肉，孕晚期便秘高发期友好",
+   "ingredients": [
+    {
+     "name": "干木耳",
+     "amount": "10g"
+    },
+    {
+     "name": "山药",
+     "amount": "200g"
+    },
+    {
+     "name": "瘦肉片",
+     "amount": "150g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "2瓣"
+    }
+   ],
+   "steps": [
+    "木耳现泡（≤2小时）撕小朵；山药去皮切片泡水防氧化",
+    "肉片腌制，热锅炒至变色",
+    "下山药木耳炒 3 分钟至熟，调味出锅"
+   ],
+   "nutritionNote": "木耳纤维+山药黏液蛋白，便秘高发期的友好搭配。",
+   "cautions": [
+    "木耳现泡现吃（泡发≤2小时，久泡易产毒素）",
+    "山药削皮戴手套防痒"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；木耳久泡毒素为安全铁律",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-086",
+   "name": "木耳炒猪板筋",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "iron",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "木耳+板筋脆口，便秘高发期友好",
+   "ingredients": [
+    {
+     "name": "干木耳",
+     "amount": "10g"
+    },
+    {
+     "name": "猪板筋",
+     "amount": "250g"
+    },
+    {
+     "name": "青红椒",
+     "amount": "各半个"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    }
+   ],
+   "steps": [
+    "木耳现泡撕小朵；板筋撕去筋膜切条",
+    "板筋焯水 1 分钟",
+    "煸蒜下板筋炒 2 分钟，下木耳青椒同炒 2 分钟调味出锅"
+   ],
+   "nutritionNote": "脆口下饭的木耳组合。",
+   "cautions": [
+    "木耳现泡现吃（泡发≤2小时）",
+    "板筋撕净筋膜炒熟"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-087",
+   "name": "青瓜炒梅花肉",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "青瓜水分高热量低，控体重期的下饭肉菜",
+   "ingredients": [
+    {
+     "name": "梅花肉",
+     "amount": "250g"
+    },
+    {
+     "name": "青瓜",
+     "amount": "1根"
+    },
+    {
+     "name": "蒜片",
+     "amount": "2瓣"
+    },
+    {
+     "name": "生抽/淀粉",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "梅花肉切薄片腌制 10 分钟",
+    "热锅少油下肉片炒至全熟",
+    "下青瓜片快炒 30 秒出锅"
+   ],
+   "nutritionNote": "用高水分青瓜稀释肉菜的热量密度。",
+   "cautions": [
+    "梅花肉偏肥切薄片，配青瓜平衡"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；做法为通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-088",
+   "name": "杂菌菇炒猪颈肉",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "菌菇纤维+肉，饱腹感强",
+   "ingredients": [
+    {
+     "name": "杂菌菇（市售常见品种）",
+     "amount": "300g"
+    },
+    {
+     "name": "猪颈肉",
+     "amount": "200g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    },
+    {
+     "name": "生抽",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "菌菇去根撕开（只用市售常见品种）",
+    "猪颈肉切薄片",
+    "煸蒜下菌菇炒 3 分钟出香，下肉片炒至全熟调味"
+   ],
+   "nutritionNote": "菌菇给体积和纤维，肉给蛋白——饱腹感强的一盘。",
+   "cautions": [
+    "只用市售常见品种，不食野生菌",
+    "菌菇务必炒熟透",
+    "猪颈肉偏肥控量"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；野生菌红线随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-089",
+   "name": "生焗排骨",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "同\"生焗梅花肉\"烹法（生料焗熟，非生食）",
+   "ingredients": [
+    {
+     "name": "肋排",
+     "amount": "400g"
+    },
+    {
+     "name": "姜片/葱段",
+     "amount": "适量"
+    },
+    {
+     "name": "生抽/蚝油",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "排骨斩段腌制 20 分钟",
+    "砂锅爆香姜葱，排骨铺入",
+    "中小火加盖焗 20 分钟，中途翻面至脱骨全熟"
+   ],
+   "nutritionNote": "砂锅焗制的下饭蛋白。",
+   "cautions": [
+    "焗至全熟脱骨",
+    "酱汁高钠少淋"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；\"生焗\"烹法定义随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-090",
+   "name": "沙茶炒猪雪花",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "沙茶酱香浓郁下饭",
+   "ingredients": [
+    {
+     "name": "猪雪花肉",
+     "amount": "250g"
+    },
+    {
+     "name": "沙茶酱",
+     "amount": "1勺"
+    },
+    {
+     "name": "洋葱/青红椒",
+     "amount": "适量"
+    },
+    {
+     "name": "蒜片",
+     "amount": "2瓣"
+    }
+   ],
+   "steps": [
+    "雪花肉切薄片",
+    "煸蒜下洋葱，下肉片大火炒至全熟",
+    "沙茶酱一勺翻匀出锅"
+   ],
+   "nutritionNote": "风味型下饭菜，钠油需要自觉控制。",
+   "cautions": [
+    "沙茶酱高钠高油：一勺提味即可，控体重期尤其少"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；高钠复合酱口径随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-091",
+   "name": "酸咸菜炒梅花肉",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "咸酸开胃下饭",
+   "ingredients": [
+    {
+     "name": "梅花肉",
+     "amount": "250g"
+    },
+    {
+     "name": "酸咸菜",
+     "amount": "150g"
+    },
+    {
+     "name": "蒜片",
+     "amount": "3瓣"
+    },
+    {
+     "name": "糖",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "酸咸菜冲洗挤水切丝（减盐）",
+    "梅花肉切薄片煸至全熟",
+    "下酸咸菜同炒 1 分钟，少糖提鲜"
+   ],
+   "nutritionNote": "用腌菜的风味而非盐量开胃。",
+   "cautions": [
+    "酸咸菜属腌制品（高钠）：涮洗减盐、少量配"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；腌制口径随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-092",
+   "name": "南乳煎焗排骨",
+   "stages": [
+    "late2"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "南乳（红腐乳）煎焗，粤式风味",
+   "ingredients": [
+    {
+     "name": "肋排",
+     "amount": "400g"
+    },
+    {
+     "name": "南乳",
+     "amount": "1块"
+    },
+    {
+     "name": "姜片",
+     "amount": "3片"
+    },
+    {
+     "name": "少许糖/生抽",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "排骨斩段，南乳压碎与调料拌匀腌 30 分钟",
+    "少油把排骨两面煎黄",
+    "加 2 勺水加盖焗 15 分钟至全熟收汁"
+   ],
+   "nutritionNote": "发酵腐乳的风味型煎焗菜。",
+   "cautions": [
+    "南乳发酵调味可食但高钠：少量",
+    "煎焗至全熟"
+   ],
+   "bentoFriendly": false,
+   "rotation": "excluded",
+   "origin": "user-approved",
+   "source": "用户审定菜单（2026-10-01）；发酵高钠口径随条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  }
+ ]
+}
