@@ -1,10 +1,10 @@
 {
   "version": "1.1.27",
   "desc": "孕期食谱功能上线：92道菜谱+今日三餐轮换（5周段×11营养素，DRIs 2023核对，全非奶口径）",
-  "commit": "9dd47c7fd2e33e5acbefaed9abb7c43f34c05635",
+  "commit": "2e42112361955b9363d6556a39ce27f38a33bd01",
   "functions": [],
-  "releasedAt": "2026-10-02T01:23:51.413Z",
-  "baseline": "0c4f8e86ef6bada8b90abe77bad42947a092b8b5",
+  "releasedAt": "2026-10-02T01:34:37.541Z",
+  "baseline": "9dd47c7fd2e33e5acbefaed9abb7c43f34c05635",
   "closureReasons": {},
   "built": [
     "mc-collab",
