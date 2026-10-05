@@ -1,6 +1,6 @@
 {
- "version": "1.0",
- "generatedFrom": "docs/recipe-draft.md（2026-10-02 审定版：92 道/11 营养素/5 周段；DRIs 2023 核对+指南全文校验）",
+ "version": "1.2",
+ "generatedFrom": "docs/recipe-draft.md（2026-10-02 审定版：92 道/11 营养素/5 周段；DRIs 2023 核对+指南全文校验）；2026-10-05 v1.1 增补 dishRole（grain/protein/meat/veg/soup，组合推荐用角色标注，营养内容未动）；2026-10-05 v1.2 早餐缺口补菜 5 道审定落库（鲈鱼杂粮粥/瘦肉青菜杂粮粥/鸡蛋蔬菜软饼/水煮蛋/番茄蛋花汤）+ 3 道段扩容（蛋羹/馒头豆浆/核桃糊）——见 docs/RECIPE_BREAKFAST_GAP_DRAFT_2026-10-05.md",
  "nutrients": [
   {
    "key": "folate",
@@ -223,6 +223,7 @@
    "mealType": [
     "breakfast"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "folate",
@@ -288,6 +289,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "folate",
@@ -345,6 +347,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "folate",
@@ -402,6 +405,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -454,6 +458,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "folate",
@@ -510,6 +515,7 @@
    "mealType": [
     "snack"
    ],
+   "dishRole": "protein",
    "nutrients": [
     {
      "key": "folate",
@@ -571,6 +577,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -631,6 +638,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -691,6 +699,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -747,6 +756,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -804,6 +814,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -860,6 +871,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -921,6 +933,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -977,6 +990,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -1033,6 +1047,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "folate",
@@ -1085,6 +1100,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "iodine",
@@ -1147,6 +1163,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "iodine",
@@ -1201,6 +1218,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "carb",
@@ -1257,6 +1275,7 @@
     "breakfast",
     "snack"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "carb",
@@ -1305,6 +1324,7 @@
     "breakfast",
     "snack"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "carb",
@@ -1348,6 +1368,7 @@
    "mealType": [
     "snack"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "carb",
@@ -1394,6 +1415,7 @@
     "breakfast",
     "snack"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "carb",
@@ -1439,6 +1461,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -1496,6 +1519,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -1549,6 +1573,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -1606,6 +1631,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "calcium",
@@ -1663,6 +1689,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "protein",
@@ -1714,6 +1741,7 @@
    "mealType": [
     "breakfast"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "protein",
@@ -1769,12 +1797,15 @@
    "id": "r-029",
    "name": "虾皮蒸蛋羹",
    "stages": [
-    "mid1"
+    "mid1",
+    "mid2",
+    "late1"
    ],
    "mealType": [
     "breakfast",
     "snack"
    ],
+   "dishRole": "protein",
    "nutrients": [
     {
      "key": "calcium",
@@ -1832,6 +1863,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "calcium",
@@ -1887,6 +1919,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "calcium",
@@ -1940,11 +1973,13 @@
    "stages": [
     "mid1",
     "mid2",
-    "late1"
+    "late1",
+    "late2"
    ],
    "mealType": [
     "snack"
    ],
+   "dishRole": "protein",
    "nutrients": [
     {
      "key": "calcium",
@@ -1994,6 +2029,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "calcium",
@@ -2046,6 +2082,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "calcium",
@@ -2103,6 +2140,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "calcium",
@@ -2155,6 +2193,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "calcium",
@@ -2212,6 +2251,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -2269,6 +2309,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -2322,6 +2363,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -2375,6 +2417,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -2418,11 +2461,15 @@
    "id": "r-041",
    "name": "全麦馒头+无糖豆浆",
    "stages": [
-    "mid1"
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
    ],
    "mealType": [
     "breakfast"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "protein",
@@ -2471,6 +2518,7 @@
     "breakfast",
     "snack"
    ],
+   "dishRole": "protein",
    "nutrients": [
     {
      "key": "protein",
@@ -2519,6 +2567,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "vitd",
@@ -2575,6 +2624,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "vitd",
@@ -2632,6 +2682,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "vita",
@@ -2695,6 +2746,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "carb",
@@ -2752,6 +2804,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "protein",
@@ -2806,6 +2859,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "protein",
@@ -2865,6 +2919,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -2924,6 +2979,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "iron",
@@ -2978,6 +3034,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "iron",
@@ -3037,6 +3094,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -3093,6 +3151,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -3150,6 +3209,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -3208,6 +3268,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -3265,6 +3326,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -3323,6 +3385,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "iron",
@@ -3381,6 +3444,7 @@
    "mealType": [
     "breakfast"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "iron",
@@ -3449,6 +3513,7 @@
     "breakfast",
     "lunch"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "iron",
@@ -3508,6 +3573,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -3566,6 +3632,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -3624,6 +3691,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -3678,6 +3746,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -3732,6 +3801,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -3786,6 +3856,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -3840,6 +3911,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "calcium",
@@ -3896,6 +3968,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "calcium",
@@ -3948,6 +4021,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "veg",
    "nutrients": [
     {
      "key": "calcium",
@@ -4004,6 +4078,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "dha",
@@ -4061,6 +4136,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -4118,6 +4194,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "dha",
@@ -4171,6 +4248,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -4234,6 +4312,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -4287,6 +4366,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -4344,6 +4424,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -4400,6 +4481,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -4452,6 +4534,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -4505,6 +4588,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "glucose",
@@ -4561,6 +4645,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "glucose",
@@ -4617,6 +4702,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "glucose",
@@ -4665,6 +4751,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "glucose",
@@ -4721,6 +4808,7 @@
    "mealType": [
     "snack"
    ],
+   "dishRole": "grain",
    "nutrients": [
     {
      "key": "glucose",
@@ -4764,6 +4852,7 @@
    "mealType": [
     "snack"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "glucose",
@@ -4822,6 +4911,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "soup",
    "nutrients": [
     {
      "key": "zinc",
@@ -4879,6 +4969,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -4936,6 +5027,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "iron",
@@ -4993,6 +5085,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -5045,6 +5138,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -5099,6 +5193,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -5148,6 +5243,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -5200,6 +5296,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -5252,6 +5349,7 @@
     "lunch",
     "dinner"
    ],
+   "dishRole": "meat",
    "nutrients": [
     {
      "key": "protein",
@@ -5293,6 +5391,269 @@
    "source": "用户审定菜单（2026-10-01）；发酵高钠口径随条目",
    "sourceUrl": "",
    "reviewedAt": "2026-10-02",
+   "version": "1.0"
+  },
+  {
+   "id": "r-093",
+   "name": "鲈鱼杂粮粥",
+   "stages": [
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "breakfast"
+   ],
+   "dishRole": "grain",
+   "nutrients": [
+    {
+     "key": "dha",
+     "weight": "primary"
+    },
+    {
+     "key": "protein",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "鲈鱼低汞高DHA切薄片滚粥，杂粮打底缓释碳水（晚孕控糖友好）",
+   "ingredients": [
+    {
+     "name": "杂粮米（大米+小米+燕麦）",
+     "amount": "80g"
+    },
+    {
+     "name": "鲈鱼片（无刺切段）",
+     "amount": "60g"
+    },
+    {
+     "name": "姜丝",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "杂粮米提前浸泡半小时，加水煮至开花",
+    "下鲈鱼片与姜丝，滚2~3分钟至鱼片全熟不透明",
+    "极少盐或不再加盐，连粥趁热吃"
+   ],
+   "nutritionNote": "一碗同时落DHA与优质蛋白；杂粮缓释碳水对控糖期友好。鱼类现做8分钟内完成，适合早餐场景。",
+   "cautions": [
+    "鱼片必须全熟（不透明、轻拨即散）",
+    "选无刺鲈鱼片，降低晨间处理成本"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理；鱼类口径同饮食安全词典低汞鱼类条目",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-05",
+   "version": "1.0"
+  },
+  {
+   "id": "r-094",
+   "name": "瘦肉青菜杂粮粥",
+   "stages": [
+    "mid2",
+    "late1"
+   ],
+   "mealType": [
+    "breakfast"
+   ],
+   "dishRole": "grain",
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "iron",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "纯瘦肉末+青菜的日常杂粮粥，与菠菜版（early）、猪肝版（频率受限）明确区分",
+   "ingredients": [
+    {
+     "name": "杂粮米（大米+小米+糙米）",
+     "amount": "80g"
+    },
+    {
+     "name": "猪里脊末",
+     "amount": "50g"
+    },
+    {
+     "name": "青菜碎（菜心/小白菜）",
+     "amount": "一把"
+    },
+    {
+     "name": "淀粉",
+     "amount": "少许"
+    }
+   ],
+   "steps": [
+    "杂粮米加水煮至开花",
+    "瘦肉末抓少许淀粉拌匀，分散下入并搅散防结团",
+    "肉末完全变色后下青菜碎滚1分钟起锅"
+   ],
+   "nutritionNote": "瘦肉末提供优质蛋白与血红素铁（不冒充主打——段内铁由午餐主菜命中）；青菜最后下，减少叶酸热损失。",
+   "cautions": [
+    "肉末必须完全变色全熟",
+    "青菜最后下锅，久煮叶酸损失大"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-05",
+   "version": "1.0"
+  },
+  {
+   "id": "r-095",
+   "name": "鸡蛋蔬菜软饼",
+   "stages": [
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "breakfast"
+   ],
+   "dishRole": "grain",
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    },
+    {
+     "key": "vita",
+     "weight": "secondary"
+    }
+   ],
+   "summary": "面粉+鸡蛋+蔬菜丝一张饼齐\"主食+蛋白+果蔬\"三角，少油小火全熟",
+   "ingredients": [
+    {
+     "name": "面粉",
+     "amount": "60g"
+    },
+    {
+     "name": "鸡蛋",
+     "amount": "1个"
+    },
+    {
+     "name": "胡萝卜丝/西葫芦丝",
+     "amount": "50g"
+    },
+    {
+     "name": "水",
+     "amount": "适量"
+    }
+   ],
+   "steps": [
+    "面粉+鸡蛋+蔬菜丝加水调成流动糊",
+    "不粘锅少油小火，摊至两面金黄全熟（切开无湿芯）"
+   ],
+   "nutritionNote": "一道同时覆盖早餐三角；胡萝卜丝走β-胡萝卜素通道。不放孕早期（孕吐期少油煎）。",
+   "cautions": [
+    "小火全熟：面糊内部无湿芯",
+    "少油原则，不反复加油煎炸"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-05",
+   "version": "1.0"
+  },
+  {
+   "id": "r-096",
+   "name": "水煮蛋（全熟）",
+   "stages": [
+    "early",
+    "mid1",
+    "mid2",
+    "late1",
+    "late2"
+   ],
+   "mealType": [
+    "breakfast",
+    "snack"
+   ],
+   "dishRole": "protein",
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "早餐蛋白角与加餐两用的最简解——指南口径孕程每天1个鸡蛋",
+   "ingredients": [
+    {
+     "name": "鸡蛋",
+     "amount": "1个"
+    }
+   ],
+   "steps": [
+    "鸡蛋冷水下锅",
+    "水沸后转小火再煮8分钟",
+    "过凉水剥壳，蛋黄完全凝固"
+   ],
+   "nutritionNote": "优质蛋白的最简来源；早餐三角\"蛋白角\"与加餐两用，全程适用。",
+   "cautions": [
+    "全熟口径：蛋黄完全凝固；溏心蛋孕期 avoid（同饮食安全词典口径）"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行做法；鸡蛋口径同饮食安全词典",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-05",
+   "version": "1.0"
+  },
+  {
+   "id": "r-097",
+   "name": "番茄蛋花汤",
+   "stages": [
+    "early"
+   ],
+   "mealType": [
+    "lunch",
+    "dinner"
+   ],
+   "dishRole": "soup",
+   "nutrients": [
+    {
+     "key": "protein",
+     "weight": "primary"
+    }
+   ],
+   "summary": "孕吐期开胃快手汤，番茄酸甜促食欲，与番茄系菜同口径",
+   "ingredients": [
+    {
+     "name": "番茄",
+     "amount": "1个"
+    },
+    {
+     "name": "鸡蛋",
+     "amount": "1个"
+    }
+   ],
+   "steps": [
+    "番茄切块，少油炒出汁",
+    "加水滚沸后淋入打散蛋液成蛋花",
+    "少盐起锅"
+   ],
+   "nutritionNote": "水分+优质蛋白+番茄酸甜开胃，孕早期午/晚汤位轮换补位。",
+   "cautions": [
+    "蛋花必须完全凝固",
+    "少盐——孕吐期口味变重更要有意识控钠"
+   ],
+   "bentoFriendly": false,
+   "rotation": "pool",
+   "origin": "curated",
+   "source": "通行家常做法整理",
+   "sourceUrl": "",
+   "reviewedAt": "2026-10-05",
    "version": "1.0"
   }
  ]

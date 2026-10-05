@@ -40,8 +40,14 @@
 			</view>
 			<view class="meal-row" v-for="m in mealRows" :key="m.slot">
 				<text class="meal-slot">{{ m.slotLabel }}</text>
-				<text class="meal-name">{{ m.recipe ? m.recipe.name : '本阶段暂无推荐' }}</text>
-				<text class="meal-tag" v-if="m.recipe">{{ primaryOf(m.recipe) }}</text>
+				<view class="meal-items" v-if="m.items.length">
+					<view class="meal-item" v-for="(it, i) in m.items" :key="it.recipe.id">
+						<text class="meal-role">{{ roleLabel(it.role) }}</text>
+						<text class="meal-name">{{ it.recipe.name }}</text>
+						<text class="meal-tag" v-if="i === 0 && (m.slot === 'lunch' || m.slot === 'dinner')">{{ primaryOf(it.recipe) }}</text>
+					</view>
+				</view>
+				<text class="meal-name" v-else>本阶段暂无推荐</text>
 			</view>
 			<view class="meals-foot">
 				<text class="meals-focus" v-if="meals.focusTags.length">今日主打：{{ meals.focusTags.map(nutrientName).join(' · ') }}</text>
@@ -199,7 +205,7 @@
 			</view>
 			<view v-else-if="keyword.trim() !== ''" class="empty-card">
 				<text class="empty-title">未收录此菜品</text>
-				<text class="empty-desc">菜谱库（92 道）未查到「{{ keyword.trim() }}」——可换个说法再搜（如搜食材"豆腐"），或到饮食安全速查确认某种食材能不能吃</text>
+				<text class="empty-desc">菜谱库（97 道）未查到「{{ keyword.trim() }}」——可换个说法再搜（如搜食材"豆腐"），或到饮食安全速查确认某种食材能不能吃</text>
 			</view>
 			<view v-else class="empty-card">
 				<text class="empty-title">搜索菜谱</text>
@@ -219,7 +225,7 @@ import { ref, computed, reactive } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useHealthStore } from '@/stores/health.js'
 import {
-	RECIPE_NUTRIENTS, RECIPE_STAGES, RECIPE_ENTRIES,
+	RECIPE_NUTRIENTS, RECIPE_STAGES, RECIPE_ENTRIES, DISH_ROLE_LABELS,
 	getStageByWeek, getStageFocus, listRecipes, searchRecipes, buildDailyMeals
 } from '@/services/toolsStore.js'
 
@@ -261,10 +267,10 @@ const meals = computed(() => {
 	return buildDailyMeals({ dateKey, week, weekday: now.getDay(), shuffleOffset: shuffleOffset.value })
 })
 const mealRows = computed(() => [
-	{ slot: 'breakfast', slotLabel: '早餐', recipe: meals.value.breakfast },
-	{ slot: 'lunch', slotLabel: '午餐', recipe: meals.value.lunch },
-	{ slot: 'dinner', slotLabel: '晚餐', recipe: meals.value.dinner },
-	{ slot: 'snack', slotLabel: '加餐', recipe: meals.value.snack }
+	{ slot: 'breakfast', slotLabel: '早餐', items: meals.value.breakfast },
+	{ slot: 'lunch', slotLabel: '午餐', items: meals.value.lunch },
+	{ slot: 'dinner', slotLabel: '晚餐', items: meals.value.dinner },
+	{ slot: 'snack', slotLabel: '加餐', items: meals.value.snack }
 ])
 
 const bentoCount = computed(() => listRecipes(stageKey.value).filter(r => r.bentoFriendly).length)
@@ -298,6 +304,9 @@ function nutrientName(key) {
 function primaryOf(recipe) {
 	const p = (recipe.nutrients || []).find(n => n.weight === 'primary')
 	return p ? nutrientName(p.key) : ''
+}
+function roleLabel(role) {
+	return DISH_ROLE_LABELS[role] || '推荐'
 }
 function mealLabel(recipe) {
 	return (recipe.mealType || []).map(m => SLOT_LABELS[m] || m).join('/')
@@ -437,7 +446,7 @@ onShow(() => {
 .meal-row {
 	display: flex;
 	flex-direction: row;
-	align-items: center;
+	align-items: flex-start;
 	gap: 16rpx;
 	padding: 14rpx 0;
 	border-bottom: 1rpx solid #f5f7fb;
@@ -446,6 +455,27 @@ onShow(() => {
 	width: 80rpx;
 	font-size: 24rpx;
 	color: #8a94a6;
+	line-height: 44rpx;
+}
+.meal-items {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 8rpx;
+}
+.meal-item {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 12rpx;
+}
+.meal-role {
+	flex-shrink: 0;
+	font-size: 20rpx;
+	color: #4a7cf7;
+	background: #eef3fe;
+	border-radius: 999rpx;
+	padding: 4rpx 14rpx;
 }
 .meal-name {
 	flex: 1;
@@ -454,6 +484,7 @@ onShow(() => {
 	color: #11222e;
 }
 .meal-tag {
+	flex-shrink: 0;
 	font-size: 20rpx;
 	color: #6a5cf7;
 	background: #f3f0ff;

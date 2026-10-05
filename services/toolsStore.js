@@ -96,10 +96,17 @@ export function searchRecipes({ keyword = '', stageKey = '', nutrientKey = '', m
   })
 }
 
-// 今日三餐（无状态确定性轮换）：同 seed 永远同组合、次日自然换；
-// 周一~五午餐走带饭友好池、周六日走现做全池（对齐"带饭口径"）；
-// 午餐优先命中段第一优先营养、晚餐第二优先（池空回退全段池如实展示）；
+// 今日三餐 v2（无状态确定性轮换 · 多道组合）：同 seed 永远同组合、次日自然换；
+// 早餐 = 三角口径"主食 + 蛋白/甜汤副角"两道（早/加餐池打通，副角不挤占唯一加餐选项）；
+// 午餐 = "荤主菜/主食碗 + 素菜 + 汤"三道（对齐带饭口径的一周结构：工作日各角色带饭
+// 池 ≥2 道才启用、否则回退该角色全池轮换（单道会天天固定，宁轮换不僵化）；周末现做全池）；
+// 晚餐 = "主菜 + 素菜 + 汤"三道现做（无带饭约束）；
+// 加餐保持单道（本版口径）；午餐主菜优先命中段第一优先营养、晚餐主菜第二优先；
+// 全天组合内去重（早餐两道/午餐三道/晚餐三道/加餐互不重样）；
 // 频率受限菜（rotation:'excluded'——猪肝/海带/腌制高钠/早茶）永不自动入选。
+// 数据 v1.2（2026-10-05 审定）：早餐缺口补菜 5 道 + 段扩容 3 道落库后，各段早餐
+// 主食≥2/副角 3、午晚汤池≥2——早/午/晚组合结构全程不缺角；
+// 过程与口径见 docs/RECIPE_COMBO_V2_2026-10-05.md 与 docs/RECIPE_BREAKFAST_GAP_DRAFT_2026-10-05.md。
 const STAGE_SEED_OFFSET = { early: 0, mid1: 977, mid2: 2741, late1: 4409, late2: 6271 }
 const DAY_OF_YEAR_CUM = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
 function dayOfYearOf(dateKey) {
@@ -118,27 +125,76 @@ function pickFromPool(pool, seed, primaryNutrient) {
   const use = focusPool.length ? focusPool : sorted
   return use[seed % use.length]
 }
+// 组合条目统一形如 { recipe, role }，页面按 role 渲染角色标签
+export const DISH_ROLE_LABELS = { grain: '主食', protein: '蛋白', meat: '荤主菜', veg: '素菜', soup: '汤' }
+function comboItem(recipe) {
+  return recipe ? { recipe, role: recipe.dishRole || '' } : null
+}
 export function buildDailyMeals({ dateKey = '', week = 1, weekday = 1, shuffleOffset = 0 } = {}) {
   const stageKey = getStageByWeek(week)
   const focus = getStageFocus(stageKey)
   const weekend = weekday === 0 || weekday === 6
   const base = RECIPE_ENTRIES.filter(r => r.rotation !== 'excluded' && Array.isArray(r.stages) && r.stages.includes(stageKey))
   const seed = dayOfYearOf(dateKey) + (STAGE_SEED_OFFSET[stageKey] || 0) + shuffleOffset
-  const breakfast = pickFromPool(base.filter(r => r.mealType.includes('breakfast')), seed)
-  // 工作日优先带饭友好池；该段无带饭菜（如 early）时回退全池如实展示（口径靠页面提示）
-  const lunchAll = base.filter(r => r.mealType.includes('lunch'))
-  const bentoPool = lunchAll.filter(r => r.bentoFriendly)
-  const lunchPool = weekend || !bentoPool.length ? lunchAll : bentoPool
-  const lunch = pickFromPool(lunchPool, seed + 1, focus && focus.stage.nutrientPriority[0])
-  const dinnerPool = base.filter(r => r.mealType.includes('dinner') && (!lunch || r.id !== lunch.id))
-  const dinner = pickFromPool(dinnerPool, seed + 2, focus && focus.stage.nutrientPriority[1])
-  const snack = pickFromPool(base.filter(r => r.mealType.includes('snack')), seed + 3)
+  const usedIds = new Set()
+
+  // 加餐先选：早餐副角池与之去重，避免挤占薄池段的唯一加餐选项
+  const snack = pickFromPool(base.filter(r => r.mealType.includes('snack')), seed)
+  if (snack) usedIds.add(snack.id)
+
+  // 早餐三角：主食（grain）+ 副角（protein/soup，甜汤羹可作早餐饮品角），池 = 早∪加餐
+  const bfPool = base.filter(r => r.mealType.includes('breakfast') || r.mealType.includes('snack'))
+  const bfStaple = pickFromPool(bfPool.filter(r => r.dishRole === 'grain' && !usedIds.has(r.id)), seed + 1)
+  if (bfStaple) usedIds.add(bfStaple.id)
+  const bfSide = pickFromPool(bfPool.filter(r => (r.dishRole === 'protein' || r.dishRole === 'soup') && !usedIds.has(r.id)), seed + 2)
+  if (bfSide) usedIds.add(bfSide.id)
+  const breakfast = [bfStaple, bfSide].filter(Boolean).map(comboItem)
+
+  // 午餐三道：主菜池 = meat∪grain（荤菜或面/饭主食碗，保证主食类午菜不退出轮换）
+  const lunchBase = base.filter(r => r.mealType.includes('lunch') && !usedIds.has(r.id))
+  const rolePool = (roles, bentoFirst) => {
+    let pool = lunchBase.filter(r => roles.includes(r.dishRole))
+    if (bentoFirst) {
+      // 带饭池 ≥2 道才启用（单道会退化成天天固定；1 道时回退全池轮换，带饭口径靠页面标签如实提示）
+      const bento = pool.filter(r => r.bentoFriendly)
+      if (bento.length >= 2) pool = bento
+    }
+    return pool
+  }
+  const lunchMain = pickFromPool(rolePool(['meat', 'grain'], !weekend), seed + 3, focus && focus.stage.nutrientPriority[0])
+  if (lunchMain) usedIds.add(lunchMain.id)
+  const lunchVeg = pickFromPool(rolePool(['veg'], !weekend), seed + 4)
+  if (lunchVeg) usedIds.add(lunchVeg.id)
+  const lunchSoup = pickFromPool(rolePool(['soup'], !weekend), seed + 5)
+  if (lunchSoup) usedIds.add(lunchSoup.id)
+  const lunch = [lunchMain, lunchVeg, lunchSoup].filter(Boolean).map(comboItem)
+
+  // 晚餐三道（下班现做，无带饭约束）：主菜优先命中段第二优先营养（P2）+ 素菜 + 汤
+  const dinnerBase = base.filter(r => r.mealType.includes('dinner') && !usedIds.has(r.id))
+  const dinnerMain = pickFromPool(dinnerBase.filter(r => r.dishRole === 'meat' || r.dishRole === 'grain'), seed + 6, focus && focus.stage.nutrientPriority[1])
+  if (dinnerMain) usedIds.add(dinnerMain.id)
+  const dinnerVeg = pickFromPool(dinnerBase.filter(r => r.dishRole === 'veg' && !usedIds.has(r.id)), seed + 7)
+  if (dinnerVeg) usedIds.add(dinnerVeg.id)
+  const dinnerSoup = pickFromPool(dinnerBase.filter(r => r.dishRole === 'soup' && !usedIds.has(r.id)), seed + 8)
+  const dinner = [dinnerMain, dinnerVeg, dinnerSoup].filter(Boolean).map(comboItem)
+
   const focusTags = []
   if (focus) {
-    if (lunch && lunch.nutrients.some(n => n.weight === 'primary' && n.key === focus.stage.nutrientPriority[0])) focusTags.push(focus.stage.nutrientPriority[0])
-    if (dinner && dinner.nutrients.some(n => n.weight === 'primary' && n.key === focus.stage.nutrientPriority[1])) focusTags.push(focus.stage.nutrientPriority[1])
+    const p1 = focus.stage.nutrientPriority[0]
+    const p2 = focus.stage.nutrientPriority[1]
+    if (lunch.some(it => it.recipe.nutrients.some(n => n.weight === 'primary' && n.key === p1))) focusTags.push(p1)
+    if (dinner.some(it => it.recipe.nutrients.some(n => n.weight === 'primary' && n.key === p2))) focusTags.push(p2)
   }
-  return { dateKey: String(dateKey || ''), stageKey, mode: weekend ? 'weekend' : 'weekday', breakfast, lunch, dinner, snack, focusTags }
+  return {
+    dateKey: String(dateKey || ''),
+    stageKey,
+    mode: weekend ? 'weekend' : 'weekday',
+    breakfast,
+    lunch,
+    dinner,
+    snack: snack ? [comboItem(snack)] : [],
+    focusTags
+  }
 }
 
 // R1 前旧固定键（无身份作用域）——隔离保留（A08：不自动并入任何成员），但自 F1 起

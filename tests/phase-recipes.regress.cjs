@@ -1,5 +1,5 @@
 // Phase RECIPES：孕期食谱功能契约（2026-10-02 实施方案 docs/RECIPE_FEATURE_SPEC_2026-10-02.md）。
-// 覆盖：①数据 schema（92 道/段计数/枚举/非奶/excluded/bento/origin）②检索纯函数（阶段定位/列表/搜索）
+// 覆盖：①数据 schema（97 道/段计数/枚举/非奶/excluded/bento/origin/角色）②检索纯函数（阶段定位/列表/搜索）
 // ③今日三餐确定性轮换（工作日带饭池/周末现做池/频率菜永不入选/营养覆盖/确定性）④页面结构 ⑤入口注册。
 // 运行：node tests/phase-recipes.regress.cjs（仅本地静态数据与纯函数，不触真实 storage/云/网络）。
 const fs = require('node:fs')
@@ -20,22 +20,24 @@ const MEAL_KEYS = ['breakfast', 'lunch', 'dinner', 'snack']
 const NUTRIENT_KEYS = ['folate', 'iodine', 'carb', 'calcium', 'protein', 'vita', 'vitd', 'iron', 'dha', 'zinc', 'glucose']
 const EXCLUDED_NAMES = ['海带黄豆排骨汤', '凉拌海带丝', '早茶拼盘（虾饺/烧卖）', '猪肝菠菜汤', '猪肝瘦肉杂粮粥', '酸菜牛肉煲', '沙茶炒猪雪花', '酸咸菜炒梅花肉', '南乳煎焗排骨']
 const USER_APPROVED = ['花菜炒大虾', '甜豆炒鱿鱼虾梅花肉', '葱油鸡', '豉汁蒸排骨', '生焗梅花肉', '蒜蓉豉汁焗鲈鱼', '芥末炒芥兰', '酸咸菜炒梅花肉', '黑胡椒牛肉杏鲍菇', '焗乳鸽', '鹿茸菇炒牛肉', '生焗排骨', '花菇炒猪颈肉', '花菇炒牛肉', '芦笋炒鸡腿肉', '客家酿豆腐', '青瓜炒梅花肉', '青瓜炒牛肉', '酸菜牛肉煲', '菠萝炒鸡腿肉', '南乳煎焗排骨', '木耳炒猪板筋', '油麦菜炒牛肉', '沙茶炒猪雪花', '杂菌菇炒猪颈肉']
-const RECIPE_FIELDS = ['id', 'name', 'stages', 'mealType', 'nutrients', 'summary', 'ingredients', 'steps', 'nutritionNote', 'cautions', 'bentoFriendly', 'rotation', 'origin', 'source', 'sourceUrl', 'reviewedAt', 'version']
+const RECIPE_FIELDS = ['id', 'name', 'stages', 'mealType', 'dishRole', 'nutrients', 'summary', 'ingredients', 'steps', 'nutritionNote', 'cautions', 'bentoFriendly', 'rotation', 'origin', 'source', 'sourceUrl', 'reviewedAt', 'version']
+const DISH_ROLES = ['grain', 'protein', 'meat', 'veg', 'soup']
+const ROLE_COUNTS = { grain: 15, protein: 5, meat: 43, veg: 17, soup: 17 }
 
 async function main() {
 	// ── R1 数据 schema 契约 ──
-	await scenario('R1a 结构：92 道/11 营养素/5 周段；id 唯一且 r-001~r-092', async () => {
-		assert.equal(DATA.recipes.length, 92)
+	await scenario('R1a 结构：97 道/11 营养素/5 周段；id 唯一且 r-001~r-097', async () => {
+		assert.equal(DATA.recipes.length, 97)
 		assert.equal(DATA.nutrients.length, 11)
 		assert.equal(DATA.stages.length, 5)
 		const ids = DATA.recipes.map(r => r.id)
-		assert.equal(new Set(ids).size, 92, 'id 唯一')
+		assert.equal(new Set(ids).size, 97, 'id 唯一')
 		assert.ok(ids.every(id => /^r-\d{3}$/.test(id)), 'id 格式')
 	})
-	await scenario('R1b 主归属段计数（stages[0]=草稿分组段）：早28/中1段20/中2段20/晚1段9/晚2段15', async () => {
+	await scenario('R1b 主归属段计数（stages[0]=草稿分组段）：早30/中1段21/中2段22/晚1段9/晚2段15', async () => {
 		const home = {}
 		for (const r of DATA.recipes) home[r.stages[0]] = (home[r.stages[0]] || 0) + 1
-		assert.deepEqual(home, { early: 28, mid1: 20, mid2: 20, late1: 9, late2: 15 })
+		assert.deepEqual(home, { early: 30, mid1: 21, mid2: 22, late1: 9, late2: 15 })
 	})
 	await scenario('R1c 字段与枚举：必填齐、无额外字段、stages/mealType/nutrients.key/rotation/origin 合法', async () => {
 		for (const r of DATA.recipes) {
@@ -43,6 +45,7 @@ async function main() {
 			assert.deepEqual(Object.keys(r).sort(), RECIPE_FIELDS.slice().sort(), `${r.id} 字段集精确一致`)
 			assert.ok(r.stages.length >= 1 && r.stages.every(s => STAGE_KEYS.includes(s)), `${r.id} stages 枚举`)
 			assert.ok(r.mealType.length >= 1 && r.mealType.every(m => MEAL_KEYS.includes(m)), `${r.id} mealType 枚举`)
+			assert.ok(DISH_ROLES.includes(r.dishRole), `${r.id} dishRole 枚举`)
 			assert.ok(['pool', 'excluded'].includes(r.rotation), `${r.id} rotation 枚举`)
 			assert.ok(['user-approved', 'curated'].includes(r.origin), `${r.id} origin 枚举`)
 			assert.equal(typeof r.bentoFriendly, 'boolean', `${r.id} bentoFriendly 布尔`)
@@ -67,7 +70,7 @@ async function main() {
 		}
 		assert.equal(expect, 41, '覆盖到 40 周')
 	})
-	await scenario('R1e 非奶铁律：92 道菜名与食材零奶制品', async () => {
+	await scenario('R1e 非奶铁律：97 道菜名与食材零奶制品', async () => {
 		const DAIRY = ['牛奶', '酸奶', '奶酪', '黄油', '奶油', '芝士', '奶片', '鲜奶']
 		const violations = []
 		for (const r of DATA.recipes) {
@@ -88,12 +91,24 @@ async function main() {
 		const ua = DATA.recipes.filter(r => r.origin === 'user-approved').map(r => r.name).sort()
 		assert.deepEqual(ua, USER_APPROVED.slice().sort())
 	})
+	await scenario('R1h dishRole 角色计数（组合推荐 v2 分类基线 + v1.2 补菜）：grain15/protein5/meat43/veg17/soup17', async () => {
+		const counts = {}
+		for (const r of DATA.recipes) counts[r.dishRole] = (counts[r.dishRole] || 0) + 1
+		assert.deepEqual(counts, ROLE_COUNTS)
+		// 每段午餐三角色（meat∪grain/veg/soup）池均非空——组合结构不塌
+		for (const st of STAGE_KEYS) {
+			const pool = DATA.recipes.filter(r => r.rotation === 'pool' && r.stages.includes(st) && r.mealType.includes('lunch'))
+			assert.ok(pool.some(r => r.dishRole === 'meat' || r.dishRole === 'grain'), `${st} 午餐主菜池非空`)
+			assert.ok(pool.some(r => r.dishRole === 'veg'), `${st} 午餐素菜池非空`)
+			assert.ok(pool.some(r => r.dishRole === 'soup'), `${st} 午餐汤池非空`)
+		}
+	})
 
 	// ── R2/R3/R4/R5/R6：纯函数（esbuild 打包 toolsStore 后 require）──
 	const bundle = path.join(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'momcare-recipes-')), 'core.cjs')
 	esbuild.buildSync({
 		stdin: {
-			contents: `export { RECIPE_ENTRIES, RECIPE_NUTRIENTS, RECIPE_STAGES, getStageByWeek, getStageFocus, listRecipes, searchRecipes, buildDailyMeals } from './services/toolsStore.js'`,
+			contents: `export { RECIPE_ENTRIES, RECIPE_NUTRIENTS, RECIPE_STAGES, DISH_ROLE_LABELS, getStageByWeek, getStageFocus, listRecipes, searchRecipes, buildDailyMeals } from './services/toolsStore.js'`,
 			resolveDir: root
 		},
 		bundle: true, platform: 'node', format: 'cjs', alias: { '@': root },
@@ -125,10 +140,10 @@ async function main() {
 		}
 		assert.equal(core.getStageFocus('nope'), null)
 	})
-	await scenario('R4 listRecipes 段计数（含跨段菜）：早30/中1段34/中2段34/晚1段32/晚2段28；不传=92', async () => {
-		const expect = { early: 30, mid1: 34, mid2: 34, late1: 32, late2: 28 }
+	await scenario('R4 listRecipes 段计数（含跨段菜）：早32/中1段36/中2段40/晚1段38/晚2段33；不传=97', async () => {
+		const expect = { early: 32, mid1: 36, mid2: 40, late1: 38, late2: 33 }
 		for (const k of STAGE_KEYS) assert.equal(core.listRecipes(k).length, expect[k], k)
-		assert.equal(core.listRecipes().length, 92)
+		assert.equal(core.listRecipes().length, 97)
 	})
 	await scenario('R5 searchRecipes：命中/未命中/带饭筛选/营养筛选/段筛选', async () => {
 		assert.ok(core.searchRecipes({ keyword: '豆腐' }).length >= 5, '豆腐命中多道')
@@ -161,59 +176,86 @@ async function main() {
 					const dateKey = `2026-${String(Math.floor(d / 28) + 1).padStart(2, '0')}-${String(d % 28 + 1).padStart(2, '0')}`
 					const m = core.buildDailyMeals({ dateKey, week, weekday: wd })
 					for (const slot of ['breakfast', 'lunch', 'dinner', 'snack']) {
-						if (m[slot]) assert.ok(!excludedIds.has(m[slot].id), `excluded 入选 ${m[slot].id} @${dateKey}/${week}/${wd}`)
+						for (const it of m[slot]) {
+							assert.ok(!excludedIds.has(it.recipe.id), `excluded 入选 ${it.recipe.id} @${dateKey}/${week}/${wd}`)
+						}
 					}
 				}
 			}
 		}
 	})
-	await scenario('R6d 工作日午餐走带饭友好池（early 段无带饭菜回退全池不空）', async () => {
-		for (const week of [15, 23, 30, 38]) { // mid1 起
+	await scenario('R6d 组合结构（v1.2 补菜后全程不缺角）：早餐恒 2 道（主食+副角）、午餐恒 3 道、晚餐恒 3 道、加餐 1 道', async () => {
+		for (const week of [5, 15, 23, 30, 38]) {
 			for (let d = 1; d <= 28; d++) {
-				const dateKey = `2026-10-${String(d).padStart(2, '0')}`
-				const m = core.buildDailyMeals({ dateKey, week, weekday: 2 })
-				assert.ok(m.lunch, `${week} 周午餐非空`)
-				assert.equal(m.lunch.bentoFriendly, true, `${week} 周工作日午餐=${m.lunch.name} 应带饭友好`)
+				for (const wd of [2, 6]) {
+					const m = core.buildDailyMeals({ dateKey: `2026-10-${String(d).padStart(2, '0')}`, week, weekday: wd })
+					assert.equal(m.breakfast.length, 2, `早餐恒 2 道 @${week}/${d}`)
+					assert.equal(m.breakfast[0].role, 'grain', '早餐第一道是主食打底')
+					assert.ok(['protein', 'soup'].includes(m.breakfast[1].role), '早餐第二道是蛋白/甜汤副角')
+					assert.equal(m.lunch.length, 3, `${week} 周午餐恒 3 道（主菜/素菜/汤）`)
+					assert.ok(['meat', 'grain'].includes(m.lunch[0].role), '午餐主菜槽=荤主菜或主食碗')
+					assert.equal(m.lunch[1].role, 'veg', '午餐第二道=素菜')
+					assert.equal(m.lunch[2].role, 'soup', '午餐第三道=汤')
+					assert.equal(m.dinner.length, 3, `晚餐恒 3 道 @${week}/${d}`)
+					assert.ok(['meat', 'grain'].includes(m.dinner[0].role), '晚餐主菜槽=荤主菜或主食碗')
+					assert.equal(m.dinner[1].role, 'veg', '晚餐第二道=素菜')
+					assert.equal(m.dinner[2].role, 'soup', '晚餐第三道=汤')
+					assert.equal(m.snack.length, 1, '加餐单道')
+				}
+			}
+		}
+	})
+	await scenario('R6e 全天去重：早餐+午餐三道+晚餐+加餐 当日互不重样', async () => {
+		for (const week of [5, 15, 23, 30, 38]) {
+			for (let d = 1; d <= 28; d++) {
+				const m = core.buildDailyMeals({ dateKey: `2026-10-${String(d).padStart(2, '0')}`, week, weekday: 3 })
+				const ids = [...m.breakfast, ...m.lunch, ...m.dinner, ...m.snack].map(it => it.recipe.id)
+				assert.equal(new Set(ids).size, ids.length, `day${d} @${week} 周当日重样: ${ids.join(',')}`)
+			}
+		}
+	})
+	await scenario('R6f 工作日午餐主菜走带饭池（mid1 起主菜带饭池 ≥2）；周末开鲜货池', async () => {
+		for (const week of [15, 23, 30, 38]) { // mid1 起各段主菜带饭池均 ≥2 道
+			for (let d = 1; d <= 28; d++) {
+				const m = core.buildDailyMeals({ dateKey: `2026-10-${String(d).padStart(2, '0')}`, week, weekday: 2 })
+				assert.equal(m.lunch[0].recipe.bentoFriendly, true, `${week} 周工作日午餐主菜=${m.lunch[0].recipe.name} 应带饭友好`)
 			}
 		}
 		const early = core.buildDailyMeals({ dateKey: '2026-10-02', week: 5, weekday: 2 })
-		assert.ok(early.lunch, 'early 段回退全池午餐非空（口径如实展示）')
-	})
-	await scenario('R6e 周末午餐开鲜货池：mid2 段 60 个周末样本中至少出现非带饭菜', async () => {
+		assert.equal(early.lunch.length, 3, 'early 段无带饭菜回退全池，午餐三道不塌（口径如实展示）')
 		const seenNonBento = []
 		for (let d = 1; d <= 30; d++) {
 			for (const wd of [0, 6]) {
 				const m = core.buildDailyMeals({ dateKey: `2026-10-${String(d).padStart(2, '0')}`, week: 23, weekday: wd })
-				if (m.lunch && !m.lunch.bentoFriendly) seenNonBento.push(m.lunch.name)
+				for (const it of m.lunch) if (!it.recipe.bentoFriendly) seenNonBento.push(it.recipe.name)
 			}
 		}
 		assert.ok(seenNonBento.length > 0, '周末午餐池确实扩大到现做菜')
 	})
-	await scenario('R6f 营养覆盖：mid2 午餐 primary=iron、晚餐 primary=dha（focus 池非空段全 seed 命中）', async () => {
+	await scenario('R6g 营养覆盖：mid2 午餐主菜 primary=iron、晚餐 primary=dha（focus 池非空段全 seed 命中）', async () => {
 		for (let d = 1; d <= 28; d++) {
 			const m = core.buildDailyMeals({ dateKey: `2026-10-${String(d).padStart(2, '0')}`, week: 23, weekday: 3 })
-			assert.equal(m.lunch.nutrients.find(n => n.weight === 'primary').key, 'iron', `day${d} 午餐主营养=iron`)
-			assert.equal(m.dinner.nutrients.find(n => n.weight === 'primary').key, 'dha', `day${d} 晚餐主营养=dha`)
+			assert.equal(m.lunch[0].recipe.nutrients.find(n => n.weight === 'primary').key, 'iron', `day${d} 午餐主菜主营养=iron`)
+			assert.equal(m.dinner[0].recipe.nutrients.find(n => n.weight === 'primary').key, 'dha', `day${d} 晚餐主营养=dha`)
 			assert.ok(m.focusTags.includes('iron') && m.focusTags.includes('dha'), 'focusTags 披露')
 		}
 	})
-	await scenario('R6g 晚餐≠午餐；换一组偏移生效且不落盘语义（同参两次仍确定）', async () => {
-		for (let d = 1; d <= 28; d++) {
-			const m = core.buildDailyMeals({ dateKey: `2026-10-${String(d).padStart(2, '0')}`, week: 23, weekday: 4 })
-			assert.notEqual(m.dinner.id, m.lunch.id, `day${d} 午晚餐不重样`)
-		}
+	await scenario('R6h 换一组偏移生效且不落盘语义（同参两次仍确定）', async () => {
 		const base = core.buildDailyMeals({ dateKey: '2026-10-02', week: 23, weekday: 4 })
 		const alt = core.buildDailyMeals({ dateKey: '2026-10-02', week: 23, weekday: 4, shuffleOffset: 1 })
 		const alt2 = core.buildDailyMeals({ dateKey: '2026-10-02', week: 23, weekday: 4, shuffleOffset: 1 })
 		assert.deepEqual(alt, alt2, '偏移后仍确定')
-		const names = s => [s.breakfast && s.breakfast.id, s.lunch && s.lunch.id, s.dinner && s.dinner.id, s.snack && s.snack.id].join(',')
-		assert.notEqual(names(base), names(alt), '换一组产生不同组合')
+		const idsOf = s => ['breakfast', 'lunch', 'dinner', 'snack'].flatMap(k => s[k].map(it => it.recipe.id)).join(',')
+		assert.notEqual(idsOf(base), idsOf(alt), '换一组产生不同组合')
+	})
+	await scenario('R6i DISH_ROLE_LABELS 角色标签齐全（页面渲染依赖）', async () => {
+		assert.deepEqual(core.DISH_ROLE_LABELS, { grain: '主食', protein: '蛋白', meat: '荤主菜', veg: '素菜', soup: '汤' })
 	})
 
 	// ── R7 页面结构断言（渲染壳关键元素在位；逻辑已全部收在可测纯函数区）──
 	await scenario('R7 recipes.vue：阶段卡/今日三餐/营养胶囊/分组列表/空态/免责声明/手动切换防覆盖', async () => {
 		const vue = fs.readFileSync(path.join(root, 'pages/tools/recipes.vue'), 'utf8')
-		for (const frag of ['今日三餐', 'stage-switch', 'nutrient-pill', 'foodGuide', '换一组', '未收录此菜品', 'footer-disclaimer', 'setStage', 'manualStage', 'buildDailyMeals', '工作日 · 午餐带饭友好', '周末 · 现做鲜货']) {
+		for (const frag of ['今日三餐', 'stage-switch', 'nutrient-pill', 'foodGuide', '换一组', '未收录此菜品', 'footer-disclaimer', 'setStage', 'manualStage', 'buildDailyMeals', '工作日 · 午餐带饭友好', '周末 · 现做鲜货', 'meal-items', 'meal-role', 'roleLabel', 'DISH_ROLE_LABELS']) {
 			assert.ok(vue.includes(frag), `页面缺关键结构：${frag}`)
 		}
 	})
