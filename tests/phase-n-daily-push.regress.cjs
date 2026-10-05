@@ -223,7 +223,11 @@ async function main() {
     for (const [month, allowed] of [[9, ['鲜枣', '梨', '葡萄']], [12, ['橙子', '甘蔗']]]) {
       for (let i = 0; i < 30; i++) {
         const d = new Date(2026, month - 1, 1 + i)
-        const r = buildPushContent({ today: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, lmp: LMP, nextCheckupDate: null })
+        // lmp 随被测日期平移（同样孕4周+5）：固定 LMP 相对真实今天取值，真实日期晚于
+        // 2026-10-04 时 9月1日 < LMP → buildPushContent 防御返回 null → 读 r.note 崩溃
+        // （2026-10-05 复现；随被测日期平移后全年确定性，与真实今天彻底解耦）
+        const lmp = new Date(2026, month - 1, 1 + i - 33)
+        const r = buildPushContent({ today: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, lmp: `${lmp.getFullYear()}-${pad(lmp.getMonth() + 1)}-${pad(lmp.getDate())}`, nextCheckupDate: null })
         if (fruitLines(r.note)) {
           assert.ok(allowed.some(f => r.note.includes(f)), `${month}月涉果行未含当季果名：${r.note}`)
         }
